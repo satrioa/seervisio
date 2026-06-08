@@ -1,0 +1,166 @@
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+import type { Database } from "@/types/database.types";
+
+/**
+ * Supabase Auth middleware for Next.js.
+ *
+ * What this does:
+ * 1. Refreshes the Supabase session on every request (cookie-based)
+ * 2. Protects /[brandSlug]/panel/* routes — redirects to /login if not authenticated
+ * 3. Protects /[brandSlug]/panel/* routes — redirects to /login if profile not linked
+ * 4. Redirects authenticated users away from /login
+ * 5. Handles /auth/callback route (no redirect, just pass through)
+ *
+ * Matcher in config: applies to everything except static files, _next, and API
+ */
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
+
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(
+          cookiesToSet: { name: string; value: string; options?: { path?: string; maxAge?: number; domain?: string; secure?: boolean; httpOnly?: boolean; sameSite?: "lax" | "strict" | "none" } }[]
+        ) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // Refresh session
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const url = request.nextUrl.clone();
+  const pathname = url.pathname;
+
+  // Public routes that don't need auth
+  const isPublicRoute =
+    pathname === "/login" ||
+    pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/_next") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/";
+
+  // Check if this is a panel route
+  const isPanelRoute = /^\/[^/]+\/panel(\/.*)?$/.test(pathname);
+
+  // If it's a public route, pass through
+  if (isPublicRoute) {
+    // If user is already logged in and visiting /login, redirect to their brand
+    if (pathname === "/login" && user) {
+      // Try to find which brand they belong to
+      const membershipResult = await (
+        supabase
+          .from("user_brand_memberships")
+          .select("brand_id")
+          .eq("profile_id", user.id)
+          .single() as unknown as Promise<{
+          data: { brand_id: number | null } | null;
+        }>
+      );
+
+      if (membershipResult.data?.brand_id) {
+        const brandResult = await (
+          supabase
+            .from("brands")
+            .select("slug")
+            .eq("id", membershipResult.data.brand_id)
+            .single() as unknown as Promise<{ data: { slug: string } | null }>
+        );
+
+        if (brandResult.data?.slug) {
+          url.pathname = `/${brandResult.data.slug}/panel/dashboard`;
+          return NextResponse.redirect(url);
+        }
+      }
+    }
+    return supabaseResponse;
+  }
+
+  // If panel route and not authenticated, redirect to login
+  if (isPanelRoute && !user) {
+    url.pathname = "/login";
+    url.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // If panel route and authenticated, verify profile is linked
+  if (isPanelRoute && user) {
+    const profileResult = await (
+      supabase
+        .from("profiles")
+        .select("id, is_active")
+        .eq("auth_user_id", user.id)
+        .single() as unknown as Promise<{
+        data: { id: string; is_active: boolean } | null;
+      }>
+    );
+
+    const profile = profileResult.data;
+
+    // If profile not found or inactive, redirect to login with error
+    if (!profile || !profile.is_active) {
+      await supabase.auth.signOut();
+      url.pathname = "/login";
+      url.searchParams.set("error", "account_disabled");
+      return NextResponse.redirect(url);
+    }
+
+    // Verify user has access to this brand
+    const brandSlug = pathname.split("/")[1];
+    const brandResult = await (
+      supabase
+        .from("brands")
+        .select("id")
+        .eq("slug", brandSlug)
+        .single() as unknown as Promise<{ data: { id: number } | null }>
+    );
+
+    const brand = brandResult.data;
+
+    if (brand) {
+      const membershipResult = await (
+        supabase
+          .from("user_brand_memberships")
+          .select("id")
+          .eq("profile_id", profile.id)
+          .eq("brand_id", brand.id)
+          .eq("is_active", true)
+          .single() as unknown as Promise<{ data: { id: string } | null }>
+      );
+
+      const membership = membershipResult.data;
+
+      if (!membership) {
+        // User doesn't have access to this brand
+        url.pathname = "/login";
+        url.searchParams.set("error", "no_brand_access");
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
+  return supabaseResponse;
+}
+
+export const config = {
+  matcher: [
+    // Match all routes except static files, _next, and api
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
