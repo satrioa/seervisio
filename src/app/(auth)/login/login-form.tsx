@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,20 +18,36 @@ import { Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  account_disabled: "Akun Anda telah dinonaktifkan. Silakan hubungi administrator.",
+  account_disabled:
+    "Akun Anda telah dinonaktifkan. Silakan hubungi administrator.",
   no_brand_access: "Anda tidak memiliki akses ke brand tersebut.",
   invalid_credentials: "Email atau password salah.",
   unknown: "Terjadi kesalahan. Silakan coba lagi.",
 };
 
+const DEFAULT_REDIRECT = "/kasservice/panel/dashboard";
+
+function getSafeRedirect(redirectTo?: string | null) {
+  if (!redirectTo) return DEFAULT_REDIRECT;
+
+  // Hindari redirect balik ke login.
+  if (redirectTo === "/login") return DEFAULT_REDIRECT;
+
+  // Hindari external redirect.
+  if (!redirectTo.startsWith("/")) return DEFAULT_REDIRECT;
+
+  return redirectTo;
+}
+
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || undefined;
+
+  const redirectTo = searchParams.get("redirect");
   const errorParam = searchParams.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(
     errorParam ? ERROR_MESSAGES[errorParam] ?? ERROR_MESSAGES.unknown : null
@@ -40,28 +56,50 @@ export function LoginForm() {
   const handleLogin = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+
       setIsLoading(true);
       setError(null);
 
-      const supabase = createClient();
+      try {
+        const supabase = createClient();
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+        const { data, error: authError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
 
-      if (authError) {
-        setError(ERROR_MESSAGES.invalid_credentials);
+        if (authError) {
+          console.error("Login error:", authError);
+          setError(ERROR_MESSAGES.invalid_credentials);
+          setIsLoading(false);
+          return;
+        }
+
+        if (!data.session || !data.user) {
+          console.error("Login returned without session/user:", data);
+          setError(ERROR_MESSAGES.unknown);
+          setIsLoading(false);
+          return;
+        }
+
+        console.log("Login successful:", {
+          id: data.user.id,
+          email: data.user.email,
+          hasSession: Boolean(data.session),
+        });
+
+        const target = getSafeRedirect(redirectTo);
+
+        // Full reload supaya Server Components membaca session/cookie terbaru.
+        window.location.href = target;
+      } catch (err) {
+        console.error("Unexpected login error:", err);
+        setError(ERROR_MESSAGES.unknown);
         setIsLoading(false);
-        return;
       }
-
-      // Successful login — redirect back or to default panel
-      // The middleware will resolve the brand and redirect appropriately
-      router.refresh();
-      router.push(redirectTo ?? "/");
     },
-    [email, password, redirectTo, router]
+    [email, password, redirectTo]
   );
 
   return (
@@ -70,14 +108,19 @@ export function LoginForm() {
         <CardHeader className="space-y-1 text-center">
           <Link href="/" className="mx-auto mb-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">S</span>
+              <span className="text-lg font-bold text-primary-foreground">
+                S
+              </span>
             </div>
           </Link>
+
           <CardTitle className="text-xl">Masuk ke Seervis</CardTitle>
+
           <CardDescription>
             Masukkan email dan password akun Anda
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           {error && (
             <Alert variant="destructive" className="mb-4">

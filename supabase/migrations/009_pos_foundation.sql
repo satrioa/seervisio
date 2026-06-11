@@ -394,7 +394,7 @@ declare
   v_existing_id       uuid;
 begin
   -- Step 1: Validate brand
-  perform 1 from public.brands where id = p_brand_id and deleted_at is null;
+  perform 1 from public.brands where id = p_brand_id and lower(status) = 'active';
   if not found then
     raise exception 'Brand % not found or deleted', p_brand_id using errcode = 'P0002';
   end if;

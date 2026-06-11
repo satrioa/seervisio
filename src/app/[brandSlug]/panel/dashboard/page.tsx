@@ -1,10 +1,11 @@
 import React from "react";
+import { DashboardContent } from "./dashboard-content";
 
-export default function DashboardPage() {
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="text-muted-foreground mt-1">Dashboard placeholder</p>
-    </div>
-  );
+interface PageProps {
+  params: Promise<{ brandSlug: string }>;
+}
+
+export default async function DashboardPage({ params }: PageProps) {
+  const { brandSlug } = await params;
+  return <DashboardContent brandSlug={brandSlug} />;
 }

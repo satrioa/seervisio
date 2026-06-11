@@ -45,6 +45,12 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  console.log("[middleware] getUser result:", {
+    pathname: request.nextUrl.pathname,
+    hasUser: Boolean(user),
+    userId: user?.id,
+  });
+
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
 

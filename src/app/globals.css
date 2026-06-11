@@ -19,11 +19,40 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: var(--color-red-800);
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 161.4 93.5% 30.4%;
+    --chart-3: 32.1 94.6% 43.7%;
+    --chart-4: 271.5 81.3% 55.9%;
+    --chart-5: 340.7 82.5% 52.2%;
+    --chart-6: 186 80% 40%;
+    --chart-7: 0 75% 55%;
+    --chart-8: 240 60% 55%;
+    --sidebar-background: 40 11% 94.7%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 40 9% 84%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --d-bg: 0 0% 100%;
+    --d-muted: 0 0% 90%;
+    --d-fg: 0 0% 0%;
+    --d-border: 0 0% 90%;
+    --d-sheet: 0 0% 98%;
+    --success: var(--color-emerald-500);
+    --success-foreground: var(--color-emerald-900);
+    --info: var(--color-violet-500);
+    --info-foreground: var(--color-violet-900);
+    --warning: var(--color-yellow-500);
+    --warning-foreground: var(--color-yellow-900);
+    --invert: var(--color-zinc-900);
+    --invert-foreground: var(--color-zinc-50);
   }
 
   .dark {
@@ -42,10 +71,39 @@
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: var(--color-red-600);
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+    --chart-1: 217.2 91.2% 59.8%;
+    --chart-2: 161.4 80% 40%;
+    --chart-3: 32.1 85% 55%;
+    --chart-4: 271.5 70% 65%;
+    --chart-5: 340.7 75% 60%;
+    --chart-6: 186 70% 50%;
+    --chart-7: 0 70% 60%;
+    --chart-8: 240 55% 65%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --d-bg: 0 0% 10%;
+    --d-muted: 0 0% 20%;
+    --d-fg: 0 0% 100%;
+    --d-border: 0 0% 20%;
+    --d-sheet: 0 0% 12%;
+    --success: var(--color-emerald-500);
+    --success-foreground: var(--color-emerald-600);
+    --info: var(--color-violet-500);
+    --info-foreground: var(--color-violet-600);
+    --warning: var(--color-yellow-500);
+    --warning-foreground: var(--color-yellow-600);
+    --invert: var(--color-zinc-700);
+    --invert-foreground: var(--color-zinc-50);
   }
 }
 
@@ -53,7 +111,21 @@
   * {
     @apply border-border;
   }
+
+  html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  html[data-scroll-locked],
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
   }
 }

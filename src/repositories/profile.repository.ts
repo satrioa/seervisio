@@ -18,12 +18,17 @@ export async function getProfileByAuthUserId(
   supabase: SupabaseClient<any, any, any>,
   authUserId: string
 ): Promise<DbProfile | null> {
-  const { data } = await supabase
+  console.log("[profile.repository] getProfileByAuthUserId called with authUserId:", authUserId);
+  const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .eq("auth_user_id", authUserId)
-    .single();
+    .maybeSingle();
 
+  if (error) {
+    console.error("[profile.repository] Query error:", error.message, error.details, error.hint);
+  }
+  console.log("[profile.repository] Result:", data ? `found profile id=${data.id} name=${data.name}` : "null");
   return data ?? null;
 }
 

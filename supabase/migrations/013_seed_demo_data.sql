@@ -12,6 +12,569 @@
 -- ============================================================
 
 -- ============================================================
+-- PRE-SEED COMPATIBILITY PATCH
+-- Overwrite functions that were deployed with brands.deleted_at
+-- validation to use brands.status = 'active' instead.
+-- Remote already has old versions from migrations 008–010.
+-- ============================================================
+
+create or replace function public.add_finance_ledger_entry(
+  p_brand_id integer,
+  p_entry_type text,
+  p_direction text,
+  p_amount numeric,
+  p_branch_id uuid default null,
+  p_ledger_date date default current_date,
+  p_occurred_at timestamptz default now(),
+  p_category text default null,
+  p_account_code text default null,
+  p_reference_type text default null,
+  p_reference_id uuid default null,
+  p_source_table text default null,
+  p_source_id uuid default null,
+  p_description text default null,
+  p_metadata jsonb default '{}',
+  p_created_by uuid default null,
+  p_idempotency_key text default null
+) returns uuid
+language plpgsql
+security definer
+as $func$
+declare
+  v_found_id          uuid;
+  v_existing_entry_type text;
+  v_existing_direction text;
+  v_existing_amount   numeric(14,2);
+  v_existing_ref_type text;
+  v_existing_ref_id   text;
+  v_existing_src_tbl  text;
+  v_existing_src_id   text;
+  v_ledger_id         uuid;
+begin
+  -- Validate brand exists
+  perform 1 from public.brands where id = p_brand_id and lower(status) = 'active';
+  if not found then
+    raise exception 'Brand % not found or deleted', p_brand_id using errcode = 'P0002';
+  end if;
+
+  -- Validate branch if provided
+  if p_branch_id is not null then
+    perform 1 from public.branches
+    where id = p_branch_id and brand_id = p_brand_id and deleted_at is null;
+    if not found then
+      raise exception 'Branch % not found, deleted, or does not belong to brand %',
+        p_branch_id, p_brand_id using errcode = 'P0002';
+    end if;
+  end if;
+
+  -- Validate amount
+  if p_amount <= 0 then
+    raise exception 'Ledger amount must be positive, got %', p_amount using errcode = '22023';
+  end if;
+
+  -- Validate direction
+  if p_direction not in ('DEBIT', 'CREDIT') then
+    raise exception 'Invalid direction: %. Must be DEBIT or CREDIT', p_direction using errcode = 'P0004';
+  end if;
+
+  -- Validate entry_type
+  if p_entry_type not in (
+    'SERVICE_REVENUE','POS_REVENUE','OTHER_INCOME','MDR_EXPENSE',
+    'OPERATING_EXPENSE','STOCK_PURCHASE','COGS','CASH_ADJUSTMENT',
+    'PAYMENT_REFUND','VOID_REVERSAL'
+  ) then
+    raise exception 'Invalid entry_type: %', p_entry_type using errcode = 'P0004';
+  end if;
+
+  -- Handle idempotency
+  if p_idempotency_key is not null then
+    select id into v_found_id
+    from public.finance_ledger
+    where brand_id = p_brand_id and idempotency_key = p_idempotency_key;
+
+    if found then
+      select entry_type, direction, amount,
+             reference_type, reference_id::text,
+             source_table, source_id::text
+      into v_existing_entry_type, v_existing_direction, v_existing_amount,
+           v_existing_ref_type, v_existing_ref_id,
+           v_existing_src_tbl, v_existing_src_id
+      from public.finance_ledger
+      where id = v_found_id;
+
+      if v_existing_entry_type != p_entry_type
+         or v_existing_direction != p_direction
+         or v_existing_amount != p_amount
+         or coalesce(v_existing_ref_type, '') != coalesce(p_reference_type, '')
+         or coalesce(v_existing_ref_id, '') != coalesce(p_reference_id::text, '')
+         or coalesce(v_existing_src_tbl, '') != coalesce(p_source_table, '')
+         or coalesce(v_existing_src_id, '') != coalesce(p_source_id::text, '') then
+        raise exception 'Idempotency key % already exists with different payload (entry_type=%, direction=%, amount=%)',
+          p_idempotency_key, v_existing_entry_type, v_existing_direction, v_existing_amount
+          using errcode = 'P0004';
+      end if;
+
+      return v_found_id;
+    end if;
+  end if;
+
+  insert into public.finance_ledger (
+    brand_id, branch_id, ledger_date, occurred_at,
+    entry_type, direction, amount,
+    category, account_code,
+    reference_type, reference_id,
+    source_table, source_id,
+    description, idempotency_key,
+    metadata, created_by, created_at
+  ) values (
+    p_brand_id, p_branch_id, p_ledger_date, p_occurred_at,
+    p_entry_type, p_direction, p_amount,
+    p_category, p_account_code,
+    p_reference_type, p_reference_id,
+    p_source_table, p_source_id,
+    p_description, p_idempotency_key,
+    p_metadata, p_created_by, now()
+  )
+  returning id into v_ledger_id;
+
+  return v_ledger_id;
+end;
+$func$;
+
+create or replace function public.record_pos_sale(  p_brand_id integer,
+  p_branch_id uuid,
+  p_payment_method_id uuid,
+  p_items jsonb,
+  p_customer_id uuid default null,
+  p_discount_amount numeric default 0,
+  p_sold_at timestamptz default now(),
+  p_notes text default null,
+  p_metadata jsonb default '{}',
+  p_created_by uuid default null,
+  p_idempotency_key text default null) returns jsonb
+language plpgsql
+security definer
+as $func$
+declare
+  v_branch_valid      boolean;
+  v_item              record;
+  v_inv_item          record;
+  v_stock_check       record;
+  v_resolved          jsonb;
+  v_account_id        uuid;
+  v_method_type       text;
+  v_mdr_pct           numeric(5,2);
+  v_gross_amount      numeric(14,2) := 0;
+  v_total_item_disc   numeric(14,2) := 0;
+  v_total_discount    numeric(14,2);
+  v_customer_paid     numeric(14,2);
+  v_mdr_amount        numeric(14,2);
+  v_net_amount        numeric(14,2);
+  v_sale_number       text;
+  v_final_key         text;
+  v_sale_id           uuid;
+  v_sale_item_id      uuid;
+  v_movement_key      text;
+  v_movement_id       uuid;
+  v_pa_movement_id    uuid;
+  v_total_cogs        numeric(14,2) := 0;
+  v_line_total        numeric(14,2);
+  v_revenue_ledger_id uuid;
+  v_cogs_ledger_id    uuid;
+  v_mdr_ledger_id     uuid;
+  v_existing_id       uuid;
+begin
+  -- Step 1: Validate brand
+  perform 1 from public.brands where id = p_brand_id and lower(status) = 'active';
+  if not found then
+    raise exception 'Brand % not found or deleted', p_brand_id using errcode = 'P0002';
+  end if;
+
+  -- Step 2: Validate branch
+  perform 1 from public.branches
+  where id = p_branch_id and brand_id = p_brand_id and deleted_at is null;
+  if not found then
+    raise exception 'Branch % not found, deleted, or does not belong to brand %',
+      p_branch_id, p_brand_id using errcode = 'P0002';
+  end if;
+
+  -- Step 3: Validate items array
+  if p_items is null or jsonb_array_length(p_items) = 0 then
+    raise exception 'Items array is empty' using errcode = 'P0004';
+  end if;
+
+  -- Step 4: Idempotency check (before any work)
+  if p_idempotency_key is not null then
+    select id into v_existing_id
+    from public.pos_sales
+    where brand_id = p_brand_id and idempotency_key = p_idempotency_key;
+
+    if found then
+      return jsonb_build_object(
+        'pos_sale_id', v_existing_id,
+        'status', 'ALREADY_EXISTS'
+      );
+    end if;
+  end if;
+
+  -- Step 5: First pass — validate items, lock stock, calculate totals
+  for v_item in
+    select *
+    from jsonb_to_recordset(p_items) as x(
+      inventory_item_id uuid,
+      quantity numeric,
+      unit_price numeric,
+      discount_amount numeric
+    )
+  loop
+    select id, brand_id, item_type, cost_price, name
+    into v_inv_item
+    from public.inventory_items
+    where id = v_item.inventory_item_id and deleted_at is null;
+
+    if not found then
+      raise exception 'Inventory item % not found', v_item.inventory_item_id using errcode = 'P0002';
+    end if;
+
+    if v_inv_item.brand_id != p_brand_id then
+      raise exception 'Inventory item % does not belong to brand %', v_item.inventory_item_id, p_brand_id
+        using errcode = 'P0002';
+    end if;
+
+    if v_inv_item.item_type != 'PRODUCT' then
+      raise exception 'Item % has type %, not PRODUCT. Only PRODUCT items can be sold via POS.',
+        v_item.inventory_item_id, v_inv_item.item_type using errcode = 'P0004';
+    end if;
+
+    if v_item.quantity <= 0 then
+      raise exception 'Item % quantity must be positive, got %', v_item.inventory_item_id, v_item.quantity
+        using errcode = '22023';
+    end if;
+
+    v_line_total := v_item.quantity * v_item.unit_price - coalesce(v_item.discount_amount, 0);
+    if v_line_total < 0 then
+      raise exception 'Line total cannot be negative for item %', v_item.inventory_item_id
+        using errcode = '22023';
+    end if;
+
+    v_gross_amount := v_gross_amount + (v_item.quantity * v_item.unit_price);
+    v_total_item_disc := v_total_item_disc + coalesce(v_item.discount_amount, 0);
+    v_total_cogs := v_total_cogs + (v_item.quantity * coalesce(v_inv_item.cost_price, 0));
+  end loop;
+
+  -- Step 6: Calculate final amounts
+  v_total_discount := v_total_item_disc + p_discount_amount;
+  v_customer_paid := v_gross_amount - v_total_discount;
+
+  if v_customer_paid <= 0 then
+    raise exception 'Customer paid amount must be positive after discounts, got %', v_customer_paid
+      using errcode = '22023';
+  end if;
+
+  -- Step 7: Resolve payment account
+  v_resolved := public.resolve_pos_payment_account(p_brand_id, p_branch_id, p_payment_method_id);
+  v_account_id  := (v_resolved ->> 'payment_account_id')::uuid;
+  v_method_type := v_resolved ->> 'method_type';
+  v_mdr_pct     := (v_resolved ->> 'mdr_percentage')::numeric(5,2);
+
+  -- Step 8: Calculate MDR from customer_paid_amount
+  v_mdr_amount := public.calculate_pos_mdr(v_method_type, v_customer_paid, v_mdr_pct);
+  v_net_amount := v_customer_paid - v_mdr_amount;
+
+  -- Step 9: Generate sale number
+  v_sale_number := public.generate_pos_sale_number(p_brand_id);
+
+  -- Step 10: Generate idempotency key if not provided
+  v_final_key := coalesce(p_idempotency_key, 'pos_sale:' || p_brand_id || ':' || v_sale_number);
+
+  -- Step 11: Insert POS sale header
+  insert into public.pos_sales (
+    brand_id, branch_id, customer_id,
+    sale_number, sale_status,
+    payment_method_id, payment_account_id,
+    gross_amount, discount_amount, mdr_amount, net_amount,
+    idempotency_key, notes, metadata,
+    sold_at, created_by, created_at
+  ) values (
+    p_brand_id, p_branch_id, p_customer_id,
+    v_sale_number, 'COMPLETED',
+    p_payment_method_id, v_account_id,
+    v_gross_amount, v_total_discount, v_mdr_amount, v_net_amount,
+    v_final_key, p_notes, p_metadata,
+    p_sold_at, p_created_by, now()
+  )
+  returning id into v_sale_id;
+
+  -- Step 12: Process each item — insert line and deduct stock
+  for v_item in
+    select *
+    from jsonb_to_recordset(p_items) as x(
+      inventory_item_id uuid,
+      quantity numeric,
+      unit_price numeric,
+      discount_amount numeric
+    )
+  loop
+    select cost_price, name into v_inv_item
+    from public.inventory_items
+    where id = v_item.inventory_item_id;
+
+    v_line_total := v_item.quantity * v_item.unit_price - coalesce(v_item.discount_amount, 0);
+
+    insert into public.pos_sale_items (
+      brand_id, branch_id, pos_sale_id,
+      inventory_item_id, quantity,
+      unit_price, unit_cost,
+      discount_amount, line_total,
+      metadata
+    ) values (
+      p_brand_id, p_branch_id, v_sale_id,
+      v_item.inventory_item_id, v_item.quantity,
+      v_item.unit_price, coalesce(v_inv_item.cost_price, 0),
+      coalesce(v_item.discount_amount, 0), v_line_total,
+      '{}'
+    )
+    returning id into v_sale_item_id;
+
+    v_movement_key := 'pos_sale:' || v_sale_id || ':item:' || v_item.inventory_item_id || ':line:' || v_sale_item_id;
+
+    v_movement_id := public.add_inventory_movement(
+      p_brand_id       := p_brand_id,
+      p_branch_id      := p_branch_id,
+      p_item_id        := v_item.inventory_item_id,
+      p_direction      := 'OUT',
+      p_movement_type  := 'POS_SALE',
+      p_quantity       := v_item.quantity,
+      p_unit_cost      := coalesce(v_inv_item.cost_price, 0),
+      p_reference_type := 'pos_sale',
+      p_reference_id   := v_sale_id,
+      p_idempotency_key := v_movement_key,
+      p_description    := 'POS sale ' || v_sale_number,
+      p_metadata       := jsonb_build_object(
+                            'sale_item_id', v_sale_item_id,
+                            'item_name', v_inv_item.name
+                          ),
+      p_created_by     := p_created_by
+    );
+
+    update public.pos_sale_items
+    set inventory_movement_id = v_movement_id
+    where id = v_sale_item_id;
+  end loop;
+
+  -- Step 13: Create payment account movement (IN, net_amount)
+  v_pa_movement_id := public.add_payment_account_movement(
+    p_payment_account_id := v_account_id,
+    p_brand_id           := p_brand_id,
+    p_direction          := 'IN',
+    p_amount             := v_net_amount,
+    p_movement_type      := 'POS_PAYMENT',
+    p_branch_id          := p_branch_id,
+    p_reference_type     := 'pos_sale',
+    p_reference_id       := v_sale_id::text,
+    p_description        := 'POS sale ' || v_sale_number,
+    p_metadata           := jsonb_build_object(
+                             'sale_number', v_sale_number,
+                             'gross_amount', v_gross_amount,
+                             'discount_amount', v_total_discount,
+                             'mdr_amount', v_mdr_amount,
+                             'method_type', v_method_type
+                           ),
+    p_created_by         := p_created_by
+  );
+
+  update public.pos_sales
+  set payment_account_movement_id = v_pa_movement_id
+  where id = v_sale_id;
+
+  -- Step 14: Write finance ledger entries
+  v_revenue_ledger_id := public.add_finance_ledger_entry(
+    p_brand_id       := p_brand_id,
+    p_branch_id      := p_branch_id,
+    p_ledger_date    := p_sold_at::date,
+    p_occurred_at    := p_sold_at,
+    p_entry_type     := 'POS_REVENUE',
+    p_direction      := 'CREDIT',
+    p_amount         := v_customer_paid,
+    p_category       := 'pos',
+    p_account_code   := '4000',
+    p_reference_type := 'pos_sale',
+    p_reference_id   := v_sale_id,
+    p_source_table   := 'pos_sales',
+    p_source_id      := v_sale_id,
+    p_description    := 'POS sale ' || v_sale_number || ' revenue',
+    p_metadata       := jsonb_build_object(
+                         'sale_number', v_sale_number,
+                         'gross_amount', v_gross_amount,
+                         'discount_amount', v_total_discount
+                       ),
+    p_created_by     := p_created_by,
+    p_idempotency_key := 'pos_sale:' || v_sale_id || ':revenue'
+  );
+
+  if v_total_cogs > 0 then
+    v_cogs_ledger_id := public.add_finance_ledger_entry(
+      p_brand_id       := p_brand_id,
+      p_branch_id      := p_branch_id,
+      p_ledger_date    := p_sold_at::date,
+      p_occurred_at    := p_sold_at,
+      p_entry_type     := 'COGS',
+      p_direction      := 'DEBIT',
+      p_amount         := v_total_cogs,
+      p_category       := 'pos',
+      p_account_code   := '5000',
+      p_reference_type := 'pos_sale',
+      p_reference_id   := v_sale_id,
+      p_source_table   := 'pos_sales',
+      p_source_id      := v_sale_id,
+      p_description    := 'COGS for ' || v_sale_number,
+      p_metadata       := jsonb_build_object('sale_number', v_sale_number),
+      p_created_by     := p_created_by,
+      p_idempotency_key := 'pos_sale:' || v_sale_id || ':cogs'
+    );
+  end if;
+
+  if v_mdr_amount > 0 then
+    v_mdr_ledger_id := public.add_finance_ledger_entry(
+      p_brand_id       := p_brand_id,
+      p_branch_id      := p_branch_id,
+      p_ledger_date    := p_sold_at::date,
+      p_occurred_at    := p_sold_at,
+      p_entry_type     := 'MDR_EXPENSE',
+      p_direction      := 'DEBIT',
+      p_amount         := v_mdr_amount,
+      p_category       := 'bank_fee',
+      p_account_code   := '5100',
+      p_reference_type := 'pos_sale',
+      p_reference_id   := v_sale_id,
+      p_source_table   := 'pos_sales',
+      p_source_id      := v_sale_id,
+      p_description    := 'MDR fee for ' || v_sale_number,
+      p_metadata       := jsonb_build_object(
+                           'sale_number', v_sale_number,
+                           'customer_paid', v_customer_paid,
+                           'method_type', v_method_type
+                         ),
+      p_created_by     := p_created_by,
+      p_idempotency_key := 'pos_sale:' || v_sale_id || ':mdr'
+    );
+  end if;
+
+  -- Step 15: Return result
+  return jsonb_build_object(
+    'pos_sale_id', v_sale_id,
+    'sale_number', v_sale_number,
+    'status', 'COMPLETED',
+    'gross_amount', v_gross_amount,
+    'discount_amount', v_total_discount,
+    'customer_paid_amount', v_customer_paid,
+    'mdr_amount', v_mdr_amount,
+    'net_amount', v_net_amount,
+    'total_cogs', v_total_cogs,
+    'gross_profit', v_customer_paid - v_total_cogs - v_mdr_amount
+  );
+end;
+$func$;
+
+create or replace function public.open_store_shift(
+  p_brand_id integer,
+  p_branch_id uuid,
+  p_opening_cash numeric,
+  p_opening_notes text default null,
+  p_opened_by uuid default null,
+  p_metadata jsonb default '{}'
+) returns uuid
+language plpgsql
+security definer
+as $func$
+declare
+  v_cash_account_id   uuid;
+  v_prev_shift        record;
+  v_opening_diff      numeric(14,2);
+  v_shift_number      text;
+  v_shift_id          uuid;
+begin
+  -- Validate brand
+  perform 1 from public.brands where id = p_brand_id and lower(status) = 'active';
+  if not found then
+    raise exception 'Brand % not found or deleted', p_brand_id using errcode = 'P0002';
+  end if;
+
+  -- Validate branch
+  perform 1 from public.branches
+  where id = p_branch_id and brand_id = p_brand_id and deleted_at is null;
+  if not found then
+    raise exception 'Branch % not found, deleted, or does not belong to brand %',
+      p_branch_id, p_brand_id using errcode = 'P0002';
+  end if;
+
+  -- Ensure no OPEN shift exists
+  perform 1 from public.store_shifts
+  where branch_id = p_branch_id and shift_status = 'OPEN';
+  if found then
+    raise exception 'Branch % already has an OPEN shift. Close it before opening a new one.',
+      p_branch_id using errcode = 'P0004';
+  end if;
+
+  -- Resolve CASH payment account for this branch
+  select id into v_cash_account_id
+  from public.payment_accounts
+  where brand_id = p_brand_id
+    and branch_id = p_branch_id
+    and type = 'CASH'
+    and is_cash_account = true
+    and is_active = true
+  order by is_system_account desc, is_default_receiving_account desc, id
+  limit 1;
+
+  if not found then
+    raise exception 'No active CASH payment account found for branch %', p_branch_id
+      using errcode = 'P0002';
+  end if;
+
+  -- Find previous closed shift
+  select counted_closing_cash into v_prev_shift
+  from public.store_shifts
+  where branch_id = p_branch_id and shift_status = 'CLOSED'
+  order by closed_at desc
+  limit 1;
+
+  -- Calculate opening difference
+  v_opening_diff := p_opening_cash - coalesce(v_prev_shift.counted_closing_cash, 0);
+
+  -- Generate shift number
+  v_shift_number := public.generate_store_shift_number(p_brand_id);
+
+  -- Insert shift
+  insert into public.store_shifts (
+    brand_id, branch_id, cash_account_id,
+    shift_number, shift_status,
+    opening_cash, previous_closing_cash, opening_difference,
+    opened_at, opened_by, opening_notes,
+    metadata, created_at, updated_at
+  ) values (
+    p_brand_id, p_branch_id, v_cash_account_id,
+    v_shift_number, 'OPEN',
+    p_opening_cash, v_prev_shift.counted_closing_cash, v_opening_diff,
+    now(), p_opened_by, p_opening_notes,
+    p_metadata, now(), now()
+  )
+  returning id into v_shift_id;
+
+  -- Audit log
+  insert into public.audit_logs (brand_id, actor_id, action, target_type, target_id, target_label, description, details, created_at)
+  values (
+    p_brand_id, p_opened_by, 'OPEN_SHIFT', 'store_shifts', v_shift_id, v_shift_number,
+    'Opened shift ' || v_shift_number || ' with opening cash ' || p_opening_cash::text,
+    jsonb_build_object('shift_number', v_shift_number, 'opening_cash', p_opening_cash),
+    now()
+  );
+
+  return v_shift_id;
+end;
+$func$;
+
+-- ============================================================
 -- BEGIN SEED
 -- ============================================================
 DO $$
@@ -673,27 +1236,39 @@ BEGIN
 
   -- POS Sale 1: QRIS small (total 100.000, MDR should be 0 because <= 500.000)
   v_pos_result := public.record_pos_sale(
-    v_brand_id, v_branch_smg_id,
-    v_cust_budi_id, v_pm_qris_id,
-    jsonb_build_array(
+  p_brand_id := v_brand_id,
+  p_branch_id := v_branch_smg_id,
+  p_payment_method_id := v_pm_qris_id,
+  p_items := jsonb_build_array(
       jsonb_build_object('inventory_item_id', v_item_charger20_id, 'quantity', 1, 'unit_price', 50000),
       jsonb_build_object('inventory_item_id', v_item_tg_id, 'quantity', 2, 'unit_price', 25000)
     ),
-    0, NOW(), 'QRIS small test: under threshold', '{}',
-    v_prof_front_id, 'seed:pos:qris_small'
-  );
+  p_customer_id := v_cust_budi_id,
+  p_discount_amount := 0,
+  p_sold_at := NOW(),
+  p_notes := 'QRIS small test: under threshold',
+  p_metadata := '{}',
+  p_created_by := v_prof_front_id,
+  p_idempotency_key := 'seed:pos:qris_small'
+);
   RAISE NOTICE 'POS small QRIS sale result: %', v_pos_result;
 
   -- POS Sale 2: QRIS large (total 600.000, MDR should be > 0)
-  v_pos_result := public.record_pos_sale(
-    v_brand_id, v_branch_smg_id,
-    v_cust_andi_id, v_pm_qris_id,
-    jsonb_build_array(
+v_pos_result := public.record_pos_sale(
+  p_brand_id := v_brand_id,
+  p_branch_id := v_branch_smg_id,
+  p_payment_method_id := v_pm_qris_id,
+  p_items := jsonb_build_array(
       jsonb_build_object('inventory_item_id', v_item_charger67_id, 'quantity', 1, 'unit_price', 600000)
-    ),
-    0, NOW(), 'QRIS large test: over threshold', '{}',
-    v_prof_front_id, 'seed:pos:qris_large'
-  );
+  ),
+  p_customer_id := v_cust_andi_id,
+  p_discount_amount := 0,
+  p_sold_at := NOW(),
+  p_notes := 'QRIS large test: over threshold',
+  p_metadata := '{}',
+  p_created_by := v_prof_front_id,
+  p_idempotency_key := 'seed:pos:qris_large'
+);
   RAISE NOTICE 'POS large QRIS sale result: %', v_pos_result;
 
   RAISE NOTICE 'POS sales completed';

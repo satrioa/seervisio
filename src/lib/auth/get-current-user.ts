@@ -45,20 +45,56 @@ export type AuthResult =
 export async function getCurrentUser(): Promise<AuthResult> {
   const supabase = await createServerSupabase();
 
+  // Step 0: Check session
+  const { data: sessionData } = await supabase.auth.getSession();
+  console.log("[getCurrentUser] auth.getSession result:", {
+    hasSession: Boolean(sessionData?.session),
+    expiresAt: sessionData?.session?.expires_at,
+    userId: sessionData?.session?.user?.id,
+  });
+
   // Step 1: Get authenticated user from Supabase Auth
   const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+  console.log("[getCurrentUser] auth.getUser result:", {
+    hasUser: Boolean(authUser),
+    userId: authUser?.id,
+    email: authUser?.email,
+    authError: authError?.message,
+  });
 
   if (authError || !authUser) {
     return { user: null, error: authError?.message ?? "Not authenticated" };
   }
 
   // Step 2: Load profile linked to this auth user
-  const profile = await getProfileByAuthUserId(supabase, authUser.id);
+  console.log("[getCurrentUser] about to query profiles with auth_user_id:", authUser.id);
+  let profile = await getProfileByAuthUserId(supabase, authUser.id);
+
+  // Fallback: if SSR client profile query returns null but we have a session,
+  // try with a directly-authenticated client using the access token.
+  if (!profile && sessionData?.session?.access_token) {
+    console.log("[getCurrentUser] SSR client returned null profile. Trying fallback with session access_token...");
+    const { createClient } = await import("@supabase/supabase-js");
+    const authedClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        },
+      }
+    );
+    profile = await getProfileByAuthUserId(authedClient, authUser.id);
+    console.log("[getCurrentUser] Fallback profile query result:", Boolean(profile));
+  }
 
   if (!profile) {
     return {
       user: null,
-      error: "Akun Anda belum terhubung ke profil. Silakan hubungi administrator.",
+      error: `Akun Anda belum terhubung ke profil. (authUserId: ${authUser.id}, email: ${authUser.email})`,
     };
   }
 
