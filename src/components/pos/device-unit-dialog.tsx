@@ -12,9 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Smartphone, Cpu, HardDrive, Battery, Check } from "lucide-react";
 import type { CartDeviceUnit } from "@/domain/pos/types";
+
+function ScrollArea({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={`${className ?? ""} overflow-auto`}>{children}</div>;
+}
 
 interface DeviceUnitDialogProps {
   units: CartDeviceUnit[];

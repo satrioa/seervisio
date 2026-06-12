@@ -1,11 +1,10 @@
-export default function PosPage() {
-  return (
-    <div className="space-y-2 p-6">
-      <h1 className="text-2xl font-semibold">POS / Penjualan Produk</h1>
-      <p className="text-muted-foreground">
-        Modul POS sedang disiapkan. Fokus saat ini adalah menyelesaikan Service,
-        Customer, Role Access, dan Branch Scope terlebih dahulu.
-      </p>
-    </div>
-  );
+import { PosPageClient } from "@/components/pos/pos-page-client";
+
+interface PageProps {
+  params: Promise<{ brandSlug: string }>;
+}
+
+export default async function PosPage({ params }: PageProps) {
+  const { brandSlug } = await params;
+  return <PosPageClient brandSlug={brandSlug} />;
 }

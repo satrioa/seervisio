@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -35,6 +34,10 @@ import {
 } from "lucide-react";
 import type { PosCartItem, PosTradeIn } from "@/domain/pos/types";
 import { calculateLineTotal, isSerializedDevice } from "@/domain/pos/calculate-pos";
+
+function ScrollArea({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={`${className ?? ""} overflow-auto`}>{children}</div>;
+}
 
 /* ─── Helpers ─── */
 
@@ -256,13 +259,25 @@ function PaymentSummary({
 
 function SuccessScreen({
   saleNumber,
-  totalPaid,
+  grossAmount,
+  discountAmount,
+  tradeInAmount,
+  amountDue,
+  paidAmount,
   changeAmount,
+  mdrAmount,
+  netAmount,
   onNewSale,
 }: {
   saleNumber: string;
-  totalPaid: number;
+  grossAmount: number;
+  discountAmount: number;
+  tradeInAmount: number;
+  amountDue: number;
+  paidAmount: number;
   changeAmount: number;
+  mdrAmount: number;
+  netAmount: number;
   onNewSale: () => void;
 }) {
   return (
@@ -272,12 +287,17 @@ function SuccessScreen({
       </div>
       <h3 className="text-lg font-semibold mb-1">Penjualan Berhasil</h3>
       <p className="text-sm text-muted-foreground mb-1">Nomor: {saleNumber}</p>
-      <p className="text-2xl font-bold mb-4">{formatPrice(totalPaid)}</p>
-      {changeAmount > 0 && (
-        <p className="text-sm text-muted-foreground mb-4">
-          Kembalian: {formatPrice(changeAmount)}
-        </p>
-      )}
+      <p className="text-2xl font-bold mb-4">{formatPrice(paidAmount)}</p>
+      <div className="w-full max-w-xs space-y-1 rounded-lg border bg-muted/30 p-3 text-sm text-left">
+        <div className="flex justify-between"><span>Subtotal</span><span>{formatPrice(grossAmount)}</span></div>
+        <div className="flex justify-between"><span>Diskon</span><span>-{formatPrice(discountAmount)}</span></div>
+        <div className="flex justify-between"><span>Tukar tambah</span><span>-{formatPrice(tradeInAmount)}</span></div>
+        <div className="flex justify-between font-medium"><span>Total bayar</span><span>{formatPrice(amountDue)}</span></div>
+        <div className="flex justify-between"><span>Dibayar</span><span>{formatPrice(paidAmount)}</span></div>
+        <div className="flex justify-between"><span>Kembalian</span><span>{formatPrice(changeAmount)}</span></div>
+        <div className="flex justify-between text-muted-foreground"><span>MDR</span><span>{formatPrice(mdrAmount)}</span></div>
+        <div className="flex justify-between text-muted-foreground"><span>Net</span><span>{formatPrice(netAmount)}</span></div>
+      </div>
       <div className="flex gap-2 mt-2">
         <Button variant="outline" size="sm" onClick={onNewSale}>
           <RepeatIcon className="h-4 w-4 mr-1" />
@@ -298,7 +318,18 @@ interface CartPanelProps {
   discountAmount: number;
   submitting: boolean;
   error?: string;
-  success?: { saleNumber: string; totalPaid: number; changeAmount: number };
+  success?: {
+    saleNumber: string;
+    grossAmount: number;
+    discountAmount: number;
+    tradeInAmount: number;
+    amountDue: number;
+    paidAmount: number;
+    changeAmount: number;
+    mdrAmount: number;
+    netAmount: number;
+  };
+  paymentMethods: Array<{ id: string; name: string; type: string }>;
   brandSlug: string;
   onRemoveItem: (key: string) => void;
   onUpdateQty: (key: string, qty: number) => void;
@@ -306,16 +337,9 @@ interface CartPanelProps {
   onSetCustomerQuick: (data: { name: string; phone?: string }) => void;
   onSetTradeIn: (t?: PosTradeIn) => void;
   onSetDiscount: (amount: number) => void;
-  onSubmitSale: (payment: { paymentMethodId: string; paymentAccountId: string; amount: number }) => void;
+  onSubmitSale: (payment: { paymentMethodId: string; amount: number }) => void;
   onReset: () => void;
 }
-
-// Payment method options (mock — replace with real data from action)
-const PAYMENT_METHODS = [
-  { id: "cash", name: "Tunai", type: "CASH" },
-  { id: "qris", name: "QRIS", type: "QRIS" },
-  { id: "transfer", name: "Transfer", type: "TRANSFER" },
-];
 
 export function CartPanel({
   cart,
@@ -324,6 +348,7 @@ export function CartPanel({
   submitting,
   error,
   success,
+  paymentMethods,
   brandSlug,
   onRemoveItem,
   onUpdateQty,
@@ -354,8 +379,14 @@ export function CartPanel({
       <div className="h-full rounded-lg border bg-card">
         <SuccessScreen
           saleNumber={success.saleNumber}
-          totalPaid={success.totalPaid}
+          grossAmount={success.grossAmount}
+          discountAmount={success.discountAmount}
+          tradeInAmount={success.tradeInAmount}
+          amountDue={success.amountDue}
+          paidAmount={success.paidAmount}
           changeAmount={success.changeAmount}
+          mdrAmount={success.mdrAmount}
+          netAmount={success.netAmount}
           onNewSale={onReset}
         />
       </div>
@@ -368,7 +399,6 @@ export function CartPanel({
     // Map payment method ID (in real impl, look up from DB)
     onSubmitSale({
       paymentMethodId: paymentMethod,
-      paymentAccountId: paymentMethod,
       amount,
     });
   };
@@ -438,13 +468,18 @@ export function CartPanel({
                 <SelectValue placeholder="Pilih metode" />
               </SelectTrigger>
               <SelectContent>
-                {PAYMENT_METHODS.map((m) => (
+                {paymentMethods.map((m) => (
                   <SelectItem key={m.id} value={m.id} className="text-xs">
-                    {m.name}
+                    {m.name} ({m.type})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {paymentMethods.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Belum ada metode pembayaran aktif untuk brand ini.
+              </p>
+            )}
           </div>
 
           {/* Paid Amount */}
@@ -469,7 +504,7 @@ export function CartPanel({
           {/* Submit */}
           <Button
             className="w-full h-10 text-sm font-semibold"
-            disabled={!paymentMethod || submitting || amountDue <= 0}
+            disabled={!paymentMethod || submitting || amountDue <= 0 || paymentMethods.length === 0}
             onClick={handlePay}
           >
             {submitting ? (

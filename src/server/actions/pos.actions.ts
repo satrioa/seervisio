@@ -35,6 +35,7 @@ import {
   getPosSaleById as repoGetSale,
 } from "@/repositories/pos.repository";
 import { findOrCreateCustomer } from "@/repositories/customer.repository";
+import { getPaymentMethodsByBrand } from "@/repositories/payment.repository";
 import type { InventoryItemUnitRow } from "@/repositories/pos.repository";
 
 /* ─── Helpers ─── */
@@ -137,6 +138,27 @@ export async function getAvailableDeviceUnitsAction(
   } catch (err: any) {
     console.error("[getAvailableDeviceUnitsAction]", err);
     return errorResult(err.message || "Gagal mengambil unit tersedia.");
+  }
+}
+
+export async function getPosPaymentMethodsAction(
+  brandSlug: string,
+): Promise<ActionResult<Array<{ id: string; name: string; type: string }>>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    if (!session) return errorResult("Sesi tidak valid.");
+
+    const methods = await getPaymentMethodsByBrand(session.brandId);
+    return successResult(
+      methods.map((method: any) => ({
+        id: method.id,
+        name: method.name,
+        type: method.type,
+      })),
+    );
+  } catch (err: any) {
+    console.error("[getPosPaymentMethodsAction]", err);
+    return errorResult(err.message || "Gagal mengambil metode pembayaran.");
   }
 }
 

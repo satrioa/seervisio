@@ -6,18 +6,22 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Plus, Package } from "lucide-react";
 import type { PosProductResult, CartDeviceUnit } from "@/domain/pos/types";
 import { getAvailableDeviceUnitsAction } from "@/server/actions/pos.actions";
 import { DeviceUnitDialog } from "./device-unit-dialog";
 
+function ScrollArea({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={`${className ?? ""} overflow-auto`}>{children}</div>;
+}
+
 /* ─── Type Filter Tabs ─── */
 
 const TYPE_TABS = [
   { label: "Semua", value: undefined },
-  { label: "Aksesoris", value: "ACCESSORY" },
+  { label: "Produk", value: "PRODUCT" },
   { label: "Sparepart", value: "SPAREPART" },
+  { label: "Supply", value: "SUPPLY" },
   { label: "Unit", value: "DEVICE_UNIT" },
   { label: "Lainnya", value: "OTHER" },
 ] as const;
@@ -64,8 +68,9 @@ function ProductCard({
 
   const typeBadge = () => {
     switch (product.itemType) {
-      case "ACCESSORY": return <Badge variant="outline" className="text-[10px] px-1.5 py-0">Aksesoris</Badge>;
+      case "PRODUCT": return <Badge variant="outline" className="text-[10px] px-1.5 py-0">Produk</Badge>;
       case "SPAREPART": return <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Sparepart</Badge>;
+      case "SUPPLY": return <Badge variant="outline" className="text-[10px] px-1.5 py-0">Supply</Badge>;
       case "DEVICE_UNIT": return <Badge variant="default" className="text-[10px] px-1.5 py-0">Unit</Badge>;
       default: return <Badge variant="outline" className="text-[10px] px-1.5 py-0">Produk</Badge>;
     }
