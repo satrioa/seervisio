@@ -1,52 +1,119 @@
 ﻿"use client";
 
 import * as React from "react";
+import { Suspense, useCallback } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
   LayoutList,
   Columns3,
   Filter,
   SlidersHorizontal,
+  Check,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CreateServiceOverlay } from "@/components/services/create-service-overlay";
 
 import {
-  MOCK_SERVICES,
   type ServiceStatus,
   STATUS_CONFIG,
   STATUS_ORDER,
 } from "@/components/services/service-data";
+import type { ServiceRecord } from "@/components/services/service-data";
 import { ServiceListView } from "@/components/services/service-list-view";
 import { ServiceKanbanView } from "@/components/services/service-kanban-view";
+import { ServiceDetailSheet } from "@/components/services/service-detail-sheet";
+import { useRightSidebar } from "@/components/layout/right-sidebar-context";
+import { listServicesAction, getServiceDetailAction } from "@/server/actions/service.actions";
+import { mapDbStatusToUI } from "@/components/services/service-ui-mappers";
 
 type ViewMode = "list" | "kanban";
 
-export default function ServicesPage() {
+function ServicesPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const brandSlug = pathname.split("/")[1];
+  const { showDetail } = useRightSidebar();
+
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<ServiceStatus | "all">("all");
   const [technicianFilter, setTechnicianFilter] = React.useState("all");
+  const [statusFilterOpen, setStatusFilterOpen] = React.useState(false);
+  const [technicianFilterOpen, setTechnicianFilterOpen] = React.useState(false);
+  const [selectedServiceId, setSelectedServiceId] = React.useState<string | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = React.useState(false);
+  const [services, setServices] = React.useState<ServiceRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [selectedServiceDetail, setSelectedServiceDetail] = React.useState<ServiceRecord | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    setLoading(true);
+    listServicesAction({ brandSlug }).then((result) => {
+      if (result.success) {
+        setServices(result.data);
+      }
+      setLoading(false);
+    });
+  }, [brandSlug]);
+
+  // Fetch full service detail when a service is selected
+  React.useEffect(() => {
+    if (!selectedServiceId) {
+      setSelectedServiceDetail(null);
+      return;
+    }
+
+    const fetchDetail = async () => {
+      setIsDetailLoading(true);
+      try {
+        const result = await getServiceDetailAction(brandSlug, selectedServiceId);
+        if (result.success) {
+          setSelectedServiceDetail(result.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch service detail:", err);
+      } finally {
+        setIsDetailLoading(false);
+      }
+    };
+
+    fetchDetail();
+  }, [brandSlug, selectedServiceId]);
+
+  const selectedService = React.useMemo(
+    () => selectedServiceDetail ?? services.find((s) => s.id === selectedServiceId) ?? null,
+    [selectedServiceDetail, selectedServiceId, services]
+  );
+
   const technicians = React.useMemo(
     () =>
       Array.from(
-        new Set(MOCK_SERVICES.map((service) => service.technician).filter(Boolean))
+        new Set(services.map((service) => service.technician).filter(Boolean))
       ).sort() as string[],
-    []
+    [services]
   );
+
+  // Restore right sidebar from URL on mount
+  React.useEffect(() => {
+    const serviceId = searchParams.get("service");
+    if (serviceId && services.length > 0) {
+      const service = services.find((s) => s.id === serviceId);
+      if (service) {
+        showDetail(service);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services]);
 
   // Filter services
   const filteredServices = React.useMemo(() => {
-    let result = MOCK_SERVICES;
+    let result = services;
 
     if (statusFilter !== "all") {
       result = result.filter((s) => s.status === statusFilter);
@@ -71,98 +138,215 @@ export default function ServicesPage() {
     }
 
     return result;
-  }, [search, statusFilter, technicianFilter]);
+  }, [search, statusFilter, technicianFilter, services]);
+
+  const updateUrlParam = React.useCallback(
+    (serviceId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (serviceId) {
+        params.set("service", serviceId);
+      } else {
+        params.delete("service");
+      }
+      const newUrl = params.toString()
+        ? `${pathname}?${params.toString()}`
+        : pathname;
+      router.replace(newUrl, { scroll: false });
+    },
+    [searchParams, router, pathname]
+  );
+
+  const handleCardDoubleClick = React.useCallback(
+    (service: ServiceRecord) => {
+      setSelectedServiceId(service.id);
+      setIsDetailOpen(true);
+      updateUrlParam(service.id);
+      showDetail(service);
+    },
+    [updateUrlParam, showDetail]
+  );
+
+  const handleSheetOpenChange = React.useCallback(
+    (open: boolean) => {
+      setIsDetailOpen(open);
+      if (!open) {
+        // Clear URL param when sheet closes
+        updateUrlParam(null);
+      }
+    },
+    [updateUrlParam]
+  );
+
+  const handleServiceUpdated = useCallback(() => {
+    listServicesAction({ brandSlug }).then((result) => {
+      if (result.success) setServices(result.data);
+    });
+    if (selectedServiceId) {
+      getServiceDetailAction(brandSlug, selectedServiceId).then(result => {
+        if (result.success) setSelectedServiceDetail(result.data);
+      });
+    }
+  }, [brandSlug, selectedServiceId]);
+
+  const statusFilterLabel =
+    statusFilter === "all" ? "Semua Status" : STATUS_CONFIG[statusFilter].label;
+  const technicianFilterLabel =
+    technicianFilter === "all"
+      ? "Semua Teknisi"
+      : technicianFilter === "unassigned"
+        ? "Belum Ditugaskan"
+        : technicianFilter;
 
   return (
     <>
       <div className="flex flex-col gap-4">
-      {/* ---------- Toolbar ---------- */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Cari servis, pelanggan, perangkat..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-8 text-xs"
-          />
-        </div>
+        {/* ---------- Toolbar ---------- */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Cari servis, pelanggan, perangkat..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-xs"
+            />
+          </div>
 
-        <div className="flex items-center gap-2">
-          {/* Status Filter */}
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as ServiceStatus | "all")}
-          >
-            <SelectTrigger className="h-9 w-[140px] text-xs">
-              <Filter className="mr-1.5 size-3.5 text-muted-foreground" />
-              <SelectValue placeholder="Semua Status" />
-            </SelectTrigger>
-            <SelectContent align="end" className="z-[1001]">
-              <SelectItem value="all" className="text-xs">Semua Status</SelectItem>
-              {STATUS_ORDER.map((s) => (
-                <SelectItem key={s} value={s} className="text-xs">
-                  {STATUS_CONFIG[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {/* Status Filter */}
+            <Popover open={statusFilterOpen} onOpenChange={setStatusFilterOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 w-[140px] justify-start px-3 text-xs font-normal"
+                >
+                  <Filter className="mr-1.5 size-3.5 text-muted-foreground" />
+                  <span className="truncate">{statusFilterLabel}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="z-[1001] w-[180px] p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setStatusFilterOpen(false);
+                  }}
+                  className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span>Semua Status</span>
+                  {statusFilter === "all" && <Check className="size-3.5" />}
+                </button>
+                {STATUS_ORDER.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(status);
+                      setStatusFilterOpen(false);
+                    }}
+                    className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <span>{STATUS_CONFIG[status].label}</span>
+                    {statusFilter === status && <Check className="size-3.5" />}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
 
-          {/* Technician Filter */}
-          <Select
-            value={technicianFilter}
-            onValueChange={setTechnicianFilter}
-          >
-            <SelectTrigger className="h-9 w-[150px] text-xs">
-              <SlidersHorizontal className="mr-1.5 size-3.5 text-muted-foreground" />
-              <SelectValue placeholder="Semua Teknisi" />
-            </SelectTrigger>
-            <SelectContent align="end" className="z-[1001]">
-              <SelectItem value="all" className="text-xs">Semua Teknisi</SelectItem>
-              <SelectItem value="unassigned" className="text-xs">
-                Belum Ditugaskan
-              </SelectItem>
-              {technicians.map((technician) => (
-                <SelectItem key={technician} value={technician} className="text-xs">
-                  {technician}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* View Toggle */}
-          <div className="flex items-center rounded-lg border bg-card p-0.5">
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setViewMode("list")}
-              aria-label="List view"
+            {/* Technician Filter */}
+            <Popover
+              open={technicianFilterOpen}
+              onOpenChange={setTechnicianFilterOpen}
             >
-              <LayoutList className="size-3.5" />
-            </Button>
-            <Button
-              variant={viewMode === "kanban" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setViewMode("kanban")}
-              aria-label="Kanban view"
-            >
-              <Columns3 className="size-3.5" />
-            </Button>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 w-[150px] justify-start px-3 text-xs font-normal"
+                >
+                  <SlidersHorizontal className="mr-1.5 size-3.5 text-muted-foreground" />
+                  <span className="truncate">{technicianFilterLabel}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="z-[1001] w-[200px] p-1">
+                {[
+                  { value: "all", label: "Semua Teknisi" },
+                  { value: "unassigned", label: "Belum Ditugaskan" },
+                  ...technicians.map((technician) => ({
+                    value: technician,
+                    label: technician,
+                  })),
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      setTechnicianFilter(item.value);
+                      setTechnicianFilterOpen(false);
+                    }}
+                    className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <span className="truncate">{item.label}</span>
+                    {technicianFilter === item.value && <Check className="size-3.5" />}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+
+            {/* View Toggle */}
+            <div className="flex items-center rounded-lg border bg-card p-0.5">
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setViewMode("list")}
+                aria-label="List view"
+              >
+                <LayoutList className="size-3.5" />
+              </Button>
+              <Button
+                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setViewMode("kanban")}
+                aria-label="Kanban view"
+              >
+                <Columns3 className="size-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ---------- Views ---------- */}
-      {viewMode === "list" ? (
-        <ServiceListView services={filteredServices} />
-      ) : (
-        <ServiceKanbanView services={filteredServices} />
-      )}
-    </div>
+        {/* ---------- Views ---------- */}
+        {viewMode === "list" ? (
+          <ServiceListView services={filteredServices} />
+        ) : (
+          <ServiceKanbanView
+            services={filteredServices}
+            brandSlug={brandSlug}
+            onCardDoubleClick={handleCardDoubleClick}
+          />
+        )}
+      </div>
       <CreateServiceOverlay />
+      <ServiceDetailSheet
+        service={selectedService}
+        open={isDetailOpen}
+        onOpenChange={handleSheetOpenChange}
+        loading={isDetailLoading}
+        brandSlug={brandSlug}
+        onServiceUpdated={handleServiceUpdated}
+      />
     </>
+  );
+}
+
+export default function ServicesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ServicesPageContent />
+    </Suspense>
   );
 }

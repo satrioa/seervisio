@@ -78,78 +78,100 @@ interface ServiceCardProps {
   asHandle?: boolean;
   isOverlay?: boolean;
   onClick?: () => void;
+  onCardDoubleClick?: (service: ServiceRecord) => void;
 }
 
-function ServiceCard({ service, asHandle, isOverlay, onClick }: ServiceCardProps) {
+function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick }: ServiceCardProps) {
   const totalBiaya = getTotalSparepartCost(service.spareparts);
   const styles = STATUS_COLUMN_STYLES[service.status];
 
   const cardContent = (
-    <Card
-      className={`border-black/5 shadow-sm transition-shadow hover:shadow-md dark:border-white/10 ${
-        isOverlay ? "shadow-xl" : ""
-      } ${styles.cardBg}`}
-      onClick={onClick}
+    <div
+      className="relative group"
+      onDoubleClick={() => onCardDoubleClick?.(service)}
     >
-      <CardContent className="flex flex-col gap-2 p-3">
-        {/* Header: Device icon + name + ID */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <service.deviceIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate text-xs font-medium text-foreground">
-              {service.deviceBrand} {service.deviceModel}
-            </span>
-          </div>
-          <span className="shrink-0 text-[9px] text-muted-foreground">
-            {service.id}
-          </span>
-        </div>
-
-        {/* Issue */}
-        <p className="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
-          {service.issue}
-        </p>
-
-        {/* Customer & Technician */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            <User className="size-3 text-muted-foreground" />
-            <span className="truncate text-[10px] text-muted-foreground">
-              {service.customerName}
-            </span>
-          </div>
-          {service.technician && (
-            <span className="truncate text-[10px] text-muted-foreground">
-              🔧 {service.technician}
-            </span>
-          )}
-        </div>
-
-        {/* Footer: Date + Branch + Sparepart */}
-        <div className="flex items-center justify-between border-t pt-1.5">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <Clock className="size-3 text-muted-foreground" />
-              <span className="text-[9px] text-muted-foreground">
-                {service.createdAt.slice(5)}
+      <Card
+        className={`select-none cursor-pointer border-black/5 shadow-sm transition-shadow hover:shadow-md dark:border-white/10 ${
+          isOverlay ? "shadow-xl" : ""
+        } ${styles.cardBg}`}
+        onClick={onClick}
+      >
+        <CardContent className="flex flex-col gap-2 p-3">
+          {/* Header: Device icon + name + ID + mobile detail button */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <service.deviceIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate text-xs font-medium text-foreground">
+                {service.deviceBrand} {service.deviceModel}
               </span>
             </div>
-            <Badge variant="outline" size="xs" radius="full">
-              {service.branch === "Semarang Pusat"
-                ? "Pusat"
-                : service.branch === "Salatiga"
-                  ? "Salatiga"
-                  : "Sragen"}
-            </Badge>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[9px] text-muted-foreground">
+                {service.id}
+              </span>
+              <button
+                type="button"
+                className="sm:hidden inline-flex items-center justify-center rounded-md px-2 py-1 text-[9px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onCardDoubleClick?.(service);
+                }}
+              >
+                Detail
+              </button>
+            </div>
           </div>
-          {totalBiaya > 0 && (
-            <span className="text-[10px] font-medium tabular-nums text-foreground">
-              {formatCurrency(totalBiaya)}
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+
+          {/* Issue */}
+          <p className="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+            {service.issue}
+          </p>
+
+          {/* Customer & Technician */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <User className="size-3 text-muted-foreground" />
+              <span className="truncate text-[10px] text-muted-foreground">
+                {service.customerName}
+              </span>
+            </div>
+            {service.technician && (
+              <span className="truncate text-[10px] text-muted-foreground">
+                🔧 {service.technician}
+              </span>
+            )}
+          </div>
+
+          {/* Footer: Date + Branch + Sparepart */}
+          <div className="flex items-center justify-between border-t pt-1.5">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <Clock className="size-3 text-muted-foreground" />
+                <span className="text-[9px] text-muted-foreground">
+                  {service.createdAt.slice(5)}
+                </span>
+              </div>
+              <Badge variant="outline" size="xs" radius="full">
+                {service.branch === "Semarang Pusat"
+                  ? "Pusat"
+                  : service.branch === "Salatiga"
+                    ? "Salatiga"
+                    : "Sragen"}
+              </Badge>
+            </div>
+            {totalBiaya > 0 && (
+              <span className="text-[10px] font-medium tabular-nums text-foreground">
+                {formatCurrency(totalBiaya)}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <span className="hidden sm:group-hover:block text-[8px] text-muted-foreground absolute -bottom-3 left-0 right-0 text-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        Double click untuk detail
+      </span>
+    </div>
   );
 
   return (
@@ -170,9 +192,10 @@ interface ServiceColumnProps {
   services: ServiceRecord[];
   isOverlay?: boolean;
   onCardClick: (service: ServiceRecord) => void;
+  onCardDoubleClick?: (service: ServiceRecord) => void;
 }
 
-function ServiceColumn({ status, services, isOverlay, onCardClick }: ServiceColumnProps) {
+function ServiceColumn({ status, services, isOverlay, onCardClick, onCardDoubleClick }: ServiceColumnProps) {
   const styles = STATUS_COLUMN_STYLES[status];
   const config = STATUS_CONFIG[status];
 
@@ -220,6 +243,7 @@ function ServiceColumn({ status, services, isOverlay, onCardClick }: ServiceColu
                   service={service}
                   asHandle={!isOverlay}
                   onClick={() => onCardClick(service)}
+                  onCardDoubleClick={onCardDoubleClick}
                 />
               ))}
               {services.length === 0 && (
@@ -241,9 +265,11 @@ function ServiceColumn({ status, services, isOverlay, onCardClick }: ServiceColu
 
 interface ServiceKanbanViewProps {
   services: ServiceRecord[];
+  brandSlug: string;
+  onCardDoubleClick?: (service: ServiceRecord) => void;
 }
 
-export function ServiceKanbanView({ services }: ServiceKanbanViewProps) {
+export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: ServiceKanbanViewProps) {
   const { showDetail } = useRightSidebar();
 
   // Convert services array to Record<ServiceStatus, ServiceRecord[]>
@@ -360,6 +386,7 @@ export function ServiceKanbanView({ services }: ServiceKanbanViewProps) {
     // Call server action (source of truth)
     try {
       const response = await updateServiceStatusAction({
+        brandSlug,
         serviceId: service.id,
         nextStatus: workflowNext,
       });
@@ -438,6 +465,7 @@ export function ServiceKanbanView({ services }: ServiceKanbanViewProps) {
 
             try {
               const response = await cancelServiceAction({
+                brandSlug,
                 serviceId: cancelTarget.id,
                 reason,
                 returnStock,
@@ -498,6 +526,7 @@ export function ServiceKanbanView({ services }: ServiceKanbanViewProps) {
             status={status}
             services={columns[status] ?? []}
             onCardClick={openDetail}
+            onCardDoubleClick={onCardDoubleClick}
           />
         ))}
       </KanbanBoard>

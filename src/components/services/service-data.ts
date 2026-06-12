@@ -22,23 +22,36 @@ export type ServiceStatus =
   | "selesai"
   | "batal";
 
+export type PaymentItemType = "dp" | "full" | "partial";
+
 export interface SparepartItem {
+  id: string;
   name: string;
   qty: number;
   price: number;
+  totalPrice: number;
+  type: "sparepart";
 }
 
 export interface PaymentItem {
-  method: string;
+  id: string;
+  type: PaymentItemType;
   amount: number;
-  status: "lunas" | "belum" | "sebagian";
+  method: string;
+  date: string;
+  note?: string;
+  status?: string;
 }
 
 export interface TimelineEntry {
+  id: string;
   status: string;
+  fromStatus?: string;
+  toStatus: string;
   timestamp: string;
   note?: string;
-  by: string;
+  changedBy?: string;
+  by?: string;
 }
 
 export interface ServiceNote {
@@ -90,9 +103,10 @@ export interface MockPaymentAccount {
 }
 
 export interface ServicePaymentSummary {
-  totalDue: number;
+  totalCharged: number;
   totalPaid: number;
   remainingBalance: number;
+  dpAmount: number;
   paymentStatus: ServicePaymentStatus;
 }
 
@@ -226,16 +240,16 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     updatedAt: "2026-06-09 14:15",
     estimatedCompletion: "2026-06-10",
     spareparts: [
-      { name: "Battery iPhone 11 (Original)", qty: 1, price: 350000 },
-      { name: "Flexible Charger Port", qty: 1, price: 85000 },
+      { id: "sp-1", name: "Battery iPhone 11 (Original)", qty: 1, price: 350000, totalPrice: 350000, type: "sparepart" as const },
+      { id: "sp-2", name: "Flexible Charger Port", qty: 1, price: 85000, totalPrice: 85000, type: "sparepart" as const },
     ],
     payments: [
-      { method: "DP Tunai", amount: 100000, status: "sebagian" },
+      { id: "pay-1", type: "dp" as const, amount: 100000, method: "DP Tunai", date: "2026-06-08 10:30" },
     ],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-08 10:30", note: "Unit diterima", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-08 14:00", note: "Diagnosis selesai, menunggu persetujuan", by: "Andi Pratama" },
-      { status: "perbaikan", timestamp: "2026-06-09 09:00", note: "Sparepart tersedia, mulai perbaikan", by: "Andi Pratama" },
+      { id: "tl-1", status: "masuk", toStatus: "masuk", timestamp: "2026-06-08 10:30", note: "Unit diterima", changedBy: "Front Office" },
+      { id: "tl-2", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-08 14:00", note: "Diagnosis selesai, menunggu persetujuan", changedBy: "Andi Pratama" },
+      { id: "tl-3", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-09 09:00", note: "Sparepart tersedia, mulai perbaikan", changedBy: "Andi Pratama" },
     ],
     notes: [
       { text: "Pelanggan minta dipercepat, butuh hp untuk kerja", timestamp: "2026-06-08 11:00", by: "Front Office" },
@@ -259,12 +273,12 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     updatedAt: "2026-06-09 11:30",
     estimatedCompletion: "2026-06-11",
     spareparts: [
-      { name: "LCD Samsung S22 Full Assembly", qty: 1, price: 1250000 },
+      { id: "sp-3", name: "LCD Samsung S22 Full Assembly", qty: 1, price: 1250000, totalPrice: 1250000, type: "sparepart" as const },
     ],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-09 08:15", note: "Unit diterima dengan LCD retak", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-09 11:30", note: "Diagnosis selesai, menunggu persetujuan biaya", by: "Budi Santoso" },
+      { id: "tl-4", status: "masuk", toStatus: "masuk", timestamp: "2026-06-09 08:15", note: "Unit diterima dengan LCD retak", changedBy: "Front Office" },
+      { id: "tl-5", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-09 11:30", note: "Diagnosis selesai, menunggu persetujuan biaya", changedBy: "Budi Santoso" },
     ],
     notes: [
       { text: "Pelanggan sudah diinfo estimasi biaya Rp 1.250.000", timestamp: "2026-06-09 11:35", by: "Budi Santoso" },
@@ -288,15 +302,15 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     updatedAt: "2026-06-09 10:00",
     estimatedCompletion: "2026-06-10",
     spareparts: [
-      { name: "SSD NVMe 512GB", qty: 1, price: 650000 },
+      { id: "sp-4", name: "SSD NVMe 512GB", qty: 1, price: 650000, totalPrice: 650000, type: "sparepart" as const },
     ],
     payments: [
-      { method: "Transfer", amount: 650000, status: "lunas" },
+      { id: "pay-2", type: "full" as const, amount: 650000, method: "Transfer", date: "2026-06-07 16:00" },
     ],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-07 16:00", note: "BSOD, tidak bisa masuk Windows", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-08 09:00", note: "HDD bad sector, rekomendasi ganti SSD", by: "Citra Dewi" },
-      { status: "perbaikan", timestamp: "2026-06-08 14:00", note: "SSD baru dipasang, install OS", by: "Citra Dewi" },
+      { id: "tl-6", status: "masuk", toStatus: "masuk", timestamp: "2026-06-07 16:00", note: "BSOD, tidak bisa masuk Windows", changedBy: "Front Office" },
+      { id: "tl-7", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-08 09:00", note: "HDD bad sector, rekomendasi ganti SSD", changedBy: "Citra Dewi" },
+      { id: "tl-8", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-08 14:00", note: "SSD baru dipasang, install OS", changedBy: "Citra Dewi" },
     ],
     notes: [
       { text: "Data sudah di-backup ke external drive", timestamp: "2026-06-08 10:00", by: "Citra Dewi" },
@@ -317,17 +331,17 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     createdAt: "2026-06-05 13:00",
     updatedAt: "2026-06-09 08:00",
     spareparts: [
-      { name: "Charging Port Flex Redmi Note 12", qty: 1, price: 95000 },
+      { id: "sp-5", name: "Charging Port Flex Redmi Note 12", qty: 1, price: 95000, totalPrice: 95000, type: "sparepart" as const },
     ],
     payments: [
-      { method: "QRIS", amount: 200000, status: "lunas" },
+      { id: "pay-3", type: "full" as const, amount: 200000, method: "QRIS", date: "2026-06-05 13:00" },
     ],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-05 13:00", note: "Unit diterima", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-05 15:00", note: "Port charging rusak, perlu ganti", by: "Andi Pratama" },
-      { status: "perbaikan", timestamp: "2026-06-06 10:00", note: "Penggantian port selesai", by: "Andi Pratama" },
-      { status: "qc", timestamp: "2026-06-06 14:00", note: "QC lulus, charging normal", by: "QC Team" },
-      { status: "selesai", timestamp: "2026-06-09 08:00", note: "Unit diambil pelanggan", by: "Front Office" },
+      { id: "tl-9", status: "masuk", toStatus: "masuk", timestamp: "2026-06-05 13:00", note: "Unit diterima", changedBy: "Front Office" },
+      { id: "tl-10", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-05 15:00", note: "Port charging rusak, perlu ganti", changedBy: "Andi Pratama" },
+      { id: "tl-11", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-06 10:00", note: "Penggantian port selesai", changedBy: "Andi Pratama" },
+      { id: "tl-12", status: "qc", toStatus: "qc", timestamp: "2026-06-06 14:00", note: "QC lulus, charging normal", changedBy: "QC Team" },
+      { id: "tl-13", status: "selesai", toStatus: "selesai", timestamp: "2026-06-09 08:00", note: "Unit diambil pelanggan", changedBy: "Front Office" },
     ],
     notes: [],
     deviceIcon: Smartphone,
@@ -349,17 +363,17 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     updatedAt: "2026-06-09 16:00",
     estimatedCompletion: "2026-06-10",
     spareparts: [
-      { name: "LCD Galaxy Tab S9 Original", qty: 1, price: 2100000 },
+      { id: "sp-6", name: "LCD Galaxy Tab S9 Original", qty: 1, price: 2100000, totalPrice: 2100000, type: "sparepart" as const },
     ],
     payments: [
-      { method: "Debit", amount: 1500000, status: "sebagian" },
+      { id: "pay-4", type: "partial" as const, amount: 1500000, method: "Debit", date: "2026-06-03 09:00" },
     ],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-03 09:00", note: "Layar pecah parah", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-03 11:00", note: "Perlu LCD baru", by: "Budi Santoso" },
-      { status: "perbaikan", timestamp: "2026-06-05 08:00", note: "LCD tersedia, mulai pemasangan", by: "Budi Santoso" },
-      { status: "perbaikan", timestamp: "2026-06-05 15:00", note: "Pemasangan selesai, tes fungsi", by: "Budi Santoso" },
-      { status: "qc", timestamp: "2026-06-09 16:00", note: "QC dilakukan, menunggu hasil akhir", by: "QC Team" },
+      { id: "tl-14", status: "masuk", toStatus: "masuk", timestamp: "2026-06-03 09:00", note: "Layar pecah parah", changedBy: "Front Office" },
+      { id: "tl-15", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-03 11:00", note: "Perlu LCD baru", changedBy: "Budi Santoso" },
+      { id: "tl-16", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-05 08:00", note: "LCD tersedia, mulai pemasangan", changedBy: "Budi Santoso" },
+      { id: "tl-17", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-05 15:00", note: "Pemasangan selesai, tes fungsi", changedBy: "Budi Santoso" },
+      { id: "tl-18", status: "qc", toStatus: "qc", timestamp: "2026-06-09 16:00", note: "QC dilakukan, menunggu hasil akhir", changedBy: "QC Team" },
     ],
     notes: [
       { text: "LCD original butuh PO, estimasi 2 hari", timestamp: "2026-06-03 11:30", by: "Inventory" },
@@ -381,7 +395,7 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     spareparts: [],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-09 15:30", note: "Unit diterima, antrian diagnosa", by: "Front Office" },
+      { id: "tl-19", status: "masuk", toStatus: "masuk", timestamp: "2026-06-09 15:30", note: "Unit diterima, antrian diagnosa", changedBy: "Front Office" },
     ],
     notes: [],
     deviceIcon: Smartphone,
@@ -402,13 +416,13 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     updatedAt: "2026-06-09 13:00",
     estimatedCompletion: "2026-06-10",
     spareparts: [
-      { name: "Bottom Mic Flex iPhone 13 Pro", qty: 1, price: 120000 },
+      { id: "sp-7", name: "Bottom Mic Flex iPhone 13 Pro", qty: 1, price: 120000, totalPrice: 120000, type: "sparepart" as const },
     ],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-08 11:00", note: "Unit diterima", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-08 16:00", note: "Bottom mic flex rusak", by: "Andi Pratama" },
-      { status: "perbaikan", timestamp: "2026-06-09 13:00", note: "Sparepart tersedia, perbaikan dimulai", by: "Andi Pratama" },
+      { id: "tl-20", status: "masuk", toStatus: "masuk", timestamp: "2026-06-08 11:00", note: "Unit diterima", changedBy: "Front Office" },
+      { id: "tl-21", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-08 16:00", note: "Bottom mic flex rusak", changedBy: "Andi Pratama" },
+      { id: "tl-22", status: "perbaikan", toStatus: "perbaikan", timestamp: "2026-06-09 13:00", note: "Sparepart tersedia, perbaikan dimulai", changedBy: "Andi Pratama" },
     ],
     notes: [],
     deviceIcon: Smartphone,
@@ -428,7 +442,7 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     spareparts: [],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-09 14:00", note: "Unit diterima, diagnosa menunggu", by: "Front Office" },
+      { id: "tl-23", status: "masuk", toStatus: "masuk", timestamp: "2026-06-09 14:00", note: "Unit diterima, diagnosa menunggu", changedBy: "Front Office" },
     ],
     notes: [],
     deviceIcon: Laptop,
@@ -451,8 +465,8 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     spareparts: [],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-08 10:00", note: "HP restar sendiri", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-09 09:30", note: "IC power bermasalah, estimasi biaya Rp 350.000", by: "Budi Santoso" },
+      { id: "tl-24", status: "masuk", toStatus: "masuk", timestamp: "2026-06-08 10:00", note: "HP restar sendiri", changedBy: "Front Office" },
+      { id: "tl-25", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-09 09:30", note: "IC power bermasalah, estimasi biaya Rp 350.000", changedBy: "Budi Santoso" },
     ],
     notes: [
       { text: "Menunggu persetujuan biaya dari pelanggan", timestamp: "2026-06-09 09:35", by: "Budi Santoso" },
@@ -476,9 +490,9 @@ export const MOCK_SERVICES: ServiceRecord[] = [
     spareparts: [],
     payments: [],
     timeline: [
-      { status: "masuk", timestamp: "2026-06-01 13:00", note: "Unit diterima", by: "Front Office" },
-      { status: "diagnosa", timestamp: "2026-06-03 10:00", note: "Board NC rusak, sparepart tidak tersedia", by: "Citra Dewi" },
-      { status: "batal", timestamp: "2026-06-05 10:00", note: "Sparepart tidak tersedia, servis dibatalkan", by: "Citra Dewi" },
+      { id: "tl-26", status: "masuk", toStatus: "masuk", timestamp: "2026-06-01 13:00", note: "Unit diterima", changedBy: "Front Office" },
+      { id: "tl-27", status: "diagnosa", toStatus: "diagnosa", timestamp: "2026-06-03 10:00", note: "Board NC rusak, sparepart tidak tersedia", changedBy: "Citra Dewi" },
+      { id: "tl-28", status: "batal", toStatus: "batal", timestamp: "2026-06-05 10:00", note: "Sparepart tidak tersedia, servis dibatalkan", changedBy: "Citra Dewi" },
     ],
     notes: [
       { text: "Sparepart NC board Sony XM5 sedang PO dari distributor", timestamp: "2026-06-03 11:00", by: "Inventory" },
@@ -533,10 +547,9 @@ export function getPaymentStatusLabel(status: ServicePaymentStatus): { label: st
 }
 
 export function calculateServicePaymentSummary(
-  totalDue: number,
+  totalCharged: number,
   paymentRecords: ServicePaymentRecord[],
 ): ServicePaymentSummary {
-  // Sum all SUCCEEDED payments, subtract REFUNDs
   let totalPaid = 0;
   for (const p of paymentRecords) {
     if (p.status === "SUCCEEDED") {
@@ -548,20 +561,20 @@ export function calculateServicePaymentSummary(
     }
   }
 
-  const remainingBalance = Math.max(0, totalDue - totalPaid);
+  const remainingBalance = Math.max(0, totalCharged - totalPaid);
 
   let paymentStatus: ServicePaymentStatus;
   if (totalPaid <= 0) {
     paymentStatus = "UNPAID";
-  } else if (totalPaid < totalDue) {
+  } else if (totalPaid < totalCharged) {
     paymentStatus = "PARTIAL";
-  } else if (totalPaid === totalDue) {
+  } else if (totalPaid === totalCharged) {
     paymentStatus = "PAID";
   } else {
     paymentStatus = "OVERPAID";
   }
 
-  return { totalDue, totalPaid, remainingBalance, paymentStatus };
+  return { totalCharged, totalPaid, remainingBalance, dpAmount: 0, paymentStatus };
 }
 
 export function getPaymentRecordTypeLabel(type: ServicePaymentRecordType): string {

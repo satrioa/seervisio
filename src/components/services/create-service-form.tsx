@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Send, Coins, PiggyBank } from "lucide-react";
+import { createServiceAction } from "@/server/actions/service.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,6 +100,9 @@ export function CreateServiceForm({
   onFormChange,
 }: CreateServiceFormProps) {
   const { closeCreateService } = useRightSidebar();
+  const router = useRouter();
+  const params = useParams();
+  const brandSlug = params.brandSlug as string;
   const [submitting, setSubmitting] = React.useState(false);
   const [deviceTypeOpen, setDeviceTypeOpen] = React.useState(false);
 
@@ -178,44 +183,49 @@ export function CreateServiceForm({
   const handleSubmit = async () => {
     setSubmitting(true);
 
-    // Close modal immediately so user sees the Dynamic Island feedback
-    closeCreateService();
-
-    // Trigger loading state on Dynamic Island
     const { triggerDynamicIslandFeedback } = await import("@/lib/dynamic-island/dynamic-island-events");
     triggerDynamicIslandFeedback({
       type: "loading",
-      title: "Menyimpan data servis...",
+      title: "Membuat servis...",
     });
 
     try {
-      // Simulate API submission (replace with actual API call)
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const result = await createServiceAction({
+        brandSlug,
+        customerName: formData.customerName,
+        customerPhone: formData.customerPhone,
+        customerAddress: formData.customerAddress,
+        deviceType: formData.deviceType,
+        deviceBrand: formData.deviceBrand,
+        deviceModel: formData.deviceModel,
+        deviceSerialNumber: formData.serialNumber,
+        reportedIssue: formData.issue,
+        estimatedCost: formData.estimatedCost ? parseInt(formData.estimatedCost) : undefined,
+        dpAmount: formData.dpEnabled && formData.dpAmount ? parseInt(formData.dpAmount) : undefined,
+        dpPaymentMethodId: formData.dpEnabled ? formData.dpMethodId : undefined,
+        dpPaymentAccountId: formData.dpEnabled ? formData.dpAccountId : undefined,
+        dpNote: formData.dpEnabled ? formData.dpNote : undefined,
+      });
 
-      // If DP is enabled, create payment record (mock)
-      if (formData.dpEnabled && formData.dpAmount) {
-        // In real implementation, this would call a server action
-        console.log("Creating DP payment:", {
-          serviceId: "SRV-NEW",
-          paymentType: "DOWN_PAYMENT",
-          amount: parseInt(formData.dpAmount),
-          methodId: formData.dpMethodId,
-          accountId: formData.dpAccountId,
-          note: formData.dpNote,
+      if (result.success) {
+        triggerDynamicIslandFeedback({
+          type: "success",
+          title: "Servis berhasil dibuat",
+          duration: 2200,
+        });
+        closeCreateService();
+        router.refresh();
+      } else {
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: result.error ?? "Gagal membuat servis",
+          duration: 2500,
         });
       }
-
-      // Success feedback
-      triggerDynamicIslandFeedback({
-        type: "success",
-        title: "Servis berhasil dibuat",
-        duration: 2200,
-      });
-    } catch (error) {
+    } catch (err: any) {
       triggerDynamicIslandFeedback({
         type: "error",
-        title: "Gagal menyimpan servis",
-        description: "Silakan coba lagi",
+        title: err.message ?? "Gagal membuat servis",
         duration: 2500,
       });
     }

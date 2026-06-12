@@ -20,7 +20,9 @@ import {
   type ServiceWorkflowStatus,
   type ServiceWorkflowRole,
 } from "@/domain/service/service-workflow";
-import type { ServiceRecord, SparepartItem } from "@/components/services/service-data";
+import type { ServiceRecord } from "@/components/services/service-data";
+import { cancelServiceAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 /* ─── Types ─── */
 
@@ -28,6 +30,7 @@ interface CancelServiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   service: ServiceRecord;
+  brandSlug?: string;
   role?: ServiceWorkflowRole;
   onConfirm: (input: { reason: string; returnStock: boolean }) => void;
 }
@@ -38,9 +41,11 @@ export function CancelServiceDialog({
   open,
   onOpenChange,
   service,
+  brandSlug,
   role = "MASTER_ADMIN",
   onConfirm,
 }: CancelServiceDialogProps) {
+  const hasBrandSlug = Boolean(brandSlug);
   // Safety guard: if service is empty/undefined, don't render
   if (!service || !service.spareparts) {
     return null;
@@ -67,7 +72,7 @@ export function CancelServiceDialog({
 
   const workflowStatus = service.status.toUpperCase() as ServiceWorkflowStatus;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     // Validate using domain logic
     const validation = validateCancelService({
       currentStatus: workflowStatus,
@@ -83,8 +88,54 @@ export function CancelServiceDialog({
     }
 
     setError(null);
-    onConfirm({ reason, returnStock });
-    onOpenChange(false);
+
+    if (hasBrandSlug) {
+      triggerDynamicIslandFeedback({
+        type: "loading",
+        title: "Membatalkan servis",
+        description: "Memproses pembatalan servis...",
+      });
+
+      try {
+        const response = await cancelServiceAction({
+          brandSlug: brandSlug!,
+          serviceId: service.id,
+          reason,
+          returnStock,
+        });
+
+        if (response.success) {
+          triggerDynamicIslandFeedback({
+            type: "success",
+            title: "Servis dibatalkan",
+            description: "Servis berhasil dibatalkan.",
+            duration: 1800,
+          });
+          onConfirm({ reason, returnStock });
+          onOpenChange(false);
+        } else {
+          triggerDynamicIslandFeedback({
+            type: "error",
+            title: "Gagal membatalkan",
+            description: response.error ?? "Gagal membatalkan servis.",
+            duration: 2400,
+          });
+          setError(response.error ?? "Gagal membatalkan servis.");
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Terjadi kesalahan tidak terduga.";
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: "Gagal membatalkan",
+          description: msg,
+          duration: 2400,
+        });
+        setError(msg);
+      }
+    } else {
+      onConfirm({ reason, returnStock });
+      onOpenChange(false);
+    }
   };
 
   return (

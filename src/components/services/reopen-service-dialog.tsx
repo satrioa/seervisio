@@ -21,6 +21,8 @@ import {
   type ServiceWorkflowRole,
 } from "@/domain/service/service-workflow";
 import type { ServiceRecord } from "@/components/services/service-data";
+import { reopenServiceAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 /* ─── Types ─── */
 
@@ -28,6 +30,7 @@ interface ReopenServiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   service: ServiceRecord;
+  brandSlug?: string;
   role?: ServiceWorkflowRole;
   onConfirm: (reason: string) => void;
 }
@@ -38,9 +41,11 @@ export function ReopenServiceDialog({
   open,
   onOpenChange,
   service,
+  brandSlug,
   role = "MASTER_ADMIN",
   onConfirm,
 }: ReopenServiceDialogProps) {
+  const hasBrandSlug = Boolean(brandSlug);
   // Safety guard: if service is empty/undefined, don't render
   if (!service || !service.id) {
     return null;
@@ -58,7 +63,7 @@ export function ReopenServiceDialog({
 
   const workflowStatus = service.status.toUpperCase() as ServiceWorkflowStatus;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const validation = validateReopenService({
       currentStatus: workflowStatus,
       role,
@@ -71,8 +76,53 @@ export function ReopenServiceDialog({
     }
 
     setError(null);
-    onConfirm(reason);
-    onOpenChange(false);
+
+    if (hasBrandSlug) {
+      triggerDynamicIslandFeedback({
+        type: "loading",
+        title: "Membuka ulang servis",
+        description: "Memproses...",
+      });
+
+      try {
+        const response = await reopenServiceAction({
+          brandSlug: brandSlug!,
+          serviceId: service.id,
+          reason,
+        });
+
+        if (response.success) {
+          triggerDynamicIslandFeedback({
+            type: "success",
+            title: "Servis dibuka ulang",
+            description: "Servis berhasil dibuka ulang.",
+            duration: 1800,
+          });
+          onConfirm(reason);
+          onOpenChange(false);
+        } else {
+          triggerDynamicIslandFeedback({
+            type: "error",
+            title: "Gagal membuka ulang",
+            description: response.error ?? "Gagal membuka ulang servis.",
+            duration: 2400,
+          });
+          setError(response.error ?? "Gagal membuka ulang servis.");
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Terjadi kesalahan tidak terduga.";
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: "Gagal membuka ulang",
+          description: msg,
+          duration: 2400,
+        });
+        setError(msg);
+      }
+    } else {
+      onConfirm(reason);
+      onOpenChange(false);
+    }
   };
 
   const isDiambil = service.status === "selesai";

@@ -1,19 +1,307 @@
-/**
- * Service repository.
- * TODO: Implement queries for public.services, service_sparepart_usages, service_status_history.
- */
+import { createServerSupabase } from "@/lib/supabase/server";
 
-export async function getServicesByBranch(brandId: number, branchId: string) {
-  console.log(`[ServiceRepository] getServicesByBranch — not implemented`);
-  return [];
+export interface ServiceRow {
+  id: string;
+  brand_id: number;
+  branch_id: string;
+  customer_id: string | null;
+  service_number: string;
+  device_type: string | null;
+  device_brand: string | null;
+  device_model: string | null;
+  device_color: string | null;
+  device_imei: string | null;
+  device_serial_number: string | null;
+  reported_issue: string;
+  diagnosis_result: string | null;
+  solution_notes: string | null;
+  current_status: string;
+  previous_status: string | null;
+  assigned_technician_id: string | null;
+  estimated_cost: number;
+  final_cost: number;
+  warranty_until: string | null;
+  intake_at: string | null;
+  diagnosis_at: string | null;
+  waiting_approval_at: string | null;
+  repairing_at: string | null;
+  qc_at: string | null;
+  done_at: string | null;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+  metadata: Record<string, unknown>;
+  created_by: string | null;
+  updated_by: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  picked_up_at: string | null;
+  picked_up_by_profile_id: string | null;
+  pickup_name: string | null;
+  pickup_phone: string | null;
+  pickup_relation: string | null;
+  pickup_note: string | null;
 }
 
-export async function getServiceById(id: string) {
-  console.log(`[ServiceRepository] getServiceById — not implemented`);
-  return null;
+export interface ServiceWithRelations extends ServiceRow {
+  customer?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  } | null;
+  technician?: {
+    id: string;
+    full_name: string | null;
+  } | null;
 }
 
-export async function getServiceStatusSummary(brandId: number, branchId: string) {
-  console.log(`[ServiceRepository] getServiceStatusSummary — not implemented`);
-  return [];
+export async function getServicesByBranch(
+  branchId: string
+): Promise<ServiceWithRelations[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("services")
+    .select(`
+      *,
+      customer:customers(id, name, phone, email, address),
+      technician:profiles(id, full_name)
+    `)
+    .eq("branch_id", branchId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getServiceById(
+  id: string
+): Promise<ServiceWithRelations | null> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("services")
+    .select(`
+      *,
+      customer:customers(id, name, phone, email, address),
+      technician:profiles(id, full_name)
+    `)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getServicesByBrand(
+  brandId: number
+): Promise<ServiceWithRelations[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("services")
+    .select(`
+      *,
+      customer:customers(id, name, phone, email, address),
+      technician:profiles(id, full_name)
+    `)
+    .eq("brand_id", brandId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface CreateServiceDBInput {
+  brand_id: number;
+  branch_id: string;
+  customer_id: string;
+  service_number: string;
+  device_type?: string | null;
+  device_brand?: string | null;
+  device_model?: string | null;
+  device_color?: string | null;
+  device_imei?: string | null;
+  device_serial_number?: string | null;
+  reported_issue: string;
+  diagnosis_result?: string | null;
+  estimated_cost?: number;
+  created_by: string;
+}
+
+export async function insertService(
+  input: CreateServiceDBInput
+): Promise<ServiceRow> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("services")
+    .insert({
+      brand_id: input.brand_id,
+      branch_id: input.branch_id,
+      customer_id: input.customer_id,
+      service_number: input.service_number,
+      device_type: input.device_type ?? null,
+      device_brand: input.device_brand ?? null,
+      device_model: input.device_model ?? null,
+      device_color: input.device_color ?? null,
+      device_imei: input.device_imei ?? null,
+      device_serial_number: input.device_serial_number ?? null,
+      reported_issue: input.reported_issue,
+      diagnosis_result: input.diagnosis_result ?? null,
+      estimated_cost: input.estimated_cost ?? 0,
+      current_status: "INTAKE",
+      created_by: input.created_by,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getServiceStatusSummary(
+  brandId: number
+): Promise<{ status: string; count: number }[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("services")
+    .select("current_status")
+    .eq("brand_id", brandId)
+    .is("deleted_at", null);
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.current_status] = (counts[row.current_status] ?? 0) + 1;
+  }
+  return Object.entries(counts).map(([status, count]) => ({ status, count }));
+}
+
+export async function updateServiceStatus(
+  serviceId: string,
+  newStatus: string,
+  previousStatus: string,
+  updatedBy: string,
+  cancelReason?: string | null
+): Promise<void> {
+  const supabase = await createServerSupabase();
+  const timestampColumns: Record<string, string> = {
+    INTAKE: "intake_at",
+    DIAGNOSIS: "diagnosis_at",
+    WAITING_APPROVAL: "waiting_approval_at",
+    REPAIRING: "repairing_at",
+    QC: "qc_at",
+    DONE: "done_at",
+    CANCELLED: "cancelled_at",
+  };
+
+  const updateData: Record<string, unknown> = {
+    current_status: newStatus,
+    previous_status: previousStatus,
+    updated_by: updatedBy,
+    updated_at: new Date().toISOString(),
+  };
+
+  const tsCol = timestampColumns[newStatus];
+  if (tsCol) {
+    updateData[tsCol] = new Date().toISOString();
+  }
+
+  if (newStatus === "CANCELLED" && cancelReason) {
+    updateData.cancel_reason = cancelReason;
+  }
+
+  const { error } = await (supabase as any)
+    .from("services")
+    .update(updateData)
+    .eq("id", serviceId);
+  if (error) throw error;
+}
+
+export async function updateServicePickupFields(
+  serviceId: string,
+  pickupName: string,
+  pickupPhone: string | null,
+  pickupRelation: string,
+  pickupNote: string | null,
+  pickedUpByProfileId: string
+): Promise<void> {
+  const supabase = await createServerSupabase();
+  const { error } = await (supabase as any)
+    .from("services")
+    .update({
+      picked_up_at: new Date().toISOString(),
+      picked_up_by_profile_id: pickedUpByProfileId,
+      pickup_name: pickupName,
+      pickup_phone: pickupPhone,
+      pickup_relation: pickupRelation,
+      pickup_note: pickupNote,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", serviceId);
+  if (error) throw error;
+}
+
+export async function addServiceTimelineEntry(params: {
+  brand_id: number;
+  branch_id: string;
+  service_id: string;
+  from_status: string | null;
+  to_status: string;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+  changed_by: string;
+}): Promise<void> {
+  const supabase = await createServerSupabase();
+  const { error } = await (supabase as any)
+    .from("service_status_history")
+    .insert({
+      brand_id: params.brand_id,
+      branch_id: params.branch_id,
+      service_id: params.service_id,
+      from_status: params.from_status ?? null,
+      to_status: params.to_status,
+      reason: params.reason ?? null,
+      metadata: params.metadata ?? {},
+      changed_by: params.changed_by,
+      changed_at: new Date().toISOString(),
+    });
+  if (error) throw error;
+}
+
+export async function addAuditLog(params: {
+  brand_id: number;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  actor_id: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const supabase = await createServerSupabase();
+  const { error } = await (supabase as any)
+    .from("audit_logs")
+    .insert({
+      brand_id: params.brand_id,
+      action: params.action,
+      entity_type: params.entity_type,
+      entity_id: params.entity_id,
+      actor_id: params.actor_id,
+      metadata: params.metadata ?? {},
+      created_at: new Date().toISOString(),
+    });
+  if (error) throw error;
+}
+
+export async function getServiceStatusHistory(
+  serviceId: string
+): Promise<any[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("service_status_history")
+    .select(`
+      *,
+      changed_by_profile:profiles(id, full_name)
+    `)
+    .eq("service_id", serviceId)
+    .order("changed_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
 }

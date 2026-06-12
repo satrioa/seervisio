@@ -44,7 +44,7 @@ import {
   getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
-import { UpdateServiceStatusFloatingPanel } from "@/components/services/update-service-status-floating-panel";
+import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 
 /* ══════════════════════════════════════════════
    COMPONENT
@@ -54,16 +54,19 @@ interface ServiceDetailModalProps {
   service: ServiceRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  brandSlug?: string;
 }
 
 export function ServiceDetailModal({
   service,
   open,
   onOpenChange,
+  brandSlug,
 }: ServiceDetailModalProps) {
   if (!service) return null;
 
   const [paymentOpen, setPaymentOpen] = React.useState(false);
+  const [debugUpdateOpen, setDebugUpdateOpen] = React.useState(false);
   const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(
     service.status,
   );
@@ -99,7 +102,7 @@ export function ServiceDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl p-0">
+      <DialogContent className="max-h-[90vh] max-w-2xl p-0 flex flex-col">
         <DialogHeader className="border-b px-6 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex flex-col gap-1">
@@ -126,7 +129,7 @@ export function ServiceDetailModal({
           </DialogClose>
         </DialogHeader>
 
-        <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
+        <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col gap-5 p-6 pt-4">
             {/* ── Info Grid ── */}
             <div className="grid grid-cols-2 gap-4">
@@ -230,6 +233,7 @@ export function ServiceDetailModal({
                     </span>
                   </div>
                   <div className="mt-1">
+NEW VERSION - 
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${paymentStatusLabel.color}`}
@@ -496,18 +500,49 @@ export function ServiceDetailModal({
           </div>
 
           {/* ── Footer / Actions ── */}
-          <div className="sticky bottom-0 border-t bg-background px-6 py-3">
+          <div className="border-t bg-background px-6 py-3">
             <div className="flex flex-col gap-2">
               {!isCancelled && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <UpdateServiceStatusFloatingPanel
-                      service={displayService}
-                      onStatusUpdated={setLocalStatus}
-                    />
+<UpdateServiceStatusDialog
+  service={displayService}
+  onStatusUpdated={setLocalStatus}
+/>
                     <Button variant="outline" size="sm" className="text-xs">
                       Tambah Sparepart
                     </Button>
+                  </div>
+                  {/* DEBUG: Hardcoded Update Status test */}
+                  <div className="mt-1 space-y-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-2 border-amber-500 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                      onClick={() => {
+                        console.log("[HARDCODED UPDATE STATUS] clicked");
+                        console.log("[HARDCODED] displayService.status:", displayService.status);
+                        console.log("[HARDCODED] localStatus:", localStatus);
+                        setDebugUpdateOpen((prev) => !prev);
+                      }}
+                    >
+                      {debugUpdateOpen ? "▼ Hardcoded Update Status (open)" : "▶ Hardcoded Update Status"}
+                    </Button>
+
+                    {debugUpdateOpen ? (
+                      <div className="rounded-xl border bg-card p-4 text-sm shadow-sm">
+                        <p className="font-semibold text-foreground">Hardcoded Update Status Panel</p>
+                        <p className="mt-1 text-muted-foreground">
+                          If this appears, button click and parent state work.
+                        </p>
+                        <div className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                          <p>displayService.status: {String(displayService.status)}</p>
+                          <p>localStatus: {String(localStatus)}</p>
+                          <p>isPaid: {String(isPaid)}</p>
+                          <p>isCancelled: {String(isCancelled)}</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                   {!isPaid && paymentSummary.remainingBalance > 0 && (
                     <Button
@@ -535,8 +570,8 @@ export function ServiceDetailModal({
           open={paymentOpen}
           onOpenChange={setPaymentOpen}
           service={service}
-          onPaymentComplete={(payment) => {
-            setEnrichedPayments((prev) => [...prev, payment]);
+          brandSlug={brandSlug ?? ""}
+          onPaymentRecorded={() => {
           }}
         />
       </DialogContent>

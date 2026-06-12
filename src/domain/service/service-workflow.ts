@@ -145,6 +145,41 @@ export function fromDbStatus(dbStatus: string): ServiceWorkflowStatus {
   return reverseMap[dbStatus] ?? "MASUK";
 }
 
+export function normalizeServiceStatus(
+  input: string
+): ServiceWorkflowStatus {
+  const upper = input.toUpperCase().trim();
+
+  // Direct DB status values
+  if (upper === "INTAKE") return "MASUK";
+  if (upper === "DIAGNOSIS") return "DIAGNOSA";
+  if (upper === "WAITING_APPROVAL") return "DIAGNOSA";
+  if (upper === "REPAIRING") return "PERBAIKAN";
+  if (upper === "QC") return "QC";
+  if (upper === "DONE") return "SELESAI";
+  if (upper === "PICKED_UP") return "DIAMBIL";
+  if (upper === "CANCELLED") return "CANCELLED";
+
+  // Direct workflow status values
+  if (upper === "MASUK") return "MASUK";
+  if (upper === "DIAGNOSA") return "DIAGNOSA";
+  if (upper === "PERBAIKAN") return "PERBAIKAN";
+  if (upper === "SELESAI") return "SELESAI";
+  if (upper === "DIAMBIL") return "DIAMBIL";
+
+  // Partial/fuzzy matches
+  if (upper.includes("MASUK") || upper === "INTAKE") return "MASUK";
+  if (upper.includes("DIAGNOS") || upper === "DIAGNOSIS") return "DIAGNOSA";
+  if (upper.includes("REPAIR") || upper.includes("PERBAIK")) return "PERBAIKAN";
+  if (upper === "QC") return "QC";
+  if (upper.includes("SELESAI") || upper === "DONE") return "SELESAI";
+  if (upper.includes("AMBIL") || upper.includes("PICKED") || upper === "CLOSED") return "DIAMBIL";
+  if (upper.includes("BATAL") || upper.includes("CANCEL")) return "CANCELLED";
+
+  // Fallback
+  return "MASUK";
+}
+
 /* ─── Role-Based Transition Rules ─── */
 
 interface RoleTransitionEntry {

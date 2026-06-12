@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Coins,
   PiggyBank,
   CreditCard,
   Wallet,
-  ArrowRight,
   Check,
   Loader2,
   AlertTriangle,
@@ -15,9 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -43,29 +40,28 @@ import {
   MOCK_PAYMENT_ACCOUNTS,
   formatCurrency,
   calculateServicePaymentSummary,
-  getPaymentTypeLabel,
-  getPaymentStatusLabel,
-  getPaymentRecordTypeLabel,
   getDefaultPaymentAccountForMethod,
-  generatePaymentId,
 } from "@/components/services/service-data";
+import { receiveServicePaymentAction } from "@/server/actions/service-workflow.actions";
 
 /* ── Props ── */
 
 interface ServicePaymentPanelProps {
+  service: ServiceRecord;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  service: ServiceRecord;
-  onPaymentComplete?: (payment: ServicePaymentRecord) => void;
+  onPaymentRecorded?: () => void;
+  brandSlug: string;
 }
 
 /* ── Payment Panel ── */
 
 export function ServicePaymentPanel({
+  service,
   open,
   onOpenChange,
-  service,
-  onPaymentComplete,
+  onPaymentRecorded,
+  brandSlug,
 }: ServicePaymentPanelProps) {
   const [paymentType, setPaymentType] = useState<ServicePaymentRecordType>("FINAL_PAYMENT");
   const [amount, setAmount] = useState("");
@@ -165,8 +161,7 @@ export function ServicePaymentPanel({
   };
 
   const handleSubmit = async () => {
-    if (validationError) return;
-
+    if (!methodId || amountNum <= 0) return;
     setSubmitting(true);
     setError(null);
 
@@ -180,34 +175,33 @@ export function ServicePaymentPanel({
         description: "Mencatat pembayaran servis...",
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-
-      const amountNum = parseInt(amount);
-      const newPayment: ServicePaymentRecord = {
-        id: generatePaymentId(),
+      const result = await receiveServicePaymentAction({
+        brandSlug,
         serviceId: service.id,
-        paymentType,
         amount: amountNum,
-        method: MOCK_PAYMENT_METHODS.find((m) => m.id === methodId)?.name ?? methodId,
-        methodType: MOCK_PAYMENT_METHODS.find((m) => m.id === methodId)?.type ?? "",
-        accountName: MOCK_PAYMENT_ACCOUNTS.find((a) => a.id === accountId)?.accountName ?? accountId,
-        status: "SUCCEEDED",
-        paidAt: new Date().toISOString(),
+        paymentMethodId: methodId,
         note: note || undefined,
-      };
-
-      onPaymentComplete?.(newPayment);
-
-      triggerDynamicIslandFeedback({
-        type: "success",
-        title: "Pembayaran berhasil",
-        description: `${paymentTypeLabel} sebesar ${formatCurrency(amountNum)} berhasil dicatat.`,
-        duration: 2200,
       });
 
-      setTimeout(() => {
+      if (result.success) {
+        triggerDynamicIslandFeedback({
+          type: "success",
+          title: "Pembayaran berhasil",
+          description: "Pembayaran berhasil dicatat.",
+          duration: 2200,
+        });
+        onPaymentRecorded?.();
         onOpenChange(false);
-      }, 800);
+        resetForm();
+      } else {
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: "Pembayaran gagal",
+          description: result.error,
+          duration: 2500,
+        });
+        setError(result.error);
+      }
     } catch (err) {
       const { triggerDynamicIslandFeedback } = await import(
         "@/lib/dynamic-island/dynamic-island-events"
@@ -215,13 +209,20 @@ export function ServicePaymentPanel({
       triggerDynamicIslandFeedback({
         type: "error",
         title: "Pembayaran gagal",
-        description: err instanceof Error ? err.message : "Terjadi kesalahan",
+        description: err instanceof Error ? err.message : "Gagal memproses pembayaran",
         duration: 2500,
       });
-      setError("Gagal memproses pembayaran. Silakan coba lagi.");
+      setError(err instanceof Error ? err.message : "Gagal memproses pembayaran");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setAmount("");
+    setMethodId("");
+    setAccountId("");
+    setNote("");
   };
 
   const amountNum = parseInt(amount) || 0;

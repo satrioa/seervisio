@@ -16,7 +16,10 @@ import {
   PiggyBank,
   CheckCircle,
   Coins,
+  RotateCcw,
+  XCircle,
 } from "lucide-react";
+import { useParams } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,7 @@ import {
   type ServiceRecord,
   type ServicePaymentRecord,
   type ServicePaymentSummary,
+  type SparepartItem,
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
@@ -36,9 +40,15 @@ import {
   getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
+import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
+import { ServiceSparepartSection } from "@/components/services/service-sparepart-section";
+import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
+import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
 
 interface ServiceSidebarDetailProps {
   service: ServiceRecord;
+  brandSlug?: string;
+  onServiceUpdated?: () => void;
 }
 
 const containerVariants = {
@@ -61,12 +71,20 @@ const itemVariants = {
   },
 };
 
-export function ServiceSidebarDetail({ service }: ServiceSidebarDetailProps) {
+export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServiceUpdated }: ServiceSidebarDetailProps) {
+  const params = useParams();
+  const brandSlug = brandSlugProp ?? (params?.brandSlug as string) ?? "";
   const { showOverview } = useRightSidebar();
   const [paymentOpen, setPaymentOpen] = React.useState(false);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [reopenOpen, setReopenOpen] = React.useState(false);
   const [enrichedPayments, setEnrichedPayments] = React.useState<
     ServicePaymentRecord[]
   >(() => (service as any).__paymentRecords ?? []);
+
+  const [enrichedSpareparts, setEnrichedSpareparts] = React.useState<SparepartItem[]>(
+    () => (service as any).__spareparts ?? service.spareparts ?? []
+  );
 
   const statusIndex = STATUS_ORDER.indexOf(service.status);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
@@ -318,27 +336,17 @@ export function ServiceSidebarDetail({ service }: ServiceSidebarDetailProps) {
           </div>
         </Section></motion.div>
 
-        <motion.div variants={itemVariants}><Section icon={Wrench} title="Sparepart Digunakan">
-          {service.spareparts.length > 0 ? (
-            <div className="space-y-2">
-              {service.spareparts.map((part, index) => (
-                <div key={`${part.name}-${index}`} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-foreground">{part.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {part.qty}x @ {formatCurrency(part.price)}
-                    </p>
-                  </div>
-                  <p className="text-xs font-medium tabular-nums">
-                    {formatCurrency(part.price * part.qty)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Belum ada sparepart digunakan</p>
-          )}
-        </Section></motion.div>
+        <motion.div variants={itemVariants}>
+          <ServiceSparepartSection
+            serviceId={service.id}
+            serviceNumber={service.id}
+            spareparts={enrichedSpareparts}
+            currentStatus={service.status}
+            onSparepartAdded={onServiceUpdated}
+            onSparepartRemoved={onServiceUpdated}
+            brandSlug={brandSlug}
+          />
+        </motion.div>
 
         <motion.div variants={itemVariants}><Section icon={MessageSquare} title="Catatan">
           {service.notes.length > 0 ? (
@@ -359,31 +367,50 @@ export function ServiceSidebarDetail({ service }: ServiceSidebarDetailProps) {
       </motion.div>
 
       <div className="sticky bottom-0 border-t bg-background/95 px-5 py-3 backdrop-blur">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-2">
           {!isCancelled && (
-            <>
-              <Button variant="outline" size="sm" className="text-xs">
-                Update Status
+            <div className="grid grid-cols-2 gap-2">
+              <UpdateServiceStatusDialog
+                service={service}
+                brandSlug={brandSlug}
+                onStatusUpdated={onServiceUpdated}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => setCancelOpen(true)}
+              >
+                <XCircle className="size-3.5" />
+                Batalkan
               </Button>
-              <Button variant="outline" size="sm" className="text-xs">
-                Tambah Sparepart
-              </Button>
-              {!isPaid && paymentSummary.remainingBalance > 0 && (
-                <Button
-                  size="sm"
-                  className="col-span-2 text-xs gap-1.5"
-                  onClick={() => setPaymentOpen(true)}
-                >
-                  <Wallet className="size-3.5" />
-                  Terima Pembayaran
-                </Button>
-              )}
-            </>
+            </div>
+          )}
+          {isCancelled && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => setReopenOpen(true)}
+            >
+              <RotateCcw className="size-3.5" />
+              Buka Ulang
+            </Button>
+          )}
+          {!isPaid && paymentSummary.remainingBalance > 0 && !isCancelled && (
+            <Button
+              size="sm"
+              className="w-full gap-1.5 text-xs"
+              onClick={() => setPaymentOpen(true)}
+            >
+              <Wallet className="size-3.5" />
+              Terima Pembayaran
+            </Button>
           )}
           <Button
             variant="ghost"
             size="sm"
-            className={isCancelled ? "col-span-2 text-xs" : "col-span-2 text-xs"}
+            className="w-full text-xs"
             onClick={showOverview}
           >
             Tutup
@@ -396,8 +423,33 @@ export function ServiceSidebarDetail({ service }: ServiceSidebarDetailProps) {
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
         service={service}
-        onPaymentComplete={(payment) => {
-          setEnrichedPayments((prev) => [...prev, payment]);
+        brandSlug={brandSlug}
+        onPaymentRecorded={() => {
+          onServiceUpdated?.();
+        }}
+      />
+
+      {/* Cancel Dialog */}
+      <CancelServiceDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onConfirm={() => {
+          setCancelOpen(false);
+          onServiceUpdated?.();
+        }}
+      />
+
+      {/* Reopen Dialog */}
+      <ReopenServiceDialog
+        open={reopenOpen}
+        onOpenChange={setReopenOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onConfirm={() => {
+          setReopenOpen(false);
+          onServiceUpdated?.();
         }}
       />
     </div>
