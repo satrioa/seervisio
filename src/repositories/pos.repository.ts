@@ -5,8 +5,14 @@
  * Queries for pos_sales, pos_sale_items, inventory_item_units, trade_ins.
  */
 
-import { createClient } from "@/lib/utils/supabase/client";
-import type { PosProductResult } from "@/domain/pos/types";
+import type {
+  PosCheckoutItemPayload,
+  PosProductResult,
+  PosSaleResult,
+  PosTradeInPayload,
+} from "@/domain/pos/types";
+
+type SupabaseClientLike = any;
 
 /* ─── Row Types ─── */
 
@@ -21,6 +27,9 @@ export interface PosSaleRow {
   payment_account_id: string;
   gross_amount: number;
   discount_amount: number;
+  trade_in_amount?: number;
+  paid_amount?: number;
+  change_amount?: number;
   mdr_amount: number;
   net_amount: number;
   notes?: string;
@@ -33,6 +42,10 @@ export interface PosSaleItemRow {
   id: string;
   pos_sale_id: string;
   inventory_item_id: string;
+  inventory_item_unit_id?: string | null;
+  item_type?: string | null;
+  name_snapshot?: string | null;
+  sku_snapshot?: string | null;
   quantity: number;
   unit_price: number;
   unit_cost: number;
@@ -101,7 +114,7 @@ export interface ProductSearchRow {
 
 /** Search POS products by name/sku/category/type with stock info. */
 export async function searchPosProducts(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   params: {
     brandId: number;
     branchId: string;
@@ -189,14 +202,21 @@ export async function searchPosProducts(
 
 /** Count available DEVICE_UNIT units for a specific item. */
 export async function countAvailableUnits(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   inventoryItemId: string,
+  branchId?: string,
 ): Promise<number> {
-  const { count, error } = await supabase
+  let query = supabase
     .from("inventory_item_units")
     .select("id", { count: "exact", head: true })
     .eq("inventory_item_id", inventoryItemId)
     .eq("status", "AVAILABLE");
+
+  if (branchId) {
+    query = query.eq("branch_id", branchId);
+  }
+
+  const { count, error } = await query;
 
   if (error) return 0;
   return count ?? 0;
@@ -204,15 +224,21 @@ export async function countAvailableUnits(
 
 /** Get available DEVICE_UNIT units for a specific item. */
 export async function getAvailableDeviceUnits(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   inventoryItemId: string,
+  branchId?: string,
 ): Promise<InventoryItemUnitRow[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("inventory_item_units")
     .select("*")
     .eq("inventory_item_id", inventoryItemId)
-    .eq("status", "AVAILABLE")
-    .order("created_at", { ascending: true });
+    .eq("status", "AVAILABLE");
+
+  if (branchId) {
+    query = query.eq("branch_id", branchId);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: true });
 
   if (error) {
     console.error("[PosRepository] getAvailableDeviceUnits error:", error);
@@ -222,115 +248,72 @@ export async function getAvailableDeviceUnits(
   return (data as InventoryItemUnitRow[]) || [];
 }
 
-/** Call the record_pos_sale RPC. */
-export async function callRecordPosSale(
-  supabase: ReturnType<typeof createClient>,
+function normalizePosSaleResult(data: any): PosSaleResult {
+  return {
+    posSaleId: data?.pos_sale_id || data?.id || "",
+    saleNumber: data?.sale_number || "",
+    grossAmount: Number(data?.gross_amount || 0),
+    discountAmount: Number(data?.discount_amount || 0),
+    tradeInAmount: Number(data?.trade_in_amount || 0),
+    amountDue: Number(data?.amount_due || 0),
+    paidAmount: Number(data?.paid_amount || 0),
+    changeAmount: Number(data?.change_amount || 0),
+    mdrAmount: Number(data?.mdr_amount || 0),
+    netAmount: Number(data?.net_amount || 0),
+    paymentAccountId: data?.payment_account_id || undefined,
+    paymentAccountMovementId: data?.payment_account_movement_id || undefined,
+    tradeInId: data?.trade_in_id || undefined,
+    tradeInItemId: data?.trade_in_item_id || undefined,
+    tradeInUnitId: data?.trade_in_unit_id || undefined,
+    status: data?.status || "COMPLETED",
+  };
+}
+
+/** Call the atomic full POS checkout RPC. */
+export async function callRecordPosSaleV2(
+  supabase: SupabaseClientLike,
   params: {
     brandId: number;
     branchId: string;
     paymentMethodId: string;
-    paymentAccountId: string;
-    items: Array<{
-      inventory_item_id: string;
-      quantity: number;
-      unit_price: number;
-      discount_amount?: number;
-      line_total: number;
-    }>;
+    items: PosCheckoutItemPayload[];
+    paymentAmount: number;
     customerId?: string;
     discountAmount?: number;
+    tradeIn?: PosTradeInPayload | null;
+    soldAt?: string;
     notes?: string;
+    metadata?: Record<string, unknown>;
     createdBy?: string;
+    idempotencyKey?: string;
   },
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  const { data, error } = await (supabase as any).rpc("record_pos_sale", {
+): Promise<{ success: boolean; data?: PosSaleResult; raw?: any; error?: string }> {
+  const { data, error } = await (supabase as any).rpc("record_pos_sale_v2", {
     p_brand_id: params.brandId,
     p_branch_id: params.branchId,
     p_payment_method_id: params.paymentMethodId,
-    p_items: JSON.stringify(
-      params.items.map((item) => ({
-        inventory_item_id: item.inventory_item_id,
-        quantity: Number(item.quantity),
-        unit_price: Number(item.unit_price),
-        discount_amount: Number(item.discount_amount || 0),
-        line_total: Number(item.line_total),
-      })),
-    ),
+    p_items: params.items,
+    p_payment_amount: Number(params.paymentAmount || 0),
     p_customer_id: params.customerId || null,
     p_discount_amount: Number(params.discountAmount || 0),
-    p_sold_at: new Date().toISOString(),
+    p_trade_in: params.tradeIn || null,
+    p_sold_at: params.soldAt || new Date().toISOString(),
     p_notes: params.notes || null,
-    p_metadata: {},
+    p_metadata: params.metadata || {},
     p_created_by: params.createdBy || null,
-    p_idempotency_key: null,
+    p_idempotency_key: params.idempotencyKey || null,
   });
 
   if (error) {
     return { success: false, error: error.message };
   }
 
-  return { success: true, data };
-}
-
-/** Insert a trade-in record. */
-export async function createTradeIn(
-  supabase: ReturnType<typeof createClient>,
-  params: {
-    brandId: number;
-    branchId: string;
-    posSaleId: string;
-    customerId?: string;
-    deviceBrand: string;
-    deviceModel: string;
-    storage?: string;
-    color?: string;
-    imei?: string;
-    serialNumber?: string;
-    conditionGrade?: string;
-    batteryHealth?: string;
-    appraisalValue: number;
-    inventoryItemId?: string;
-    inventoryItemUnitId?: string;
-    note?: string;
-    createdBy?: string;
-  },
-): Promise<{ success: boolean; data?: TradeInRow; error?: string }> {
-  const { data, error } = await supabase
-    .from("trade_ins")
-    .insert({
-      brand_id: params.brandId,
-      branch_id: params.branchId,
-      pos_sale_id: params.posSaleId,
-      customer_id: params.customerId || null,
-      device_brand: params.deviceBrand,
-      device_model: params.deviceModel,
-      storage: params.storage || null,
-      color: params.color || null,
-      imei: params.imei || null,
-      serial_number: params.serialNumber || null,
-      condition_grade: params.conditionGrade || null,
-      battery_health: params.batteryHealth || null,
-      appraisal_value: params.appraisalValue,
-      inventory_item_id: params.inventoryItemId || null,
-      inventory_item_unit_id: params.inventoryItemUnitId || null,
-      status: "ACCEPTED",
-      note: params.note || null,
-      appraised_by: params.createdBy || null,
-      created_by: params.createdBy || null,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  return { success: true, data: data as TradeInRow };
+  return { success: true, data: normalizePosSaleResult(data), raw: data };
 }
 
 /** List POS sales for a branch. */
 export async function getPosSalesByBranch(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   brandId: number,
   branchId: string,
   options?: { limit?: number; offset?: number },
@@ -360,7 +343,7 @@ export async function getPosSalesByBranch(
 
 /** Get a single POS sale with items. */
 export async function getPosSaleById(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   id: string,
 ) {
   const { data: sale, error: saleError } = await supabase

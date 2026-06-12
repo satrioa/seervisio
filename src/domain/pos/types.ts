@@ -7,8 +7,8 @@
 
 /* ─── Item / Product Types ─── */
 
-/** Extended product type that POS supports. DEVICE_UNIT requires serialized unit tracking. */
-export type PosProductType = "ACCESSORY" | "SPAREPART" | "DEVICE_UNIT" | "CONSUMABLE" | "OTHER";
+/** POS item types match inventory_items.item_type. UI ACCESSORY maps to PRODUCT; CONSUMABLE maps to SUPPLY. */
+export type PosProductType = "PRODUCT" | "SPAREPART" | "SUPPLY" | "DEVICE_UNIT" | "OTHER";
 
 /* ─── Inventory Item Unit (Serialized Device) ─── */
 
@@ -56,6 +56,8 @@ export interface PosCartItem {
   discountAmount: number;
   /** Selected inventory_item_unit for DEVICE_UNIT */
   selectedUnit?: CartDeviceUnit;
+  /** Explicit RPC field for serialized DEVICE_UNIT lines. */
+  inventoryItemUnitId?: string;
 }
 
 export interface CartDeviceUnit {
@@ -90,15 +92,36 @@ export interface PosTradeIn {
 
 export interface PosPaymentInput {
   paymentMethodId: string;
-  paymentAccountId: string;
+  paymentAccountId?: string;
   amount: number;
+}
+
+export interface PosCheckoutItemPayload {
+  inventory_item_id: string;
+  inventory_item_unit_id?: string | null;
+  quantity: number;
+  unit_price?: number;
+  discount_amount?: number;
+}
+
+export interface PosTradeInPayload {
+  device_brand: string;
+  device_model: string;
+  storage?: string | null;
+  color?: string | null;
+  imei?: string | null;
+  serial_number?: string | null;
+  condition_grade?: string | null;
+  battery_health?: string | null;
+  appraisal_value: number;
+  notes?: string | null;
 }
 
 /* ─── Sale Input / Result ─── */
 
 export interface CreatePosSaleInput {
-  brandId: number;
-  branchId: string;
+  brandId?: number;
+  branchId?: string;
   customerId?: string;
   customerQuickCreate?: {
     name: string;
@@ -107,7 +130,9 @@ export interface CreatePosSaleInput {
   cartItems: PosCartItem[];
   tradeIn?: PosTradeIn;
   payments: PosPaymentInput[];
+  paymentAmount?: number;
   discountAmount: number;
+  idempotencyKey?: string;
   notes?: string;
 }
 
@@ -116,12 +141,17 @@ export interface PosSaleResult {
   saleNumber: string;
   grossAmount: number;
   discountAmount: number;
-  tradeInValue: number;
-  totalAfterTradeIn: number;
+  tradeInAmount: number;
+  amountDue: number;
   paidAmount: number;
   changeAmount: number;
   mdrAmount: number;
   netAmount: number;
+  paymentAccountId?: string;
+  paymentAccountMovementId?: string;
+  tradeInId?: string;
+  tradeInItemId?: string;
+  tradeInUnitId?: string;
   status: string;
 }
 

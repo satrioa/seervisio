@@ -2,15 +2,15 @@
 // WIP POS module. Do not import into active routes until POS schema/actions are finalized.
 /**
  * calculate-pos.ts
- * Pure calculation helpers for POS transactions.
- * Server-side authoritative calculations — never trust client-submitted totals.
+ * Pure preview helpers for POS transactions.
+ * record_pos_sale_v2 is the server-side source of truth for checkout totals.
  */
 
 import type { PosCartItem, PosTradeIn, PosPaymentInput, PosSaleResult } from "./types";
 
 /* ─── Subtotal ─── */
 
-/** Calculate authoritative subtotal from cart items (server-side). */
+/** Preview gross subtotal from cart items. Server recalculates prices from DB. */
 export function calculateSubtotal(cartItems: PosCartItem[]): number {
   return cartItems.reduce((sum, item) => {
     const lineTotal = item.quantity * item.unitPrice - item.discountAmount;
@@ -89,13 +89,15 @@ export function validatePayment(
 /* ─── Full calculation pipeline ─── */
 
 export interface CalculatedPosTotals {
-  subtotal: number;
-  discountAmount: number;
-  subtotalAfterDiscount: number;
-  tradeInValue: number;
-  amountDue: number;
-  totalPaid: number;
-  changeAmount: number;
+  gross_amount: number;
+  discount_amount: number;
+  subtotal_after_discount: number;
+  trade_in_amount: number;
+  amount_due: number;
+  paid_amount: number;
+  change_amount: number;
+  mdr_amount: number;
+  net_amount: number;
 }
 
 export function calculatePosTotals(params: {
@@ -115,13 +117,15 @@ export function calculatePosTotals(params: {
   const changeAmount = Math.max(0, totalPaid - amountDue);
 
   return {
-    subtotal,
-    discountAmount,
-    subtotalAfterDiscount,
-    tradeInValue,
-    amountDue,
-    totalPaid,
-    changeAmount,
+    gross_amount: subtotal,
+    discount_amount: discountAmount,
+    subtotal_after_discount: subtotalAfterDiscount,
+    trade_in_amount: tradeInValue,
+    amount_due: amountDue,
+    paid_amount: totalPaid,
+    change_amount: changeAmount,
+    mdr_amount: 0,
+    net_amount: amountDue,
   };
 }
 
