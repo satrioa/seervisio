@@ -36,6 +36,9 @@ import {
   formatCurrency,
   getTotalSparepartCost,
   getTotalPayment,
+  getPickupStatus,
+  getPickupLabel,
+  getPickupColor,
 } from "@/components/services/service-data";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
@@ -211,17 +214,29 @@ export function ServiceListView({ services }: ServiceListViewProps) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
+  const [pickupFilter, setPickupFilter] = React.useState<string>("all");
   const { showDetail } = useRightSidebar();
 
   const toggleExpand = React.useCallback((id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   }, []);
 
-  const totalItems = services.length;
+  const pickupFilteredServices = React.useMemo(() => {
+    if (pickupFilter === "all") return services;
+    return services.filter((s) => {
+      const ps = getPickupStatus(s);
+      if (pickupFilter === "ready") return ps === "READY";
+      if (pickupFilter === "picked_up") return ps === "PICKED_UP";
+      if (pickupFilter === "not_ready") return ps === "NOT_READY";
+      return true;
+    });
+  }, [services, pickupFilter]);
+
+  const totalItems = pickupFilteredServices.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const paginatedServices = services.slice(startIndex, startIndex + pageSize);
+  const paginatedServices = pickupFilteredServices.slice(startIndex, startIndex + pageSize);
   const startItem = totalItems === 0 ? 0 : startIndex + 1;
   const endItem = Math.min(startIndex + pageSize, totalItems);
 
@@ -256,6 +271,21 @@ export function ServiceListView({ services }: ServiceListViewProps) {
 
   return (
     <>
+      {/* Pickup Status Filter */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-medium text-gray-500">Pengambilan:</span>
+        <select
+          className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+          value={pickupFilter}
+          onChange={(e) => setPickupFilter(e.target.value)}
+        >
+          <option value="all">Semua</option>
+          <option value="not_ready">Belum Siap</option>
+          <option value="ready">Siap Diambil</option>
+          <option value="picked_up">Sudah Diambil</option>
+        </select>
+      </div>
+
       {/* Desktop: Table */}
       <div className="hidden md:block">
         <div className="flex flex-col gap-0 overflow-hidden rounded-lg border bg-card">
@@ -324,6 +354,16 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                       />
                       {STATUS_CONFIG[service.status].label}
                     </span>
+                    {service.status === "selesai" && (
+                      (() => {
+                        const ps = getPickupStatus(service);
+                        return (
+                          <span className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-medium ${getPickupColor(ps)}`}>
+                            {getPickupLabel(ps)}
+                          </span>
+                        );
+                      })()
+                    )}
                   </div>
                   <div className="flex flex-col items-start justify-center gap-0">
                     {totalBiaya > 0 && (
@@ -558,6 +598,16 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                 >
                   {STATUS_CONFIG[service.status].label}
                 </span>
+                {service.status === "selesai" && (
+                  (() => {
+                    const ps = getPickupStatus(service);
+                    return (
+                      <span className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-medium ${getPickupColor(ps)}`}>
+                        {getPickupLabel(ps)}
+                      </span>
+                    );
+                  })()
+                )}
               </button>
 
               {/* Card Meta */}

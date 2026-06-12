@@ -30,6 +30,9 @@ import {
   STATUS_ORDER,
   formatCurrency,
   getTotalSparepartCost,
+  getPickupStatus,
+  getPickupLabel,
+  getPickupColor,
 } from "@/components/services/service-data";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
@@ -127,6 +130,18 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
           <p className="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
             {service.issue}
           </p>
+
+          {/* Pickup badge for selesai */}
+          {service.status === "selesai" && (
+            (() => {
+              const pickupStatus = getPickupStatus(service);
+              return (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getPickupColor(pickupStatus)}`}>
+                  {getPickupLabel(pickupStatus)}
+                </span>
+              );
+            })()
+          )}
 
           {/* Customer & Technician */}
           <div className="flex items-center justify-between gap-2">

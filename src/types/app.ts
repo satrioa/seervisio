@@ -79,7 +79,7 @@ export interface PaymentAccount {
 }
 
 // ── Inventory ──────────────────────────────────────
-export type ItemType = "PRODUCT" | "SPAREPART" | "SUPPLY" | "OTHER";
+export type ItemType = "PRODUCT" | "SPAREPART" | "SUPPLY" | "DEVICE_UNIT" | "OTHER";
 
 export interface InventoryItem {
   id: string;

@@ -35,7 +35,7 @@ function toWorkflowStatus(status: string): ServiceWorkflowStatus {
     perbaikan: "PERBAIKAN",
     qc: "QC",
     selesai: "SELESAI",
-    diambil: "DIAMBIL",
+    diambil: "SELESAI",
     batal: "CANCELLED",
     cancelled: "CANCELLED",
   };

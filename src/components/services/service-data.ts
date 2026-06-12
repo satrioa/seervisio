@@ -133,6 +133,36 @@ export interface ServiceRecord {
   timeline: TimelineEntry[];
   notes: ServiceNote[];
   deviceIcon: LucideIcon;
+  pickedUpAt?: string;
+  pickupName?: string;
+  pickupPhone?: string;
+  pickupRelation?: string;
+  pickupNote?: string;
+  pickedUpBy?: string;
+}
+
+export type PickupStatus = "NOT_READY" | "READY" | "PICKED_UP";
+
+export function getPickupStatus(service: ServiceRecord): PickupStatus {
+  if (service.status !== "selesai") return "NOT_READY";
+  if (service.pickedUpAt) return "PICKED_UP";
+  return "READY";
+}
+
+export function getPickupLabel(status: PickupStatus): string {
+  switch (status) {
+    case "NOT_READY": return "Belum Siap";
+    case "READY": return "Siap Diambil";
+    case "PICKED_UP": return "Sudah Diambil";
+  }
+}
+
+export function getPickupColor(status: PickupStatus): string {
+  switch (status) {
+    case "NOT_READY": return "bg-gray-100 text-gray-600";
+    case "READY": return "bg-green-100 text-green-700";
+    case "PICKED_UP": return "bg-blue-100 text-blue-700";
+  }
 }
 
 /* ─── Status labels & config ─── */

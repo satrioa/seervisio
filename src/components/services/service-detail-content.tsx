@@ -22,6 +22,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   type ServiceRecord,
   type ServiceStatus,
   type ServicePaymentRecord,
@@ -39,6 +49,14 @@ import { ServicePaymentPanel } from "@/components/services/service-payment-panel
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
+import {
+  getPickupStatus,
+  getPickupLabel,
+  getPickupColor,
+  type PickupStatus,
+} from "@/components/services/service-data";
+import { verifyServicePickupAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 /* ─── Props ─── */
 
@@ -71,6 +89,7 @@ export function ServiceDetailContent({
   const [enrichedPayments, setEnrichedPayments] = React.useState<
     ServicePaymentRecord[]
   >(() => (service as any).__paymentRecords ?? []);
+  const [pickupDialogOpen, setPickupDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
     setLocalStatus(service.status);
@@ -488,6 +507,41 @@ export function ServiceDetailContent({
           </div>
         </div>
 
+        {/* ── Pickup Status ── */}
+        {service.status === "selesai" && (
+          (() => {
+            const pickupStatus = getPickupStatus(service);
+            if (pickupStatus === "PICKED_UP") {
+              return (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="font-medium text-blue-900 mb-2">Sudah Diambil</h4>
+                  <div className="space-y-1 text-sm text-blue-700">
+                    {service.pickupName && <p>Nama: {service.pickupName}</p>}
+                    {service.pickupPhone && <p>No. HP: {service.pickupPhone}</p>}
+                    {service.pickupRelation && <p>Relasi: {service.pickupRelation}</p>}
+                    {service.pickupNote && <p>Catatan: {service.pickupNote}</p>}
+                    {service.pickedUpAt && <p>Waktu: {new Date(service.pickedUpAt).toLocaleString("id-ID")}</p>}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                <h4 className="font-medium text-green-900 mb-1">Unit Siap Diambil</h4>
+                <p className="text-sm text-green-700 mb-3">
+                  Status servis sudah selesai. Unit siap diserahkan ke pelanggan.
+                </p>
+                <button
+                  onClick={() => setPickupDialogOpen(true)}
+                  className="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Verifikasi Pengambilan
+                </button>
+              </div>
+            );
+          })()
+        )}
+
         {/* ── Footer / Actions ── */}
         <div className="border-t bg-background px-6 py-3">
           <div className="flex flex-col gap-2">
@@ -582,6 +636,267 @@ export function ServiceDetailContent({
           onServiceUpdated?.();
         }}
       />
+
+      {/* ── Pickup Dialog ── */}
+      <PickupVerificationDialog
+        open={pickupDialogOpen}
+        onOpenChange={setPickupDialogOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onSuccess={() => {
+          setPickupDialogOpen(false);
+          onServiceUpdated?.();
+        }}
+      />
     </div>
+  );
+}
+
+/* ─── Pickup Verification Dialog ─── */
+
+interface PickupVerificationDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  service: ServiceRecord;
+  brandSlug: string;
+  onSuccess: () => void;
+}
+
+function PickupVerificationDialog({
+  open,
+  onOpenChange,
+  service,
+  brandSlug,
+  onSuccess,
+}: PickupVerificationDialogProps) {
+  const [pickupName, setPickupName] = React.useState("");
+  const [pickupPhone, setPickupPhone] = React.useState("");
+  const [pickupRelation, setPickupRelation] = React.useState("");
+  const [pickupNote, setPickupNote] = React.useState("");
+  const [unitChecked, setUnitChecked] = React.useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = React.useState(false);
+  const [customerAcceptedCondition, setCustomerAcceptedCondition] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setPickupName("");
+      setPickupPhone("");
+      setPickupRelation("");
+      setPickupNote("");
+      setUnitChecked(false);
+      setPaymentConfirmed(false);
+      setCustomerAcceptedCondition(false);
+      setError(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const allChecklistDone = unitChecked && paymentConfirmed && customerAcceptedCondition;
+
+  const handleSubmit = async () => {
+    if (!pickupName.trim()) {
+      setError("Nama pengambil wajib diisi.");
+      return;
+    }
+    if (!pickupRelation.trim()) {
+      setError("Relasi pengambil wajib diisi.");
+      return;
+    }
+    if (!allChecklistDone) {
+      setError("Semua checklist harus dicentang.");
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+
+    triggerDynamicIslandFeedback({
+      type: "loading",
+      title: "Memverifikasi pengambilan",
+      description: "Memproses verifikasi pengambilan unit...",
+    });
+
+    try {
+      const response = await verifyServicePickupAction({
+        brandSlug,
+        serviceId: service.id,
+        pickupName: pickupName.trim(),
+        pickupPhone: pickupPhone.trim() || undefined,
+        pickupRelation: pickupRelation.trim(),
+        pickupNote: pickupNote.trim() || undefined,
+        checklist: {
+          unitChecked,
+          paymentConfirmed,
+          customerAcceptedCondition,
+        },
+      });
+
+      if (response.success) {
+        triggerDynamicIslandFeedback({
+          type: "success",
+          title: "Pengambilan diverifikasi",
+          description: `Unit diserahkan kepada ${pickupName.trim()}.`,
+          duration: 1800,
+        });
+        onSuccess();
+      } else {
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: "Gagal verifikasi",
+          description: response.error ?? "Gagal memverifikasi pengambilan.",
+          duration: 2400,
+        });
+        setError(response.error ?? "Gagal memverifikasi pengambilan.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan tidak terduga.";
+      triggerDynamicIslandFeedback({
+        type: "error",
+        title: "Gagal verifikasi",
+        description: msg,
+        duration: 2400,
+      });
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCircle2 className="size-5 text-green-600" />
+            Verifikasi Pengambilan
+          </DialogTitle>
+          <DialogDescription>
+            {service.deviceBrand} {service.deviceModel} — {service.id}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Nama Pengambil <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={pickupName}
+                onChange={(e) => setPickupName(e.target.value)}
+                placeholder="Nama lengkap pengambil"
+                className="text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">No. HP Pengambil</Label>
+              <Input
+                value={pickupPhone}
+                onChange={(e) => setPickupPhone(e.target.value)}
+                placeholder="Nomor telepon (opsional)"
+                className="text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Relasi <span className="text-destructive">*</span>
+              </Label>
+              <select
+                value={pickupRelation}
+                onChange={(e) => setPickupRelation(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="" disabled>Pilih relasi</option>
+                <option value="Diri Sendiri">Diri Sendiri</option>
+                <option value="Keluarga">Keluarga</option>
+                <option value="Teman">Teman</option>
+                <option value="Kurir">Kurir</option>
+                <option value="Lainnya">Lainnya</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Catatan</Label>
+              <textarea
+                value={pickupNote}
+                onChange={(e) => setPickupNote(e.target.value)}
+                placeholder="Catatan tambahan (opsional)"
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Checklist Verifikasi
+            </p>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={unitChecked}
+                onChange={(e) => setUnitChecked(e.target.checked)}
+                className="mt-0.5 size-3.5"
+              />
+              <span className="text-xs text-foreground leading-relaxed">
+                Unit sudah diperiksa dan dalam kondisi sesuai
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={paymentConfirmed}
+                onChange={(e) => setPaymentConfirmed(e.target.checked)}
+                className="mt-0.5 size-3.5"
+              />
+              <span className="text-xs text-foreground leading-relaxed">
+                Pembayaran sudah lunas
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={customerAcceptedCondition}
+                onChange={(e) => setCustomerAcceptedCondition(e.target.checked)}
+                className="mt-0.5 size-3.5"
+              />
+              <span className="text-xs text-foreground leading-relaxed">
+                Pelanggan menyetujui kondisi unit
+              </span>
+            </label>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
+            Batal
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!pickupName.trim() || !pickupRelation.trim() || !allChecklistDone || submitting}
+          >
+            {submitting ? "Memproses..." : "Konfirmasi Pengambilan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

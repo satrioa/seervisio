@@ -16,7 +16,6 @@ export type ServiceWorkflowStatus =
   | "PERBAIKAN"
   | "QC"
   | "SELESAI"
-  | "DIAMBIL"
   | "CANCELLED";
 
 export type ServiceWorkflowRole =
@@ -61,7 +60,6 @@ export const WORKFLOW_ORDER: Record<ServiceWorkflowStatus, number> = {
   PERBAIKAN: 3,
   QC: 4,
   SELESAI: 5,
-  DIAMBIL: 6,
   CANCELLED: -1,
 };
 
@@ -74,9 +72,9 @@ export function getNextServiceStatus(
 ): ServiceWorkflowStatus | null {
   const order = WORKFLOW_ORDER[currentStatus];
   if (order === undefined || order === -1) return null;
-  if (currentStatus === "DIAMBIL") return null;
+  // No special handling for DIAMBIL status as it has been removed
   const statuses: ServiceWorkflowStatus[] = [
-    "MASUK", "DIAGNOSA", "PERBAIKAN", "QC", "SELESAI", "DIAMBIL",
+    "MASUK", "DIAGNOSA", "PERBAIKAN", "QC", "SELESAI",
   ];
   const nextIndex = statuses.indexOf(currentStatus) + 1;
   return nextIndex < statuses.length ? statuses[nextIndex] : null;
@@ -85,7 +83,7 @@ export function getNextServiceStatus(
 export function isTerminalServiceStatus(
   status: ServiceWorkflowStatus
 ): boolean {
-  return status === "DIAMBIL" || status === "CANCELLED";
+  return status === "CANCELLED";
 }
 
 export function isNormalForwardTransition(
@@ -107,7 +105,6 @@ export const STATUS_LABELS: Record<ServiceWorkflowStatus, string> = {
   PERBAIKAN: "Perbaikan",
   QC: "QC",
   SELESAI: "Selesai",
-  DIAMBIL: "Diambil",
   CANCELLED: "Dibatalkan",
 };
 
@@ -123,7 +120,6 @@ export const STATUS_MAP: Record<ServiceWorkflowStatus, string> = {
   PERBAIKAN: "REPAIRING",
   QC: "QC",
   SELESAI: "DONE",
-  DIAMBIL: "PICKED_UP",
   CANCELLED: "CANCELLED",
 };
 
@@ -139,7 +135,6 @@ export function fromDbStatus(dbStatus: string): ServiceWorkflowStatus {
     REPAIRING: "PERBAIKAN",
     QC: "QC",
     DONE: "SELESAI",
-    PICKED_UP: "DIAMBIL",
     CANCELLED: "CANCELLED",
   };
   return reverseMap[dbStatus] ?? "MASUK";
@@ -157,7 +152,7 @@ export function normalizeServiceStatus(
   if (upper === "REPAIRING") return "PERBAIKAN";
   if (upper === "QC") return "QC";
   if (upper === "DONE") return "SELESAI";
-  if (upper === "PICKED_UP") return "DIAMBIL";
+  // PICKED_UP status removed; no mapping to DIAMBIL
   if (upper === "CANCELLED") return "CANCELLED";
 
   // Direct workflow status values
@@ -165,7 +160,7 @@ export function normalizeServiceStatus(
   if (upper === "DIAGNOSA") return "DIAGNOSA";
   if (upper === "PERBAIKAN") return "PERBAIKAN";
   if (upper === "SELESAI") return "SELESAI";
-  if (upper === "DIAMBIL") return "DIAMBIL";
+  // Direct workflow status DIAMBIL removed; no mapping
 
   // Partial/fuzzy matches
   if (upper.includes("MASUK") || upper === "INTAKE") return "MASUK";
@@ -173,7 +168,7 @@ export function normalizeServiceStatus(
   if (upper.includes("REPAIR") || upper.includes("PERBAIK")) return "PERBAIKAN";
   if (upper === "QC") return "QC";
   if (upper.includes("SELESAI") || upper === "DONE") return "SELESAI";
-  if (upper.includes("AMBIL") || upper.includes("PICKED") || upper === "CLOSED") return "DIAMBIL";
+  // Ambil related terms no longer map to a status
   if (upper.includes("BATAL") || upper.includes("CANCEL")) return "CANCELLED";
 
   // Fallback
@@ -194,8 +189,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     DIAGNOSA: { allowedNext: ["PERBAIKAN"], canCancel: true, canReopen: false },
     PERBAIKAN: { allowedNext: ["QC"], canCancel: true, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: true, canReopen: false },
-    SELESAI: { allowedNext: ["DIAMBIL"], canCancel: false, canReopen: true },
-    DIAMBIL: { allowedNext: [], canCancel: false, canReopen: true },
+    SELESAI: { allowedNext: [], canCancel: false, canReopen: true },
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   ADMIN: {
@@ -203,8 +197,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     DIAGNOSA: { allowedNext: ["PERBAIKAN"], canCancel: true, canReopen: false },
     PERBAIKAN: { allowedNext: ["QC"], canCancel: true, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: true, canReopen: false },
-    SELESAI: { allowedNext: ["DIAMBIL"], canCancel: false, canReopen: true },
-    DIAMBIL: { allowedNext: [], canCancel: false, canReopen: false },
+    SELESAI: { allowedNext: [], canCancel: false, canReopen: true },
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   FRONTLINER: {
@@ -212,8 +205,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     DIAGNOSA: { allowedNext: [], canCancel: true, canReopen: false },
     PERBAIKAN: { allowedNext: [], canCancel: false, canReopen: false },
     QC: { allowedNext: [], canCancel: false, canReopen: false },
-    SELESAI: { allowedNext: ["DIAMBIL"], canCancel: false, canReopen: false },
-    DIAMBIL: { allowedNext: [], canCancel: false, canReopen: false },
+    SELESAI: { allowedNext: [], canCancel: false, canReopen: false },
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   TECHNICIAN: {
@@ -222,7 +214,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     PERBAIKAN: { allowedNext: ["QC"], canCancel: false, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: false, canReopen: false },
     SELESAI: { allowedNext: [], canCancel: false, canReopen: false },
-    DIAMBIL: { allowedNext: [], canCancel: false, canReopen: false },
+
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
 };
@@ -251,13 +243,14 @@ export function validateServiceStatusTransition(
   }
 
   if (isTerminalServiceStatus(currentStatus)) {
-    return {
-      allowed: false,
-      reason:
-        currentStatus === "CANCELLED"
-          ? "Servis sudah dibatalkan. Tidak dapat mengubah status."
-          : "Servis sudah selesai dan diambil. Gunakan reopen flow untuk mengubah.",
-    };
+return {
+          allowed: false,
+          reason:
+            currentStatus === "CANCELLED"
+              ? "Servis sudah dibatalkan. Tidak dapat mengubah status."
+              : "Servis sudah selesai. Gunakan reopen flow untuk mengubah.",
+        };
+
   }
 
   if (nextStatus === "CANCELLED") {
@@ -298,13 +291,7 @@ export function validateServiceStatusTransition(
     };
   }
 
-  if (currentStatus === "SELESAI" && nextStatus === "DIAMBIL" && role === "FRONTLINER") {
-    return {
-      allowed: true,
-      requiresConfirmation: true,
-      requiresReason: false,
-    };
-  }
+
 
   return { allowed: true };
 }
@@ -383,7 +370,7 @@ export function canReopenService(input: {
   role: ServiceWorkflowRole;
 }): boolean {
   const { currentStatus, role } = input;
-  if (currentStatus !== "SELESAI" && currentStatus !== "DIAMBIL") return false;
+  if (currentStatus !== "SELESAI") return false;
   const roleRules = ROLE_RULES[role];
   if (!roleRules) return false;
   const statusRules = roleRules[currentStatus];
@@ -396,12 +383,12 @@ export function validateReopenService(
 ): TransitionValidationResult {
   const { currentStatus, role, reason } = input;
 
-  if (currentStatus !== "SELESAI" && currentStatus !== "DIAMBIL") {
-    return {
-      allowed: false,
-      reason: "Hanya servis dengan status Selesai atau Diambil yang dapat dibuka ulang.",
-    };
-  }
+if (currentStatus !== "SELESAI") {
+      return {
+        allowed: false,
+        reason: "Hanya servis dengan status Selesai yang dapat dibuka ulang.",
+      };
+    }
 
   if (!canReopenService({ currentStatus, role })) {
     return {
@@ -418,12 +405,7 @@ export function validateReopenService(
     };
   }
 
-  if (currentStatus === "DIAMBIL" && role !== "MASTER_ADMIN") {
-    return {
-      allowed: false,
-      reason: "Hanya Master Admin yang dapat membuka ulang servis yang sudah diambil.",
-    };
-  }
+
 
   return { allowed: true };
 }
@@ -460,5 +442,15 @@ export const WORKFLOW_ERROR_MESSAGES = {
   REOPEN_WRONG_STATUS: "Hanya servis dengan status Selesai atau Diambil yang dapat dibuka ulang.",
   REOPEN_NO_ROLE: "Role Anda tidak memiliki akses untuk membuka ulang servis ini.",
   REOPEN_REQUIRES_REASON: "Membuka ulang servis membutuhkan alasan.",
-  REOPEN_DIAMBIL_MASTER_ONLY: "Hanya Master Admin yang dapat membuka ulang servis yang sudah diambil.",
+
 } as const;
+
+export function getServicePickupStatus(service: {
+  current_status: string;
+  picked_up_at: string | null;
+}): "NOT_READY" | "READY" | "PICKED_UP" {
+  if (service.current_status !== "SELESAI") return "NOT_READY";
+  if (service.picked_up_at) return "PICKED_UP";
+  return "READY";
+}
+

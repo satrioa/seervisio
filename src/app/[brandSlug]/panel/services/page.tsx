@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   Check,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,13 @@ import { mapDbStatusToUI } from "@/components/services/service-ui-mappers";
 
 type ViewMode = "list" | "kanban";
 
+const viewTransition = {
+  initial: { opacity: 0, y: 8, scale: 0.985 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -8, scale: 0.985 },
+  transition: { duration: 0.2, ease: "easeOut" as const },
+};
+
 function ServicesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -40,6 +48,23 @@ function ServicesPageContent() {
   const { showDetail } = useRightSidebar();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  // Read persisted preference after mount (hydration safety)
+  React.useEffect(() => {
+    setIsMounted(true);
+    const stored = localStorage.getItem("seervis:services:view-mode");
+    if (stored === "list" || stored === "kanban") {
+      setViewMode(stored);
+    }
+  }, []);
+
+  // Persist preference on change
+  React.useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem("seervis:services:view-mode", viewMode);
+    }
+  }, [viewMode, isMounted]);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<ServiceStatus | "all">("all");
   const [technicianFilter, setTechnicianFilter] = React.useState("all");
@@ -296,39 +321,69 @@ function ServicesPageContent() {
             </Popover>
 
             {/* View Toggle */}
-            <div className="flex items-center rounded-lg border bg-card p-0.5">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 w-7 p-0"
+            <div className="inline-flex items-center rounded-lg border bg-muted p-0.5">
+              <button
+                type="button"
+                aria-pressed={viewMode === "list"}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "list"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
                 onClick={() => setViewMode("list")}
-                aria-label="List view"
               >
                 <LayoutList className="size-3.5" />
-              </Button>
-              <Button
-                variant={viewMode === "kanban" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 w-7 p-0"
+                Table
+              </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === "kanban"}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "kanban"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
                 onClick={() => setViewMode("kanban")}
-                aria-label="Kanban view"
               >
                 <Columns3 className="size-3.5" />
-              </Button>
+                Kanban
+              </button>
             </div>
           </div>
         </div>
 
         {/* ---------- Views ---------- */}
-        {viewMode === "list" ? (
-          <ServiceListView services={filteredServices} />
-        ) : (
-          <ServiceKanbanView
-            services={filteredServices}
-            brandSlug={brandSlug}
-            onCardDoubleClick={handleCardDoubleClick}
-          />
-        )}
+        <div className="relative min-h-[520px]">
+          <AnimatePresence mode="wait" initial={false}>
+            {viewMode === "list" ? (
+              <motion.div
+                key="table"
+                initial={viewTransition.initial}
+                animate={viewTransition.animate}
+                exit={viewTransition.exit}
+                transition={viewTransition.transition}
+                className="w-full"
+              >
+                <ServiceListView services={filteredServices} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="kanban"
+                initial={viewTransition.initial}
+                animate={viewTransition.animate}
+                exit={viewTransition.exit}
+                transition={viewTransition.transition}
+                className="w-full"
+              >
+                <ServiceKanbanView
+                  services={filteredServices}
+                  brandSlug={brandSlug}
+                  onCardDoubleClick={handleCardDoubleClick}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
       <CreateServiceOverlay />
       <ServiceDetailSheet

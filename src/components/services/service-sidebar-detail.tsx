@@ -44,6 +44,14 @@ import { UpdateServiceStatusDialog } from "@/components/services/update-service-
 import { ServiceSparepartSection } from "@/components/services/service-sparepart-section";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
+import {
+  getPickupStatus,
+  getPickupLabel,
+  getPickupColor,
+  type PickupStatus,
+} from "@/components/services/service-data";
+import { verifyServicePickupAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 interface ServiceSidebarDetailProps {
   service: ServiceRecord;
@@ -78,6 +86,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
   const [paymentOpen, setPaymentOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [reopenOpen, setReopenOpen] = React.useState(false);
+  const [pickupDialogOpen, setPickupDialogOpen] = React.useState(false);
   const [enrichedPayments, setEnrichedPayments] = React.useState<
     ServicePaymentRecord[]
   >(() => (service as any).__paymentRecords ?? []);
@@ -366,6 +375,40 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
         </Section></motion.div>
       </motion.div>
 
+      {service.status === "selesai" && (
+        (() => {
+          const pickupStatus = getPickupStatus(service);
+          if (pickupStatus === "PICKED_UP") {
+            return (
+              <div className="mx-5 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <h4 className="font-medium text-blue-900 mb-2">Sudah Diambil</h4>
+                <div className="space-y-1 text-sm text-blue-700">
+                  {service.pickupName && <p>Nama: {service.pickupName}</p>}
+                  {service.pickupPhone && <p>No. HP: {service.pickupPhone}</p>}
+                  {service.pickupRelation && <p>Relasi: {service.pickupRelation}</p>}
+                  {service.pickupNote && <p>Catatan: {service.pickupNote}</p>}
+                  {service.pickedUpAt && <p>Waktu: {new Date(service.pickedUpAt).toLocaleString("id-ID")}</p>}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className="mx-5 rounded-lg border border-green-200 bg-green-50 p-4">
+              <h4 className="font-medium text-green-900 mb-1">Unit Siap Diambil</h4>
+              <p className="text-sm text-green-700 mb-3">
+                Status servis sudah selesai. Unit siap diserahkan ke pelanggan.
+              </p>
+              <button
+                onClick={() => setPickupDialogOpen(true)}
+                className="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+              >
+                Verifikasi Pengambilan
+              </button>
+            </div>
+          );
+        })()
+      )}
+
       <div className="sticky bottom-0 border-t bg-background/95 px-5 py-3 backdrop-blur">
         <div className="flex flex-col gap-2">
           {!isCancelled && (
@@ -452,6 +495,161 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
           onServiceUpdated?.();
         }}
       />
+
+      {/* Pickup Verification Dialog */}
+      <PickupVerificationDialog
+        open={pickupDialogOpen}
+        onOpenChange={setPickupDialogOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onSuccess={() => {
+          setPickupDialogOpen(false);
+          onServiceUpdated?.();
+        }}
+      />
+    </div>
+  );
+}
+
+function PickupVerificationDialog({
+  open,
+  onOpenChange,
+  service,
+  brandSlug,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  service: ServiceRecord;
+  brandSlug: string;
+  onSuccess: () => void;
+}) {
+  const [pickupName, setPickupName] = React.useState("");
+  const [pickupPhone, setPickupPhone] = React.useState("");
+  const [pickupRelation, setPickupRelation] = React.useState("");
+  const [pickupNote, setPickupNote] = React.useState("");
+  const [unitChecked, setUnitChecked] = React.useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = React.useState(false);
+  const [customerAcceptedCondition, setCustomerAcceptedCondition] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const handleSubmit = async () => {
+    if (!pickupName || !pickupRelation || !unitChecked || !paymentConfirmed || !customerAcceptedCondition) return;
+    setIsSubmitting(true);
+    triggerDynamicIslandFeedback({ type: "loading", title: "Memverifikasi pengambilan...", description: "Mencatat serah terima unit..." });
+
+    try {
+      const result = await verifyServicePickupAction({
+        brandSlug,
+        serviceId: service.id,
+        pickupName,
+        pickupPhone: pickupPhone || undefined,
+        pickupRelation,
+        pickupNote: pickupNote || undefined,
+        checklist: { unitChecked, paymentConfirmed, customerAcceptedCondition },
+      });
+
+      if (result.success) {
+        triggerDynamicIslandFeedback({ type: "success", title: "Unit sudah diambil", description: "Serah terima unit berhasil dicatat." });
+        onSuccess();
+      } else {
+        triggerDynamicIslandFeedback({ type: "error", title: "Gagal verifikasi pengambilan", description: result.error });
+      }
+    } catch (err: any) {
+      triggerDynamicIslandFeedback({ type: "error", title: "Gagal verifikasi pengambilan", description: err.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => onOpenChange(false)}>
+      <div className="w-full max-w-md rounded-xl bg-background p-6 text-foreground shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold mb-4">Verifikasi Pengambilan Unit</h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Nama Pengambil *</label>
+            <input
+              type="text"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+              value={pickupName}
+              onChange={(e) => setPickupName(e.target.value)}
+              placeholder="Nama lengkap"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Nomor HP</label>
+            <input
+              type="text"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+              value={pickupPhone}
+              onChange={(e) => setPickupPhone(e.target.value)}
+              placeholder="08xxxxxxxxxx"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Relasi *</label>
+            <select
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+              value={pickupRelation}
+              onChange={(e) => setPickupRelation(e.target.value)}
+            >
+              <option value="">Pilih relasi</option>
+              <option value="Customer sendiri">Customer sendiri</option>
+              <option value="Keluarga">Keluarga</option>
+              <option value="Kurir">Kurir</option>
+              <option value="Lainnya">Lainnya</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1">Catatan</label>
+            <textarea
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+              value={pickupNote}
+              onChange={(e) => setPickupNote(e.target.value)}
+              rows={2}
+              placeholder="Catatan tambahan..."
+            />
+          </div>
+
+          <div className="space-y-2 border-t pt-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={unitChecked} onChange={(e) => setUnitChecked(e.target.checked)} />
+              Unit sudah dicek bersama customer
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={paymentConfirmed} onChange={(e) => setPaymentConfirmed(e.target.checked)} />
+              Pembayaran sudah lunas
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={customerAcceptedCondition} onChange={(e) => setCustomerAcceptedCondition(e.target.checked)} />
+              Customer menyetujui kondisi unit
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={() => onOpenChange(false)}
+            className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+          >
+            Batal
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !pickupName || !pickupRelation || !unitChecked || !paymentConfirmed || !customerAcceptedCondition}
+            className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {isSubmitting ? "Memproses..." : "Konfirmasi Pengambilan"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
