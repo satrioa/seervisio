@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SummaryCard } from "@/components/dashboard/summary-card";
+import { OperationalHourHeatmap } from "@/components/dashboard/operational-hour-heatmap";
 import {
   ChartContainer,
   ChartLegend,
@@ -799,6 +800,30 @@ export function GeneralOverviewTab({ dateRange, granularity }: GeneralOverviewTa
             </CardContent>
           </Card>
         </div>
+
+        {/* ── Service Activity & More ── */}
+        <div className="flex flex-wrap gap-6">
+          <div className="min-w-[280px] flex-1">
+            <OperationalHourHeatmap dateRange={dateRange} />
+          </div>
+          <div className="min-w-[220px] flex-1">
+            <Card className="shadow-xs h-full">
+              <CardHeader className="pb-3">
+                <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+                <div className="mt-1.5 h-3 w-40 animate-pulse rounded bg-muted" />
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                  <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                  <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                  <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
       </div>
 
       {/* ══ RIGHT INSIGHT COLUMN ══ */}
@@ -1000,6 +1025,8 @@ export function GeneralOverviewTab({ dateRange, granularity }: GeneralOverviewTa
             })}
           </CardContent>
         </Card>
+
+
       </div>
     </div>
   );
