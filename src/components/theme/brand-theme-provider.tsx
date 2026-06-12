@@ -26,29 +26,31 @@ export function useBrandTheme() {
 
 /* ─── Helpers ─── */
 
-function applyCssVars(tokens: Record<string, string>, root: HTMLElement) {
-  for (const [key, value] of Object.entries(tokens)) {
-    root.style.setProperty(`--${key}`, value);
+const STYLE_ID = "brand-theme-tokens";
+
+function injectBrandStyle(
+  lightTokens: Record<string, string>,
+  darkTokens: Record<string, string>
+) {
+  let styleEl = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = STYLE_ID;
+    document.head.appendChild(styleEl);
   }
+
+  const toCss = (tokens: Record<string, string>) =>
+    Object.entries(tokens)
+      .map(([key, value]) => `  --${key}: ${value};`)
+      .join("\n");
+
+  styleEl.textContent = `/* Brand Theme Tokens */\n:root {\n${toCss(lightTokens)}\n}\n\n.dark {\n${toCss(darkTokens)}\n}`;
 }
 
-function removeCssVars(keys: string[], root: HTMLElement) {
-  for (const key of keys) {
-    root.style.removeProperty(`--${key}`);
-  }
+function removeBrandStyle() {
+  const styleEl = document.getElementById(STYLE_ID);
+  if (styleEl) styleEl.remove();
 }
-
-const THEME_TOKEN_KEYS = [
-  "background", "foreground", "card", "card-foreground",
-  "popover", "popover-foreground", "primary", "primary-foreground",
-  "secondary", "secondary-foreground", "muted", "muted-foreground",
-  "accent", "accent-foreground", "destructive", "destructive-foreground",
-  "border", "input", "ring",
-  "sidebar-background", "sidebar-foreground", "sidebar-primary",
-  "sidebar-primary-foreground", "sidebar-accent", "sidebar-accent-foreground",
-  "sidebar-border", "sidebar-ring",
-  "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
-];
 
 /* ─── Provider ─── */
 
@@ -61,6 +63,7 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
   const [mode, setMode] = React.useState<"light" | "dark">("light");
   const [brandTokens, setBrandTokens] = React.useState<ThemeTokens | null>(null);
   const [isThemeLoaded, setIsThemeLoaded] = React.useState(false);
+  const primaryColorRef = React.useRef("#F59E0B");
   const themeKey = `seervis-theme-${brandSlug}`;
 
   // Load theme from localStorage + Supabase on mount
@@ -76,32 +79,29 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
         // 2. Load brand theme from Supabase
         const result = await getBrandThemeAction(brandSlug);
         if (result.success && result.data) {
-          const { primaryColor, mode: savedMode, tokens } = result.data;
+          const { primaryColor } = result.data;
+          primaryColorRef.current = primaryColor;
 
-          // Use saved mode or localStorage mode
-          const effectiveMode = initialMode; // localStorage mode takes precedence
+          // Generate tokens for BOTH light and dark modes
+          const lightTokens = generateBrandTheme(primaryColor, "light");
+          const darkTokens = generateBrandTheme(primaryColor, "dark");
 
-          if (tokens) {
-            // Apply saved tokens
-            applyCssVars(tokens, document.documentElement);
-            setBrandTokens(tokens as ThemeTokens);
-          } else {
-            // Generate tokens from primary color
-            const generated = generateBrandTheme(primaryColor, effectiveMode);
-            applyCssVars(generated, document.documentElement);
-            setBrandTokens(generated);
-          }
+          // Inject as a <style> tag with proper :root and .dark selectors
+          injectBrandStyle(lightTokens, darkTokens);
+          setBrandTokens(lightTokens);
         } else {
-          // No theme saved — apply default Kasservice theme
-          const defaultTokens = generateBrandTheme("#F59E0B", initialMode);
-          applyCssVars(defaultTokens, document.documentElement);
-          setBrandTokens(defaultTokens);
+          // No theme saved — apply default Kasservice theme for both modes
+          const lightTokens = generateBrandTheme("#F59E0B", "light");
+          const darkTokens = generateBrandTheme("#F59E0B", "dark");
+          injectBrandStyle(lightTokens, darkTokens);
+          setBrandTokens(lightTokens);
         }
       } catch {
-        // Silent fallback: apply defaults
-        const fallbackTokens = generateBrandTheme("#F59E0B", "light");
-        applyCssVars(fallbackTokens, document.documentElement);
-        setBrandTokens(fallbackTokens);
+        // Silent fallback: apply defaults for both modes
+        const lightTokens = generateBrandTheme("#F59E0B", "light");
+        const darkTokens = generateBrandTheme("#F59E0B", "dark");
+        injectBrandStyle(lightTokens, darkTokens);
+        setBrandTokens(lightTokens);
       } finally {
         setIsThemeLoaded(true);
       }
@@ -112,8 +112,18 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
     // Listen for theme updates from settings page
     const handleThemeUpdate = (e: CustomEvent) => {
       if (e.detail?.tokens) {
-        applyCssVars(e.detail.tokens, document.documentElement);
-        setBrandTokens(e.detail.tokens as ThemeTokens);
+        // Settings page saved tokens for one mode — need both modes
+        // Use the stored primary color to generate the other mode
+        const sourceTokens = e.detail.tokens as Record<string, string>;
+        const sourceMode = (e.detail?.mode as "light" | "dark") ?? mode;
+        
+        // Re-generate both modes from the stored primary color
+        // This ensures light and dark are consistent
+        const pc = primaryColorRef.current;
+        const lightTokens = generateBrandTheme(pc, "light");
+        const darkTokens = generateBrandTheme(pc, "dark");
+        injectBrandStyle(lightTokens, darkTokens);
+        setBrandTokens(lightTokens);
       }
       if (e.detail?.mode) {
         const newMode = e.detail.mode as "light" | "dark";
@@ -126,8 +136,7 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
     window.addEventListener("brand-theme-updated", handleThemeUpdate as EventListener);
     return () => {
       window.removeEventListener("brand-theme-updated", handleThemeUpdate as EventListener);
-      // Clean up custom CSS variables on unmount
-      removeCssVars(THEME_TOKEN_KEYS, document.documentElement);
+      removeBrandStyle();
     };
   }, [brandSlug, themeKey]);
 

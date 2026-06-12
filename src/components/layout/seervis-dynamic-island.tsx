@@ -266,7 +266,7 @@ function SeervisIslandContent() {
   return (
     <motion.div
       ref={islandRef}
-      className="flex origin-center cursor-pointer items-center justify-center rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20"
+      className="flex origin-center cursor-pointer items-center justify-center rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-black/10 dark:bg-white dark:text-black dark:hover:border-black/20"
       initial={{
         width: initialDims.width,
         height: initialDims.height,
@@ -309,10 +309,10 @@ function SeervisIslandContent() {
               aria-hidden="true"
             />
             <div className="flex min-w-0 flex-col gap-0.5 text-left">
-              <span className="truncate text-xs font-medium text-white/90">
+              <span className="truncate text-xs font-medium text-white/90 dark:text-black/90">
                 Selamat datang, {MOCK_USER_NAME}
               </span>
-              <span className="truncate text-[10px] leading-tight text-white/50">
+              <span className="truncate text-[10px] leading-tight text-white/50 dark:text-black/50">
                 Pantau operasional toko dari satu tempat.
               </span>
             </div>
@@ -348,17 +348,17 @@ function SeervisIslandContent() {
                   repeat: Infinity,
                 }}
               >
-                <span className="pr-6 text-xs text-white/60">
+                <span className="pr-6 text-xs text-white/60 dark:text-black/60">
                   Buka toko untuk memulai session
                 </span>
-                <span className="pr-6 text-xs text-white/60" aria-hidden="true">
+                <span className="pr-6 text-xs text-white/60 dark:text-black/60" aria-hidden="true">
                   Buka toko untuk memulai session
                 </span>
               </motion.div>
             </div>
             <Button
               size="sm"
-              className="h-7 shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90"
+              className="h-7 shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
               onClick={(e) => {
                 e.stopPropagation();
                 handleBukaToko();
@@ -379,8 +379,8 @@ function SeervisIslandContent() {
             transition={spring}
             className="flex items-center gap-2 px-4"
           >
-            <Clock className="size-3.5 shrink-0 text-white/50" />
-            <span className="truncate text-xs text-white/60">
+            <Clock className="size-3.5 shrink-0 text-white/50 dark:text-black/50" />
+            <span className="truncate text-xs text-white/60 dark:text-black/60">
               Shift berjalan · {elapsed}
             </span>
           </motion.div>
@@ -397,8 +397,8 @@ function SeervisIslandContent() {
             className="flex w-full flex-col gap-3 p-4"
           >
             <div className="space-y-0.5">
-              <p className="text-sm font-medium text-white">Session belum dimulai</p>
-              <p className="text-xs leading-relaxed text-white/50">
+              <p className="text-sm font-medium text-white dark:text-black">Session belum dimulai</p>
+              <p className="text-xs leading-relaxed text-white/50 dark:text-black/50">
                 Buka toko untuk mulai mencatat transaksi, servis, dan kas hari
                 ini.
               </p>
@@ -406,7 +406,7 @@ function SeervisIslandContent() {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="h-8 gap-1.5 rounded-full border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90"
+                className="h-8 gap-1.5 rounded-full border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleBukaToko();
@@ -418,7 +418,7 @@ function SeervisIslandContent() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 rounded-full border-white/20 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                className="h-8 rounded-full border-white/20 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white dark:border-black/20 dark:text-black/70 dark:hover:bg-black/10 dark:hover:text-black"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleError();
@@ -441,7 +441,7 @@ function SeervisIslandContent() {
             className="flex w-full flex-col gap-3 p-4"
           >
             <div>
-              <p className="text-sm font-medium text-white">Shift Berjalan</p>
+              <p className="text-sm font-medium text-white dark:text-black">Shift Berjalan</p>
             </div>
 
             <div className="space-y-1.5">
@@ -453,7 +453,7 @@ function SeervisIslandContent() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200"
+                className="h-8 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
                 onClick={(e) => e.stopPropagation()}
               >
                 <LogOut className="size-3.5" />
@@ -461,7 +461,7 @@ function SeervisIslandContent() {
               </Button>
               <Button
                 size="sm"
-                className="h-8 gap-1.5 rounded-full border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+                className="h-8 gap-1.5 rounded-full border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 dark:border-black/20 dark:bg-black/10 dark:text-black dark:hover:bg-black/20"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Wallet className="size-3.5" />
@@ -487,7 +487,7 @@ function SeervisIslandContent() {
           >
             <div className="flex items-center gap-2">
               {actionState === "loading" && (
-                <Loader2 className="size-4 animate-spin text-white/50" />
+                <Loader2 className="size-4 animate-spin text-white/50 dark:text-black/50" />
               )}
               {actionState === "success" && (
                 <CheckCircle className="size-4 text-green-400" />
@@ -502,7 +502,7 @@ function SeervisIslandContent() {
               <span
                 className={`text-xs font-medium ${
                   actionState === "loading"
-                    ? "text-white/60"
+                    ? "text-white/60 dark:text-black/60"
                     : actionState === "success"
                       ? "text-green-400"
                       : actionState === "error"
@@ -518,7 +518,7 @@ function SeervisIslandContent() {
               <span
                 className={`text-[9px] ${
                   actionState === "loading"
-                    ? "text-white/40"
+                    ? "text-white/40 dark:text-black/40"
                     : actionState === "success"
                       ? "text-green-400/60"
                       : actionState === "error"
@@ -548,10 +548,10 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[11px] text-white/50">{label}</span>
+      <span className="text-[11px] text-white/50 dark:text-black/50">{label}</span>
       <span
         className={`text-right text-xs font-medium ${
-          highlight ? "text-amber-300" : "text-white/80"
+          highlight ? "text-amber-300" : "text-white/80 dark:text-black/80"
         }`}
       >
         {value}

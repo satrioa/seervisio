@@ -273,7 +273,7 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
       </SidebarHeader>
 
       {/* ── Navigation ── */}
-      <SidebarContent className="!bg-[#f3f2f0]">
+      <SidebarContent className="bg-sidebar">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -341,14 +341,14 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
       </SidebarContent>
 
       {/* ── User Profile Footer ── */}
-      <SidebarFooter className="!bg-[#f3f2f0] p-2">
+      <SidebarFooter className="bg-sidebar p-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <Popover>
               <PopoverTrigger asChild>
                 <SidebarMenuButton
                   size="lg"
-                  className="rounded-xl bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-white hover:shadow-md data-[state=open]:bg-white data-[state=open]:text-sidebar-accent-foreground"
+                  className="rounded-xl bg-background shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-background hover:shadow-md data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="size-8 rounded-lg">
                     <AvatarFallback className="rounded-lg bg-sidebar-primary/10 text-xs font-medium text-sidebar-primary">

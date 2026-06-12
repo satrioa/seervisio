@@ -151,13 +151,13 @@ function PanelLayoutShell({
   const { mode: theme, toggleTheme } = useBrandTheme();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f3f2f0]">
+    <div className="flex h-screen overflow-hidden bg-background">
       <SidebarProvider>
         <AppSidebar brandSlug={brandSlug} />
 
-        <SidebarInset className="h-screen min-w-0 overflow-hidden border-none bg-[#f3f2f0] pr-2 shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none">
+        <SidebarInset className="h-screen min-w-0 overflow-hidden border-none pr-2 shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none">
           {/* ── Desktop header ── */}
-          <header className="relative z-40 flex h-16 items-center overflow-visible bg-[#f3f2f0] px-6">
+          <header className="relative z-40 flex h-16 items-center overflow-visible px-6">
             <div className="flex items-center gap-3">
               <SidebarTrigger />
               <h1 className="text-lg font-semibold tracking-tight text-foreground">
@@ -217,12 +217,12 @@ function PanelLayoutShell({
           </header>
 
           {/* ── Mobile Dynamic Island row ── */}
-          <div className="relative z-50 bg-[#f3f2f0] px-4 pb-3 md:hidden">
+          <div className="relative z-50 px-4 pb-3 md:hidden">
             <SeervisDynamicIsland />
           </div>
 
           {/* Page content */}
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-[28px] border-none bg-background shadow-sm outline-none ring-0">
+          <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-2xl shadow-sm outline-none ring-0">
             <main
               ref={mainScrollRef}
               className="relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden"
@@ -244,7 +244,7 @@ function PanelLayoutShell({
               easing="cubic-bezier(0.22, 1, 0.36, 1)"
               style={{
                 background:
-                  "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0.82) 42%, transparent 100%)",
+                  "linear-gradient(to top, hsl(var(--card)) 0%, hsl(var(--card) / 0.82) 42%, transparent 100%)",
                 opacity: showMainBottomBlur ? 1 : 0,
                 transform: showMainBottomBlur ? "translateY(0)" : "translateY(10px)",
                 transition:
