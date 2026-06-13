@@ -10,6 +10,7 @@
 import type { Role } from "@/lib/permissions/roles";
 import { can } from "@/lib/permissions/can";
 import type { Permission } from "@/lib/permissions/permissions";
+import { canUseAllBranchesScope, canAccessBranch } from "@/domain/access/branch-access";
 
 export interface AppContext {
   /** Profile UUID from public.profiles */
@@ -34,8 +35,14 @@ export interface AppContext {
   branchName: string | null;
   /** All branch IDs the user has access to within this brand */
   accessibleBranchIds: string[];
+  /** Whether the user can access all branches (MASTER_ADMIN / PLATFORM_OWNER) */
+  canAccessAllBranches: boolean;
   /** The membership ID for this brand */
   membershipId: string;
+  /** Active operator profile ID (null if same as auth user) */
+  activeOperatorId: string | null;
+  /** Active operator display name (null if not switched) */
+  activeOperatorName: string | null;
 }
 
 /**
@@ -43,4 +50,27 @@ export interface AppContext {
  */
 export function canInContext(context: AppContext, permission: Permission): boolean {
   return can(context.role, permission);
+}
+
+/**
+ * Check branch access against the app context.
+ */
+export function canAccessBranchInContext(
+  context: AppContext,
+  branchId: string | null | undefined,
+): boolean {
+  return canAccessBranch(
+    { role: context.role, accessibleBranchIds: context.accessibleBranchIds },
+    branchId,
+  );
+}
+
+/**
+ * Whether the user's role allows all-branch scope in this context.
+ */
+export function canUseAllBranchesInContext(context: AppContext): boolean {
+  return canUseAllBranchesScope({
+    role: context.role,
+    accessibleBranchIds: context.accessibleBranchIds,
+  });
 }

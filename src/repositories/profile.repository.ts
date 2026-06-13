@@ -70,6 +70,11 @@ export async function getMembershipForBrand(
  * Get all branch access records for a membership.
  * Returns the branch_ids the user has access to within a brand.
  */
+export interface BranchAccessRow {
+  branchId: string;
+  isDefault: boolean;
+}
+
 export async function getBranchAccessForMembership(
   supabase: SupabaseClient<any, any, any>,
   membershipId: string
@@ -81,6 +86,41 @@ export async function getBranchAccessForMembership(
     .eq("is_active", true);
 
   return data?.map((row) => row.branch_id) ?? [];
+}
+
+export async function getBranchAccessWithDefaults(
+  supabase: SupabaseClient<any, any, any>,
+  membershipId: string
+): Promise<BranchAccessRow[]> {
+  const { data } = await supabase
+    .from("user_branch_access")
+    .select("branch_id, is_default")
+    .eq("membership_id", membershipId)
+    .eq("is_active", true);
+
+  return (data ?? []).map((row: any) => ({
+    branchId: row.branch_id,
+    isDefault: row.is_default ?? false,
+  }));
+}
+
+export async function getDefaultBranchId(
+  supabase: SupabaseClient<any, any, any>,
+  membershipId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("user_branch_access")
+    .select("branch_id")
+    .eq("membership_id", membershipId)
+    .eq("is_active", true)
+    .eq("is_default", true)
+    .maybeSingle();
+
+  if (data?.branch_id) return data.branch_id;
+
+  // Fallback: first accessible branch
+  const rows = await getBranchAccessForMembership(supabase, membershipId);
+  return rows[0] ?? null;
 }
 
 /**
@@ -116,6 +156,24 @@ export async function getProfileById(
     .single();
 
   return data ?? null;
+}
+
+/**
+ * Update last_login_at for a profile by auth_user_id.
+ * Silently logs a warning on failure — does not throw.
+ */
+export async function updateLastLoginAt(
+  supabase: SupabaseClient<any, any, any>,
+  authUserId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ last_login_at: new Date().toISOString() })
+    .eq("auth_user_id", authUserId);
+
+  if (error) {
+    console.warn("[profile.repository] failed to update last_login_at", error.message);
+  }
 }
 
 /**

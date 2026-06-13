@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,13 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  useEffect(() => {
+    const prefillEmail = searchParams.get("email");
+    if (prefillEmail) {
+      setEmail(decodeURIComponent(prefillEmail));
+    }
+  }, [searchParams]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(
     errorParam ? ERROR_MESSAGES[errorParam] ?? ERROR_MESSAGES.unknown : null
@@ -88,6 +96,9 @@ export function LoginForm() {
           email: data.user.email,
           hasSession: Boolean(data.session),
         });
+
+        // Record last_login_at (non-blocking)
+        updateLastLoginAt(supabase, data.user.id);
 
         const target = getSafeRedirect(redirectTo);
 

@@ -76,7 +76,7 @@ function getFeedbackDimensions(actionState: ActionState, hasDescription?: boolea
 }
 
 /* ── Inner component ── */
-function SeervisIslandContent() {
+function SeervisIslandContent({ userName }: { userName?: string }) {
   const { setSize } = useDynamicIslandSize();
 
   /* State */
@@ -310,7 +310,7 @@ function SeervisIslandContent() {
             />
             <div className="flex min-w-0 flex-col gap-0.5 text-left">
               <span className="truncate text-xs font-medium text-white/90 dark:text-black/90">
-                Selamat datang, {MOCK_USER_NAME}
+                Selamat datang, {userName ?? "User"}
               </span>
               <span className="truncate text-[10px] leading-tight text-white/50 dark:text-black/50">
                 Pantau operasional toko dari satu tempat.
@@ -561,10 +561,10 @@ function InfoRow({
 }
 
 /* Public component */
-export function SeervisDynamicIsland() {
+export function SeervisDynamicIsland({ userName }: { userName?: string }) {
   return (
     <DynamicIslandProvider initialSize={"medium" as any}>
-      <SeervisIslandContent />
+      <SeervisIslandContent userName={userName} />
     </DynamicIslandProvider>
   );
 }

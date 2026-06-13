@@ -20,12 +20,20 @@ import GradualBlur from "@/components/GradualBlur";
 import { ActiveBranchProvider, type ActiveBranchOption } from "@/components/layout/active-branch-context";
 import { PosCartProvider } from "@/components/pos/pos-cart-context";
 import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
+import { saveRememberedAccount, loadRememberedAccounts } from "@/lib/auth/remembered-accounts";
+import { ROLE_LABELS } from "@/lib/permissions/roles";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
   brandSlug: string;
   branches: ActiveBranchOption[];
   initialBranchId: string | null;
+  role: string;
+  canAccessAllBranches: boolean;
+  activeOperatorId: string | null;
+  activeOperatorName: string | null;
+  userName: string;
+  userEmail: string;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -56,13 +64,19 @@ export function PanelLayoutClient({
   brandSlug,
   branches,
   initialBranchId,
+  role,
+  canAccessAllBranches,
+  activeOperatorId,
+  activeOperatorName,
+  userName,
+  userEmail,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
         <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId}>
           <PosCartProvider>
-            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail}>{children}</PanelLayoutShell>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -73,9 +87,16 @@ export function PanelLayoutClient({
 function PanelLayoutShell({
   children,
   brandSlug,
+  role,
+  canAccessAllBranches,
+  activeOperatorId,
+  activeOperatorName,
+  userName,
+  userEmail,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
+  const isPosPage = pathname?.includes("/panel/pos");
   const [isIslandDetached, setIsIslandDetached] = React.useState(false);
   const [showMainBottomBlur, setShowMainBottomBlur] = React.useState(false);
   const mainScrollRef = React.useRef<HTMLElement | null>(null);
@@ -157,14 +178,32 @@ function PanelLayoutShell({
     };
   }, []);
 
+  // Save current account to remembered accounts on mount
+  React.useEffect(() => {
+    if (!userEmail) return;
+    const accounts = loadRememberedAccounts();
+    const existing = accounts.find((a) => a.email === userEmail && a.brandSlug === brandSlug);
+    if (!existing) {
+      saveRememberedAccount({
+        profileId: activeOperatorId ?? "",
+        name: userName ?? "",
+        email: userEmail,
+        role,
+        roleLabel: ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role,
+        brandSlug,
+        lastUsedAt: new Date().toISOString(),
+      });
+    }
+  }, []);
+
   const { mode: theme, toggleTheme } = useBrandTheme();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-[#f3f2f0]">
       <SidebarProvider>
-        <AppSidebar brandSlug={brandSlug} />
+        <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
 
-        <SidebarInset className="h-screen min-w-0 overflow-hidden border-none pr-2 shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none">
+        <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${isPosPage ? "pr-0" : "pr-2"}`}>
           {/* ── Desktop header ── */}
           <header className="relative z-40 flex h-16 items-center overflow-visible px-6">
             <div className="flex items-center gap-3">
@@ -191,7 +230,7 @@ function PanelLayoutShell({
               }}
             >
               <div className="pointer-events-auto">
-                <SeervisDynamicIsland />
+                <SeervisDynamicIsland userName={userName} />
               </div>
             </motion.div>
 
@@ -231,10 +270,10 @@ function PanelLayoutShell({
           </div>
 
           {/* Page content */}
-          <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-2xl shadow-sm outline-none ring-0">
+          <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-2xl shadow-sm outline-none ring-0 ${isPosPage ? "bg-card" : ""}`}>
             <main
               ref={mainScrollRef}
-              className="relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden"
+              className={`relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden ${isPosPage ? "bg-card" : ""}`}
             >
               {children}
             </main>

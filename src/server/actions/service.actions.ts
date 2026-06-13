@@ -3,7 +3,7 @@
  */
 "use server";
 
-import { getSessionData, successResult, errorResult, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
 import { fromDbStatus } from "@/domain/service/service-workflow";
 import {
   getServicesByBranch,
@@ -31,12 +31,18 @@ export async function listServicesAction(
 ): Promise<ActionResult<ServiceRecord[]>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.view");
+
     const branchId = input.branchId ?? session.defaultBranchId;
-    if (!branchId) {
+    if (branchId) {
+      requireBranchAccess(session, branchId, "listServicesAction");
+    } else if (!session.canAccessAllBranches) {
+      return errorResult("Anda tidak memiliki akses ke cabang ini.");
+    } else {
       return errorResult("Branch tidak ditemukan.");
     }
 
-    const rows = await getServicesByBranch(branchId);
+    const rows = await getServicesByBranch(branchId!);
 
     const services: ServiceRecord[] = rows.map((row: any) => ({
       id: row.service_number,
@@ -52,7 +58,7 @@ export async function listServicesAction(
       diagnosis: row.diagnosis_result ?? undefined,
       status: fromDbStatus(row.current_status).toLowerCase() as any,
       technician: row.technician?.full_name ?? undefined,
-      branch: branchId,
+      branch: branchId!,
       createdAt: row.created_at ?? new Date().toISOString(),
       updatedAt: row.updated_at ?? new Date().toISOString(),
       estimatedCompletion: undefined,
@@ -83,9 +89,9 @@ export async function getServiceDetailAction(
   serviceId: string
 ): Promise<ActionResult<ServiceRecord>> {
   try {
-    await getSessionData(brandSlug);
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "service.view");
     
-    // 1. Base service row with customer + technician
     const row = await getServiceById(serviceId);
     if (!row) return errorResult("Servis tidak ditemukan.");
     
@@ -222,10 +228,12 @@ export async function createServiceAction(
 ): Promise<ActionResult<{ serviceId: string; serviceNumber: string }>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.create");
+
     const brandId = session.brandId;
     const branchId = input.branchId ?? session.defaultBranchId;
-
     if (!branchId) return errorResult("Branch tidak ditemukan.");
+    requireBranchAccess(session, branchId, "createServiceAction");
     if (!input.customerName?.trim()) return errorResult("Nama customer wajib diisi.");
     if (!input.reportedIssue?.trim()) return errorResult("Keluhan wajib diisi.");
 

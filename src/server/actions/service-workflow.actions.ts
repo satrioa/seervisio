@@ -3,7 +3,8 @@
  */
 "use server";
 
-import { getSessionData, successResult, errorResult, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
+import { hasPermission } from "@/lib/permissions/require-permission";
 import {
   normalizeServiceStatus,
   validateServiceStatusTransition,
@@ -40,12 +41,14 @@ export async function updateServiceStatusAction(
 ): Promise<ActionResult<{ fromStatus: string; toStatus: string }>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.update");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "updateServiceStatusAction");
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     const nextStatus = normalizeServiceStatus(input.nextStatus);
-    const userRole = session.roles[0] as ServiceWorkflowRole;
+    const userRole = session.role as unknown as ServiceWorkflowRole;
 
     const validation = validateServiceStatusTransition({
       currentStatus,
@@ -121,11 +124,13 @@ export async function cancelServiceAction(
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.delete");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "cancelServiceAction");
 
     const currentStatus = normalizeServiceStatus(service.current_status);
-    const userRole = session.roles[0] as ServiceWorkflowRole;
+    const userRole = session.role as unknown as ServiceWorkflowRole;
     const sparepartUsages = await getServiceSparepartUsages(service.id);
     const hasUsedSpareparts = sparepartUsages.length > 0;
 
@@ -184,11 +189,13 @@ export async function reopenServiceAction(
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.reopen");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "reopenServiceAction");
 
     const currentStatus = normalizeServiceStatus(service.current_status);
-    const userRole = session.roles[0] as ServiceWorkflowRole;
+    const userRole = session.role as unknown as ServiceWorkflowRole;
 
     const validation = validateReopenService({ currentStatus, role: userRole, reason: input.reason });
     if (!validation.allowed) {
@@ -237,8 +244,10 @@ export async function addServiceSparepartAction(
 ): Promise<ActionResult<{ usageIds: string[] }>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.add_sparepart");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "addServiceSparepartAction");
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     if (currentStatus !== "PERBAIKAN" && currentStatus !== "QC") {
@@ -323,8 +332,10 @@ export async function receiveServicePaymentAction(
 ): Promise<ActionResult<any>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.payment.create");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "receiveServicePaymentAction");
     if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
 
     const { createServerSupabase } = await import("@/lib/supabase/server");
@@ -407,8 +418,10 @@ export async function verifyServicePickupAction(
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    requireActionPermission(session.role, "service.verify_pickup");
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
+    requireBranchAccess(session, service.branch_id, "verifyServicePickupAction");
 
     // 1. Validate service is SELESAI (DONE) and not already picked up
     if (service.current_status !== "DONE") {
@@ -419,13 +432,8 @@ export async function verifyServicePickupAction(
     }
 
     // 2. Role validation: TECHNICIAN not allowed
-    const role = session.roles[0] as string;
-    if (role === "TECHNICIAN") {
-      return errorResult("Teknisi tidak dapat memverifikasi pengambilan unit.");
-    }
-    const allowedRoles = ["MASTER_ADMIN", "ADMIN", "FRONTLINER"];
-    if (!allowedRoles.includes(role)) {
-      return errorResult("Role Anda tidak memiliki akses untuk verifikasi pengambilan.");
+    if (!hasPermission(session.role, "service.verify_pickup")) {
+      return errorResult("Role Anda tidak memiliki akses untuk verifikasi pengambilan unit.");
     }
 
     // 3. Validate required fields

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { resolveBrandContext } from "@/lib/context/resolve-brand-context";
+import { resolveActiveOperator } from "@/lib/auth/active-operator";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
 import { PanelLayoutClient } from "./panel-layout-client";
 
@@ -30,16 +31,33 @@ export default async function PanelLayout({
 
   try {
     const context = await resolveBrandContext(supabase, authResult.user, brandSlug);
-    const allBranches = await getBranchesByBrandId(supabase as any, context.brandId);
-    const accessibleBranches = allBranches
-      .filter((branch) => context.accessibleBranchIds.includes(branch.id))
-      .map((branch) => ({ id: branch.id, name: branch.name }));
+
+    // Step 3: Check active operator override (staff quick-switch)
+    const activeOperator = await resolveActiveOperator(supabase, context.brandId, context.profileId);
+
+    let effectiveContext = context;
+    if (activeOperator) {
+      effectiveContext = await resolveBrandContext(supabase, authResult.user, brandSlug, activeOperator);
+    }
+
+    const allBranches = await getBranchesByBrandId(supabase as any, effectiveContext.brandId);
+    const accessibleBranches = effectiveContext.canAccessAllBranches
+      ? allBranches.map((branch) => ({ id: branch.id, name: branch.name }))
+      : allBranches
+          .filter((branch) => effectiveContext.accessibleBranchIds.includes(branch.id))
+          .map((branch) => ({ id: branch.id, name: branch.name }));
 
     return (
       <PanelLayoutClient
         brandSlug={brandSlug}
         branches={accessibleBranches}
-        initialBranchId={context.branchId}
+        initialBranchId={effectiveContext.branchId}
+        role={effectiveContext.role}
+        canAccessAllBranches={effectiveContext.canAccessAllBranches}
+        activeOperatorId={effectiveContext.activeOperatorId}
+        activeOperatorName={effectiveContext.activeOperatorName}
+        userName={effectiveContext.name}
+        userEmail={effectiveContext.email}
       >
         {children}
       </PanelLayoutClient>

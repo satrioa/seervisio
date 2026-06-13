@@ -19,7 +19,7 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
-import { getSessionData, successResult, errorResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission } from "./action-helper";
 import type { ActionResult } from "./action-helper";
 import type {
   PosProductResult,
@@ -185,12 +185,7 @@ export async function createPosSaleAction(
     // ── 1. Auth & Role ──
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
-
-    const allowedRoles = ["MASTER_ADMIN", "ADMIN", "FRONTLINER"];
-    const hasRole = session.roles.some((r) => allowedRoles.includes(r));
-    if (!hasRole) {
-      return errorResult("Role Anda tidak memiliki akses untuk transaksi POS.");
-    }
+    requireActionPermission(session.role, "pos.transaction");
 
     const supabase = await createServerSupabase();
     const branch = resolveSessionBranchId(session, input.branchId);

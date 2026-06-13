@@ -14,7 +14,7 @@ import { PermissionError } from "@/lib/utils/errors";
  */
 export function requirePermission(role: Role | null | undefined, permission: Permission): void {
   if (!can(role, permission)) {
-    throw new PermissionError(`Missing permission: ${permission}`);
+    throw new PermissionError("Role Anda tidak memiliki akses untuk aksi ini.");
   }
 }
 
