@@ -17,10 +17,15 @@ import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { RightSidebarProvider } from "@/components/layout/right-sidebar-context";
 import { RightSidebarPanel } from "@/components/layout/right-sidebar-panel";
 import GradualBlur from "@/components/GradualBlur";
+import { ActiveBranchProvider, type ActiveBranchOption } from "@/components/layout/active-branch-context";
+import { PosCartProvider } from "@/components/pos/pos-cart-context";
+import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
   brandSlug: string;
+  branches: ActiveBranchOption[];
+  initialBranchId: string | null;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -49,13 +54,17 @@ function getPageTitle(pathname: string | null) {
 export function PanelLayoutClient({
   children,
   brandSlug,
+  branches,
+  initialBranchId,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
-      <RightSidebarProvider>
-        <PanelLayoutShell brandSlug={brandSlug}>{children}</PanelLayoutShell>
-      </RightSidebarProvider>
+        <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId}>
+          <PosCartProvider>
+            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId}>{children}</PanelLayoutShell>
+          </PosCartProvider>
+        </ActiveBranchProvider>
       </RightSidebarProvider>
     </BrandThemeProvider>
   );
@@ -256,6 +265,7 @@ function PanelLayoutShell({
         </SidebarInset>
       </SidebarProvider>
           {pathname?.includes("/panel/services") && <RightSidebarPanel />}
+          {pathname?.includes("/panel/pos") && <PosCartSidebar />}
     </div>
   );
 }

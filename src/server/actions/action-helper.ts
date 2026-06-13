@@ -6,6 +6,7 @@ import {
   getProfileByAuthUserId,
   getMembershipForBrand,
   getDefaultBranchForProfile,
+  getBranchAccessForMembership,
 } from "@/repositories/profile.repository";
 import { getBrandBySlug } from "@/repositories/brand.repository";
 
@@ -28,6 +29,7 @@ export interface SessionData {
   brandSlug: string;
   roles: string[];
   defaultBranchId: string | null;
+  accessibleBranchIds: string[];
 }
 
 /**
@@ -60,6 +62,7 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
 
   // Get default branch
   const defaultBranchId = await getDefaultBranchForProfile(supabase as any, profile.id, brand.id);
+  const accessibleBranchIds = await getBranchAccessForMembership(supabase as any, membership.id);
 
   return {
     profileId: profile.id,
@@ -68,5 +71,6 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
     brandSlug: brand.slug,
     roles: [membership.role] as string[],
     defaultBranchId,
+    accessibleBranchIds,
   };
 }

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useState, useMemo, useCallback } from "react";
+import { motion } from "framer-motion";
 import { User, Clock, GripVerticalIcon } from "lucide-react";
 import { Badge } from "@/components/reui/badge";
 import {
@@ -205,12 +206,13 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
 interface ServiceColumnProps {
   status: ServiceStatus;
   services: ServiceRecord[];
+  index?: number;
   isOverlay?: boolean;
   onCardClick: (service: ServiceRecord) => void;
   onCardDoubleClick?: (service: ServiceRecord) => void;
 }
 
-function ServiceColumn({ status, services, isOverlay, onCardClick, onCardDoubleClick }: ServiceColumnProps) {
+function ServiceColumn({ status, services, index = 0, isOverlay, onCardClick, onCardDoubleClick }: ServiceColumnProps) {
   const styles = STATUS_COLUMN_STYLES[status];
   const config = STATUS_CONFIG[status];
 
@@ -219,7 +221,17 @@ function ServiceColumn({ status, services, isOverlay, onCardClick, onCardDoubleC
       value={status}
       className="h-full w-[260px] shrink-0"
     >
-      <div className={`flex h-full min-h-0 flex-col rounded-xl border bg-card ${styles.headerBg}`}>
+      <motion.div
+        initial={isOverlay ? false : { opacity: 0, x: 32, scale: 0.985 }}
+        animate={isOverlay ? undefined : { opacity: 1, x: 0, scale: 1 }}
+        exit={isOverlay ? undefined : { opacity: 0, x: -24, scale: 0.985 }}
+        transition={{
+          duration: 0.32,
+          delay: isOverlay ? 0 : index * 0.045,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className={`flex h-full min-h-0 flex-col rounded-xl border bg-card ${styles.headerBg}`}
+      >
         {/* Column Header */}
         <CardHeader className="flex flex-row items-center justify-between gap-2 px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -269,7 +281,7 @@ function ServiceColumn({ status, services, isOverlay, onCardClick, onCardDoubleC
             </KanbanColumnContent>
           </div>
         </CardContent>
-      </div>
+      </motion.div>
     </KanbanColumn>
   );
 }
@@ -535,10 +547,11 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
       getItemValue={(item) => item.id}
     >
       <KanbanBoard className="flex h-[calc(100vh-14rem)] min-h-[360px] items-stretch gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {STATUS_ORDER.map((status) => (
+        {STATUS_ORDER.map((status, index) => (
           <ServiceColumn
             key={status}
             status={status}
+            index={index}
             services={columns[status] ?? []}
             onCardClick={openDetail}
             onCardDoubleClick={onCardDoubleClick}

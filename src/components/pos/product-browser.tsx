@@ -12,7 +12,7 @@ import { getAvailableDeviceUnitsAction } from "@/server/actions/pos.actions";
 import { DeviceUnitDialog } from "./device-unit-dialog";
 
 function ScrollArea({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`${className ?? ""} overflow-auto`}>{children}</div>;
+  return <div className={`${className ?? ""} overflow-y-auto overflow-x-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>{children}</div>;
 }
 
 /* ─── Type Filter Tabs ─── */
@@ -33,11 +33,13 @@ function ProductCard({
   onAdd,
   isInCart,
   brandSlug,
+  branchId,
 }: {
   product: PosProductResult;
   onAdd: (product: PosProductResult, qty?: number, unit?: CartDeviceUnit) => void;
   isInCart: boolean;
   brandSlug: string;
+  branchId: string | null;
 }) {
   const [showUnitDialog, setShowUnitDialog] = React.useState(false);
   const [units, setUnits] = React.useState<CartDeviceUnit[]>([]);
@@ -49,8 +51,9 @@ function ProductCard({
 
   const handleAdd = async () => {
     if (isDeviceUnit) {
+      if (!branchId) return;
       setLoadingUnits(true);
-      const result = await getAvailableDeviceUnitsAction(brandSlug, product.id);
+      const result = await getAvailableDeviceUnitsAction(brandSlug, product.id, branchId);
       setLoadingUnits(false);
       if (result.success && result.data.length > 0) {
         setUnits(result.data);
@@ -78,7 +81,7 @@ function ProductCard({
 
   return (
     <>
-      <div className={`rounded-lg border bg-card p-3 transition-colors ${outOfStock || noUnitsAvailable ? "opacity-50" : "hover:border-primary/50"}`}>
+      <div className={`rounded-lg border bg-card p-3 transition-colors ${outOfStock || noUnitsAvailable ? "opacity-50" : ""} ${isInCart ? "border-primary/50" : "hover:border-primary/50"}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-1">
@@ -112,7 +115,6 @@ function ProductCard({
               : `Stok: ${product.availableStock}`}
           </span>
         </div>
-        {isInCart && <p className="text-[10px] text-primary mt-1">Sudah di keranjang</p>}
       </div>
 
       {showUnitDialog && (
@@ -139,6 +141,7 @@ interface ProductBrowserProps {
   onAddToCart: (product: PosProductResult, qty?: number, unit?: CartDeviceUnit) => void;
   cartItemIds: Set<string>;
   brandSlug: string;
+  branchId: string | null;
 }
 
 export function ProductBrowser({
@@ -151,9 +154,10 @@ export function ProductBrowser({
   onAddToCart,
   cartItemIds,
   brandSlug,
+  branchId,
 }: ProductBrowserProps) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full w-full flex-col overflow-visible">
       {/* Search Bar */}
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -166,7 +170,7 @@ export function ProductBrowser({
       </div>
 
       {/* Type Filter Tabs */}
-      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TYPE_TABS.map((tab) => (
           <Button
             key={tab.label}
@@ -181,9 +185,9 @@ export function ProductBrowser({
       </div>
 
       {/* Product Grid */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1 px-0.5 pb-2">
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pr-3">
+          <div className="grid grid-cols-2 gap-3 pr-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="rounded-lg border bg-card p-3 animate-pulse">
                 <div className="h-4 w-3/4 bg-muted rounded mb-2" />
@@ -199,7 +203,7 @@ export function ProductBrowser({
             <p className="text-xs">Coba ubah kata kunci atau filter kategori</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pr-3">
+          <div className="grid grid-cols-2 gap-3 pr-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
             {products.map((product) => (
               <ProductCard
                 key={product.id}
@@ -207,6 +211,7 @@ export function ProductBrowser({
                 onAdd={onAddToCart}
                 isInCart={cartItemIds.has(product.id)}
                 brandSlug={brandSlug}
+                branchId={branchId}
               />
             ))}
           </div>

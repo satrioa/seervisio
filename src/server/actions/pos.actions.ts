@@ -60,6 +60,15 @@ function normalizePosItemType(value?: string): string | undefined {
   return value;
 }
 
+function resolveSessionBranchId(session: any, branchId?: string | null) {
+  const resolvedBranchId = branchId || session.defaultBranchId;
+  if (!resolvedBranchId) return { error: "Cabang POS belum dipilih." };
+  if (session.accessibleBranchIds?.length && !session.accessibleBranchIds.includes(resolvedBranchId)) {
+    return { error: "Anda tidak memiliki akses ke cabang POS ini." };
+  }
+  return { branchId: resolvedBranchId };
+}
+
 /* ─── Search Products ─── */
 
 export async function searchPosProductsAction(
@@ -68,6 +77,7 @@ export async function searchPosProductsAction(
     query?: string;
     itemType?: string;
     categoryId?: string;
+    branchId?: string | null;
     page?: number;
     pageSize?: number;
   },
@@ -75,13 +85,14 @@ export async function searchPosProductsAction(
   try {
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
-    if (!session.defaultBranchId) return errorResult("Cabang POS belum dipilih.");
+    const branch = resolveSessionBranchId(session, params.branchId);
+    if (branch.error) return errorResult(branch.error);
 
     const supabase = await createServerSupabase();
 
     const { data: products, total } = await repoSearchProducts(supabase, {
       brandId: session.brandId,
-      branchId: session.defaultBranchId,
+      branchId: branch.branchId,
       query: params.query,
       itemType: normalizePosItemType(params.itemType),
       categoryId: params.categoryId,
@@ -93,7 +104,7 @@ export async function searchPosProductsAction(
     const enriched = await Promise.all(
       products.map(async (product) => {
         if (product.itemType === "DEVICE_UNIT") {
-          const count = await countAvailableUnits(supabase, product.id, session.defaultBranchId);
+          const count = await countAvailableUnits(supabase, product.id, branch.branchId);
           return { ...product, availableUnitsCount: count };
         }
         return product;
@@ -112,6 +123,7 @@ export async function searchPosProductsAction(
 export async function getAvailableDeviceUnitsAction(
   brandSlug: string,
   inventoryItemId: string,
+  branchId?: string | null,
 ): Promise<
   ActionResult<
     Array<{
@@ -129,10 +141,11 @@ export async function getAvailableDeviceUnitsAction(
   try {
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
-    if (!session.defaultBranchId) return errorResult("Cabang POS belum dipilih.");
+    const branch = resolveSessionBranchId(session, branchId);
+    if (branch.error) return errorResult(branch.error);
 
     const supabase = await createServerSupabase();
-    const units = await getAvailableDeviceUnits(supabase, inventoryItemId, session.defaultBranchId);
+    const units = await getAvailableDeviceUnits(supabase, inventoryItemId, branch.branchId);
 
     return successResult(units.map(mapUnitRowToDomain));
   } catch (err: any) {
@@ -180,12 +193,10 @@ export async function createPosSaleAction(
     }
 
     const supabase = await createServerSupabase();
-    const branchId = input.branchId || session.defaultBranchId;
+    const branch = resolveSessionBranchId(session, input.branchId);
+    if (branch.error) return errorResult(branch.error);
+    const branchId = branch.branchId;
     const brandId = input.brandId || session.brandId;
-
-    if (!branchId) {
-      return errorResult("Cabang POS belum dipilih.");
-    }
 
     // ── 2. Validate Cart ──
     if (!input.cartItems || input.cartItems.length === 0) {

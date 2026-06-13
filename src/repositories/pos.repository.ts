@@ -104,6 +104,7 @@ export interface ProductSearchRow {
   category_name?: string;
   selling_price: number;
   cost_price: number;
+  track_stock: boolean;
   current_stock: number;
   available_stock: number;
   unit_name?: string;
@@ -137,9 +138,10 @@ export async function searchPosProducts(
       item_type,
       selling_price,
       cost_price,
+      track_stock,
       unit_name,
       is_active,
-      inventory_categories!inner(name),
+      inventory_categories(name),
       branch_inventory_stocks!inner(
         current_stock,
         available_stock
@@ -166,10 +168,6 @@ export async function searchPosProducts(
     );
   }
 
-  // Only show items with stock > 0 or that are non-tracked
-  // For DEVICE_UNIT, we need to check inventory_item_units separately
-  dbQuery = dbQuery.or("track_stock.eq.false,and(track_stock.eq.true,branch_inventory_stocks.available_stock.gt.0)");
-
   // Pagination
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -178,24 +176,38 @@ export async function searchPosProducts(
   const { data, error, count } = await dbQuery;
 
   if (error) {
-    console.error("[PosRepository] searchPosProducts error:", error);
-    return { data: [], total: 0 };
+    console.error("[PosRepository] searchPosProducts error:", {
+      error,
+      params: { brandId, branchId, query, itemType, categoryId, page, pageSize },
+    });
+    throw new Error(error.message || "Gagal mencari produk POS.");
   }
 
   // Map to PosProductResult
-  const results: PosProductResult[] = (data || []).map((item: any) => ({
-    id: item.id,
-    name: item.name,
-    sku: item.sku,
-    itemType: item.item_type as PosProductResult["itemType"],
-    categoryName: item.inventory_categories?.name,
-    sellingPrice: Number(item.selling_price) || 0,
-    costPrice: Number(item.cost_price) || 0,
-    availableStock: Number(item.branch_inventory_stocks?.[0]?.available_stock) || 0,
-    availableUnitsCount: 0, // populated separately for DEVICE_UNIT
-    unit: item.unit_name,
-    isActive: item.is_active,
-  }));
+  const results: PosProductResult[] = (data || [])
+    .map((item: any) => {
+      const availableStock = Number(item.branch_inventory_stocks?.[0]?.available_stock) || 0;
+
+      return {
+        id: item.id,
+        name: item.name,
+        sku: item.sku,
+        itemType: item.item_type as PosProductResult["itemType"],
+        categoryName: item.inventory_categories?.name,
+        sellingPrice: Number(item.selling_price) || 0,
+        costPrice: Number(item.cost_price) || 0,
+        availableStock,
+        availableUnitsCount: 0, // populated separately for DEVICE_UNIT
+        unit: item.unit_name,
+        isActive: item.is_active,
+        trackStock: Boolean(item.track_stock),
+      };
+    })
+    .filter((item: PosProductResult & { trackStock: boolean }) => {
+      if (item.itemType === "DEVICE_UNIT") return item.availableStock > 0;
+      return !item.trackStock || item.availableStock > 0;
+    })
+    .map(({ trackStock, ...item }) => item);
 
   return { data: results, total: count ?? results.length };
 }

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { resolveBrandContext } from "@/lib/context/resolve-brand-context";
+import { getBranchesByBrandId } from "@/repositories/branch.repository";
 import { PanelLayoutClient } from "./panel-layout-client";
 
 interface PanelLayoutProps {
@@ -28,7 +29,21 @@ export default async function PanelLayout({
   const supabase = await createServerSupabase();
 
   try {
-    await resolveBrandContext(supabase, authResult.user, brandSlug);
+    const context = await resolveBrandContext(supabase, authResult.user, brandSlug);
+    const allBranches = await getBranchesByBrandId(supabase as any, context.brandId);
+    const accessibleBranches = allBranches
+      .filter((branch) => context.accessibleBranchIds.includes(branch.id))
+      .map((branch) => ({ id: branch.id, name: branch.name }));
+
+    return (
+      <PanelLayoutClient
+        brandSlug={brandSlug}
+        branches={accessibleBranches}
+        initialBranchId={context.branchId}
+      >
+        {children}
+      </PanelLayoutClient>
+    );
   } catch (error) {
     if (error instanceof Error && error.message.includes("tidak ditemukan")) {
       notFound();
@@ -46,10 +61,5 @@ export default async function PanelLayout({
     );
   }
 
-  // Step 3: Render client layout with sidebar + header
-  return (
-    <PanelLayoutClient brandSlug={brandSlug}>
-      {children}
-    </PanelLayoutClient>
-  );
+  return null;
 }

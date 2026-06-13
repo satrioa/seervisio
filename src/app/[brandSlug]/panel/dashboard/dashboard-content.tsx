@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   Clock, Activity, AlertTriangle, Store, Wrench,
   CheckCircle2, Users, DollarSign, TrendingUp,
@@ -17,7 +18,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { SummaryCard } from "@/components/dashboard/summary-card";
 import { ServicePipeline } from "@/components/dashboard/service-pipeline";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
-import { GeneralOverviewTab } from "@/components/dashboard/general-overview-tab";
 import { ServiceOverviewTab } from "@/components/dashboard/service-overview-tab";
 import { FinanceOverviewTab } from "@/components/dashboard/finance-overview-tab";
 import { InventoryOverviewTab } from "@/components/dashboard/inventory-overview-tab";
@@ -28,6 +28,21 @@ import {
 import type { DateRange } from "react-day-picker";
 import type { DateRangeMode, ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { getChartGranularity } from "@/lib/dashboard/chart-granularity";
+
+const GeneralOverviewTab = dynamic(
+  () =>
+    import("@/components/dashboard/general-overview-tab").then(
+      (mod) => mod.GeneralOverviewTab,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+        Memuat dashboard...
+      </div>
+    ),
+  },
+);
 
 interface DashboardContentProps {
   brandSlug: string;

@@ -34,10 +34,28 @@ import { mapDbStatusToUI } from "@/components/services/service-ui-mappers";
 type ViewMode = "list" | "kanban";
 
 const viewTransition = {
-  initial: { opacity: 0, y: 8, scale: 0.985 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.985 },
-  transition: { duration: 0.2, ease: "easeOut" as const },
+  transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+const viewVariants = {
+  initial: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? 36 : -36,
+    scale: 0.985,
+    filter: "blur(6px)",
+  }),
+  animate: {
+    opacity: 1,
+    x: 0,
+    scale: 1,
+    filter: "blur(0px)",
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? -36 : 36,
+    scale: 0.985,
+    filter: "blur(6px)",
+  }),
 };
 
 function ServicesPageContent() {
@@ -48,6 +66,7 @@ function ServicesPageContent() {
   const { showDetail } = useRightSidebar();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
+  const [viewDirection, setViewDirection] = React.useState(1);
   const [isMounted, setIsMounted] = React.useState(false);
 
   // Read persisted preference after mount (hydration safety)
@@ -65,6 +84,21 @@ function ServicesPageContent() {
       localStorage.setItem("seervis:services:view-mode", viewMode);
     }
   }, [viewMode, isMounted]);
+
+  const handleViewModeChange = React.useCallback(
+    (nextMode: ViewMode) => {
+      if (nextMode === viewMode) return;
+
+      setViewDirection(nextMode === "kanban" ? 1 : -1);
+      setViewMode(nextMode);
+      window.dispatchEvent(
+        new CustomEvent("seervis:services-view-mode-change", {
+          detail: { mode: nextMode },
+        })
+      );
+    },
+    [viewMode]
+  );
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<ServiceStatus | "all">("all");
   const [technicianFilter, setTechnicianFilter] = React.useState("all");
@@ -330,7 +364,7 @@ function ServicesPageContent() {
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={() => setViewMode("list")}
+                onClick={() => handleViewModeChange("list")}
               >
                 <LayoutList className="size-3.5" />
                 Table
@@ -343,7 +377,7 @@ function ServicesPageContent() {
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={() => setViewMode("kanban")}
+                onClick={() => handleViewModeChange("kanban")}
               >
                 <Columns3 className="size-3.5" />
                 Kanban
@@ -353,14 +387,16 @@ function ServicesPageContent() {
         </div>
 
         {/* ---------- Views ---------- */}
-        <div className="relative min-h-[520px]">
-          <AnimatePresence mode="wait" initial={false}>
+        <div className="relative min-h-[520px] overflow-hidden">
+          <AnimatePresence mode="wait" initial={false} custom={viewDirection}>
             {viewMode === "list" ? (
               <motion.div
                 key="table"
-                initial={viewTransition.initial}
-                animate={viewTransition.animate}
-                exit={viewTransition.exit}
+                custom={viewDirection}
+                variants={viewVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
                 transition={viewTransition.transition}
                 className="w-full"
               >
@@ -369,9 +405,11 @@ function ServicesPageContent() {
             ) : (
               <motion.div
                 key="kanban"
-                initial={viewTransition.initial}
-                animate={viewTransition.animate}
-                exit={viewTransition.exit}
+                custom={viewDirection}
+                variants={viewVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
                 transition={viewTransition.transition}
                 className="w-full"
               >

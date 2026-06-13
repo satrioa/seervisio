@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   Receipt,
   RepeatIcon,
+  Wallet,
 } from "lucide-react";
 import type { PosCartItem, PosTradeIn } from "@/domain/pos/types";
 import { calculateLineTotal, isSerializedDevice } from "@/domain/pos/calculate-pos";
@@ -58,10 +59,10 @@ function CartItemRow({
 }) {
   const isDevice = isSerializedDevice(item);
   return (
-    <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
+    <div className="flex items-start gap-3 rounded-xl border bg-card p-3 text-xs text-muted-foreground">
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-medium truncate">{item.productName}</span>
+          <span className="truncate text-sm font-medium text-foreground">{item.productName}</span>
           <button
             onClick={onRemove}
             className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
@@ -123,16 +124,26 @@ function CartItemRow({
 
 function TradeInSection({
   tradeIn,
+  allowTradeIn,
   onSet,
 }: {
   tradeIn?: PosTradeIn;
+  allowTradeIn: boolean;
   onSet: (t?: PosTradeIn) => void;
 }) {
   const [open, setOpen] = React.useState(false);
 
+  if (!allowTradeIn) {
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-[11px] text-muted-foreground">
+        Tukar tambah hanya tersedia untuk penjualan unit/device.
+      </div>
+    );
+  }
+
   if (tradeIn) {
     return (
-      <div className="rounded-lg border p-3 bg-card">
+      <div className="rounded-xl border bg-card p-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-medium">Tukar Tambah</span>
           <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onSet(undefined)}>
@@ -157,7 +168,7 @@ function TradeInSection({
   }
 
   return (
-    <div className="rounded-lg border p-3 space-y-2 bg-card">
+    <div className="space-y-2 rounded-xl border bg-card p-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Data Tukar Tambah</span>
         <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setOpen(false)}>
@@ -230,7 +241,7 @@ function PaymentSummary({
   const amountDue = Math.max(0, totalAfterDiscount - tradeInValue);
 
   return (
-    <div className="space-y-1.5 text-sm">
+    <div className="space-y-1.5 rounded-xl border bg-card p-3 text-sm">
       <div className="flex justify-between text-muted-foreground">
         <span>Subtotal</span>
         <span>{formatPrice(subtotal)}</span>
@@ -252,6 +263,26 @@ function PaymentSummary({
         <span>{formatPrice(amountDue)}</span>
       </div>
     </div>
+  );
+}
+
+function SidebarSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Icon className="size-3" />
+        {title}
+      </h3>
+      {children}
+    </section>
   );
 }
 
@@ -310,7 +341,7 @@ function SuccessScreen({
 
 /* ─── Main CartPanel ─── */
 
-interface CartPanelProps {
+export interface CartPanelProps {
   cart: PosCartItem[];
   customerId?: string;
   customerQuickCreate?: { name: string; phone?: string };
@@ -343,6 +374,8 @@ interface CartPanelProps {
 
 export function CartPanel({
   cart,
+  customerId,
+  customerQuickCreate,
   tradeIn,
   discountAmount,
   submitting,
@@ -359,24 +392,44 @@ export function CartPanel({
 }: CartPanelProps) {
   const [paymentMethod, setPaymentMethod] = React.useState("");
   const [paidAmount, setPaidAmount] = React.useState("");
+  const [localError, setLocalError] = React.useState<string | undefined>();
   const ref = React.useRef<HTMLDivElement>(null);
 
   const subtotal = cart.reduce((sum, item) => sum + calculateLineTotal(item), 0);
+  const hasDeviceUnit = cart.some((item) => item.itemType === "DEVICE_UNIT");
   const tradeInValue = tradeIn?.appraisalValue ?? 0;
   const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
   const amountDue = Math.max(0, totalAfterDiscount - tradeInValue);
+  const selectedPaymentMethod = paymentMethods.find((method) => method.id === paymentMethod);
+  const selectedPaymentText = `${selectedPaymentMethod?.type ?? ""} ${selectedPaymentMethod?.name ?? ""}`.toUpperCase();
+  const isCashPayment = selectedPaymentText.includes("CASH") || selectedPaymentText.includes("TUNAI");
+  const cashPaidAmount = Number(paidAmount) || 0;
+  const cashChangeAmount = isCashPayment ? Math.max(0, cashPaidAmount - amountDue) : 0;
 
-  // Auto-fill paid amount when method changes
   React.useEffect(() => {
+    if (!hasDeviceUnit && tradeIn) {
+      onSetTradeIn(undefined);
+    }
+  }, [hasDeviceUnit, onSetTradeIn, tradeIn]);
+
+  React.useEffect(() => {
+    if (!paymentMethod) return;
+
+    if (!isCashPayment) {
+      setPaidAmount(String(amountDue));
+      setLocalError(undefined);
+      return;
+    }
+
     if (!paidAmount || Number(paidAmount) <= 0) {
       setPaidAmount(String(amountDue));
     }
-  }, [paymentMethod, amountDue, paidAmount]);
+  }, [amountDue, isCashPayment, paidAmount, paymentMethod]);
 
   // Success screen
   if (success) {
     return (
-      <div className="h-full rounded-lg border bg-card">
+      <div className="flex h-full min-h-0 flex-col rounded-lg border bg-card lg:rounded-none lg:border-0">
         <SuccessScreen
           saleNumber={success.saleNumber}
           grossAmount={success.grossAmount}
@@ -395,8 +448,24 @@ export function CartPanel({
 
   const handlePay = () => {
     if (!paymentMethod) return;
-    const amount = Number(paidAmount) || amountDue;
-    // Map payment method ID (in real impl, look up from DB)
+    setLocalError(undefined);
+
+    if (tradeIn && !hasDeviceUnit) {
+      setLocalError("Tukar tambah hanya tersedia untuk penjualan unit/device.");
+      return;
+    }
+
+    if (tradeIn && (!tradeIn.deviceBrand || !tradeIn.deviceModel || !tradeIn.appraisalValue || tradeIn.appraisalValue <= 0)) {
+      setLocalError("Data tukar tambah belum lengkap.");
+      return;
+    }
+
+    const amount = isCashPayment ? Number(paidAmount) || 0 : amountDue;
+    if (isCashPayment && amount < amountDue) {
+      setLocalError("Jumlah dibayar tunai harus minimal total tagihan.");
+      return;
+    }
+
     onSubmitSale({
       paymentMethodId: paymentMethod,
       amount,
@@ -404,16 +473,25 @@ export function CartPanel({
   };
 
   return (
-    <div ref={ref} className="h-full rounded-lg border bg-card flex flex-col">
+    <div ref={ref} className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-xl border bg-background lg:min-h-0 lg:rounded-none lg:border-0">
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 border-b">
-        <ShoppingCart className="h-4 w-4" />
-        <span className="text-sm font-semibold">Keranjang</span>
-        <Badge variant="secondary" className="ml-auto text-xs">{cart.length}</Badge>
+      <div className="shrink-0 border-b bg-background px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="size-4 shrink-0 text-muted-foreground" />
+              <h2 className="truncate text-base font-semibold">Keranjang</h2>
+              <Badge variant="secondary" className="text-xs">{cart.length}</Badge>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              POS checkout satu transaksi atomic
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Cart Items */}
-      <ScrollArea className="flex-1 p-3">
+      {/* Scrollable body */}
+      <ScrollArea className="min-h-0 flex-1 p-5 pb-6">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <ShoppingCart className="h-10 w-10 mb-2 opacity-30" />
@@ -421,83 +499,116 @@ export function CartPanel({
             <p className="text-xs">Pilih produk untuk memulai transaksi</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {cart.map((item) => (
-              <CartItemRow
-                key={item.cartKey}
-                item={item}
-                onRemove={() => onRemoveItem(item.cartKey)}
-                onUpdateQty={(qty) => onUpdateQty(item.cartKey, qty)}
-              />
-            ))}
+          <div className="flex flex-col gap-5">
+            <SidebarSection icon={ShoppingCart} title="Item Keranjang">
+              <div className="space-y-2">
+                {cart.map((item) => (
+                  <CartItemRow
+                    key={item.cartKey}
+                    item={item}
+                    onRemove={() => onRemoveItem(item.cartKey)}
+                    onUpdateQty={(qty) => onUpdateQty(item.cartKey, qty)}
+                  />
+                ))}
+              </div>
+            </SidebarSection>
+
+            {(customerId || customerQuickCreate) && (
+              <SidebarSection icon={User} title="Pelanggan">
+                <div className="rounded-xl border bg-card p-3 text-xs text-muted-foreground">
+                  {customerQuickCreate ? (
+                    <>
+                      <p className="text-sm font-medium text-foreground">{customerQuickCreate.name}</p>
+                      {customerQuickCreate.phone && <p>{customerQuickCreate.phone}</p>}
+                    </>
+                  ) : (
+                    <p>ID pelanggan: {customerId}</p>
+                  )}
+                </div>
+              </SidebarSection>
+            )}
+
+            <SidebarSection icon={Receipt} title="Ringkasan">
+              <div className="space-y-3">
+                {/* Discount */}
+                <div className="flex items-center gap-2 rounded-xl border bg-card p-3">
+                  <Label className="shrink-0 text-xs">Diskon</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={discountAmount || ""}
+                    onChange={(e) => onSetDiscount(Number(e.target.value) || 0)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <TradeInSection tradeIn={tradeIn} allowTradeIn={hasDeviceUnit} onSet={onSetTradeIn} />
+
+                <PaymentSummary
+                  cart={cart}
+                  discountAmount={discountAmount}
+                  tradeIn={tradeIn}
+                />
+              </div>
+            </SidebarSection>
+
+            <SidebarSection icon={Wallet} title="Pembayaran">
+              <div className="space-y-3 rounded-xl border bg-card p-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Metode Pembayaran</Label>
+                  <Select value={paymentMethod} onValueChange={(value) => { setPaymentMethod(value); setLocalError(undefined); }}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Pilih metode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethods.map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name} ({m.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {paymentMethods.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Belum ada metode pembayaran aktif untuk brand ini.
+                    </p>
+                  )}
+                </div>
+
+                {isCashPayment ? (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Jumlah Dibayar</Label>
+                    <Input
+                      type="number"
+                      min={amountDue}
+                      value={paidAmount}
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                      className="h-9 text-sm font-semibold"
+                    />
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Kembalian preview</span>
+                      <span className="font-medium text-foreground">{formatPrice(cashChangeAmount)}</span>
+                    </div>
+                  </div>
+                ) : paymentMethod ? (
+                  <div className="rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                    Pembayaran non-tunai otomatis mengikuti total tagihan.
+                  </div>
+                ) : null}
+              </div>
+            </SidebarSection>
           </div>
         )}
       </ScrollArea>
 
-      {/* Bottom Section */}
+      {/* Sticky footer action area */}
       {cart.length > 0 && (
-        <div className="border-t p-3 space-y-3">
-          {/* Discount */}
-          <div className="flex items-center gap-2">
-            <Label className="text-xs shrink-0">Diskon</Label>
-            <Input
-              type="number"
-              min={0}
-              placeholder="0"
-              value={discountAmount || ""}
-              onChange={(e) => onSetDiscount(Number(e.target.value) || 0)}
-              className="h-8 text-xs"
-            />
-          </div>
-
-          {/* Trade-in */}
-          <TradeInSection tradeIn={tradeIn} onSet={onSetTradeIn} />
-
-          {/* Payment Summary */}
-          <PaymentSummary
-            cart={cart}
-            discountAmount={discountAmount}
-            tradeIn={tradeIn}
-          />
-
-          {/* Payment Method */}
-          <div className="space-y-2">
-            <Label className="text-xs">Metode Pembayaran</Label>
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="Pilih metode" />
-              </SelectTrigger>
-              <SelectContent>
-                {paymentMethods.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-xs">
-                    {m.name} ({m.type})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {paymentMethods.length === 0 && (
-              <p className="text-[11px] text-muted-foreground">
-                Belum ada metode pembayaran aktif untuk brand ini.
-              </p>
-            )}
-          </div>
-
-          {/* Paid Amount */}
-          <div className="space-y-1">
-            <Label className="text-xs">Jumlah Dibayar</Label>
-            <Input
-              type="number"
-              min={0}
-              value={paidAmount}
-              onChange={(e) => setPaidAmount(e.target.value)}
-              className="h-9 text-sm font-semibold"
-            />
-          </div>
-
+        <div className="shrink-0 space-y-3 border-t bg-background px-5 py-4">
           {/* Error */}
-          {error && (
+          {(localError || error) && (
             <div className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-              {error}
+              {localError || error}
             </div>
           )}
 

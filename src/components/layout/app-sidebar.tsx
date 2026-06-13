@@ -45,20 +45,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-
-/* ── Mock branch data ── */
-interface BranchOption {
-  id: string;
-  name: string;
-}
-
-const BRANCHES: BranchOption[] = [
-  { id: "semarang-pusat", name: "Semarang Pusat" },
-  { id: "salatiga", name: "Salatiga" },
-  { id: "sragen", name: "Sragen" },
-];
-
-type ScopeId = "general" | BranchOption["id"];
+import { useActiveBranch } from "@/components/layout/active-branch-context";
 
 const ACCOUNTS = [
   {
@@ -155,8 +142,8 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
     {}
   );
-  const [selectedScope, setSelectedScope] = React.useState<ScopeId>("general");
   const [currentSection, setCurrentSection] = React.useState<string | null>(null);
+  const { activeBranchId, activeBranchName, branches, setActiveBranchId } = useActiveBranch();
 
   React.useEffect(() => {
     if (pathname?.includes("/panel/settings")) {
@@ -201,6 +188,9 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">Kasservice</span>
+                    {activeBranchName && (
+                      <span className="truncate text-xs text-muted-foreground">{activeBranchName}</span>
+                    )}
                   </div>
                   <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
                 </SidebarMenuButton>
@@ -214,7 +204,7 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
                 {/* General (all branches) */}
                 <DropdownMenuItem
                   className="gap-2.5 p-3"
-                  onClick={() => setSelectedScope("general")}
+                  onClick={() => setActiveBranchId(null)}
                 >
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
                     K
@@ -233,7 +223,7 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
                       Lihat seluruh data brand
                     </span>
                   </div>
-                  {selectedScope === "general" && (
+                  {!activeBranchId && (
                     <Check className="size-4 shrink-0 text-sidebar-primary" />
                   )}
                 </DropdownMenuItem>
@@ -247,11 +237,11 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
                   </span>
                 </div>
 
-                {BRANCHES.map((branch) => (
+                {branches.map((branch) => (
                   <DropdownMenuItem
                     key={branch.id}
                     className="px-3 py-2.5"
-                    onClick={() => setSelectedScope(branch.id)}
+                    onClick={() => setActiveBranchId(branch.id)}
                   >
                     <div className="grid flex-1 gap-0.5">
                       <span className="text-sm font-medium">
@@ -261,7 +251,7 @@ export function AppSidebar({ brandSlug }: AppSidebarProps) {
                         Kasservice
                       </span>
                     </div>
-                    {selectedScope === branch.id && (
+                    {activeBranchId === branch.id && (
                       <Check className="size-4 shrink-0 text-sidebar-primary" />
                     )}
                   </DropdownMenuItem>
