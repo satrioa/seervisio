@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Wrench,
@@ -65,6 +65,7 @@ import { logoutAction } from "@/server/actions/operator.actions";
 import { loadRememberedAccounts, type RememberedAccount } from "@/lib/auth/remembered-accounts";
 import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 // Permission key for each nav item
 function itemPermission(href: string): string | null {
@@ -72,7 +73,7 @@ function itemPermission(href: string): string | null {
   if (href === "services") return "service.view";
   if (href === "customers") return "customer.view";
   if (href === "pos") return "pos.view";
-  if (href === "store-shifts") return "store_shift.view";
+  if (href === "store-shift") return "store_shift.view";
   if (href === "inventory") return "inventory.view";
   if (href === "stock-reports") return "inventory.view";
   if (href === "finance") return "finance.view";
@@ -130,7 +131,7 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
       { href: "services", label: "Service" },
       { href: "customers", label: "Customers" },
       { href: "pos", label: "POS" },
-      { href: "store-shifts", label: "Store Shift" },
+      { href: "store-shift", label: "Store Shift" },
     ],
   },
   {
@@ -179,19 +180,61 @@ interface AppSidebarProps {
   brandSlug: string;
   role: string;
   canAccessAllBranches: boolean;
+  authUserId: string;
   activeOperatorId: string | null;
   activeOperatorName: string | null;
   userName: string;
   userEmail: string;
 }
 
-export function AppSidebar({ brandSlug, role, canAccessAllBranches, activeOperatorId, activeOperatorName, userName, userEmail }: AppSidebarProps) {
+export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
     {}
   );
   const [currentSection, setCurrentSection] = React.useState<string | null>(null);
-  const { activeBranchId, activeBranchName, branches, setActiveBranchId } = useActiveBranch();
+  const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
+
+  const handleBranchSwitch = React.useCallback(async (branchId: string | null) => {
+    if (isSwitching) return;
+    if (branchId === activeBranchId) return;
+
+    const targetBranch = branches.find(b => b.id === branchId);
+    const fromName = activeBranchName ?? "Semua Cabang";
+    const toName = targetBranch?.name ?? "Semua Cabang";
+
+    setIsSwitching(true);
+    triggerDynamicIslandFeedback({
+      type: "loading",
+      title: "Mengganti cabang...",
+      description: `${fromName} → ${toName}`,
+    });
+
+    try {
+      // Simulate slight delay for better UX feel
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      setActiveBranchId(branchId);
+      router.refresh();
+
+      triggerDynamicIslandFeedback({
+        type: "success",
+        title: "Berhasil pindah cabang",
+        description: `Sekarang: ${toName}`,
+        duration: 2000,
+      });
+    } catch (error) {
+      triggerDynamicIslandFeedback({
+        type: "error",
+        title: "Gagal pindah cabang",
+        description: "Cabang tidak dapat diakses",
+        duration: 3000,
+      });
+    } finally {
+      setIsSwitching(false);
+    }
+  }, [isSwitching, activeBranchId, branches, activeBranchName, setIsSwitching, setActiveBranchId, router]);
 
   const visibleGroups = React.useMemo(
     () => filterGroupsByRole(COLLAPSIBLE_GROUPS, role as Role),
@@ -230,7 +273,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, activeOperat
       <SidebarHeader >
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton
                   size="lg"
@@ -259,7 +302,8 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, activeOperat
                   <>
                     <DropdownMenuItem
                       className="gap-2.5 p-3"
-                      onClick={() => setActiveBranchId(null)}
+                      disabled={isSwitching}
+                      onClick={() => handleBranchSwitch(null)}
                     >
                       <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
                         K
@@ -298,7 +342,8 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, activeOperat
                   <DropdownMenuItem
                     key={branch.id}
                     className="px-3 py-2.5"
-                    onClick={() => setActiveBranchId(branch.id)}
+                    disabled={isSwitching}
+                    onClick={() => handleBranchSwitch(branch.id)}
                   >
                     <div className="grid flex-1 gap-0.5">
                       <span className="text-sm font-medium">
@@ -391,7 +436,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, activeOperat
       <SidebarFooter className="bg-sidebar p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <AccountSwitcher brandSlug={brandSlug} role={role} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
+            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -415,6 +460,7 @@ function getInitials(name: string): string {
 function AccountSwitcher({
   brandSlug,
   role,
+  authUserId,
   activeOperatorId,
   activeOperatorName,
   userName,
@@ -422,6 +468,7 @@ function AccountSwitcher({
 }: {
   brandSlug: string;
   role: string;
+  authUserId: string;
   activeOperatorId: string | null;
   activeOperatorName: string | null;
   userName: string;
@@ -449,6 +496,7 @@ function AccountSwitcher({
   type AccountSwitcherItem =
     | {
         type: "current";
+        id: string;
         name: string;
         email: string;
         roleLabel: string;
@@ -465,24 +513,37 @@ function AccountSwitcher({
   const combinedList = React.useMemo(() => {
     const items: AccountSwitcherItem[] = [];
 
+    // Current account
     items.push({
       type: "current",
+      id: activeOperatorId || authUserId || userEmail || "current-account",
       name: displayName,
       email: userEmail,
       roleLabel: displayRole,
     });
 
     const currentKey = `${userEmail}:${brandSlug}`;
-    const sorted = [...rememberedAccounts].sort(
-      (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime(),
-    );
 
-    for (const acc of sorted) {
+    // Remembered accounts: filter invalid (no email) and deduplicate
+    const seen = new Set<string>();
+    seen.add(currentKey);
+
+    const sorted = [...rememberedAccounts]
+      .filter((acc) => !!acc.email)
+      .sort(
+        (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime(),
+      );
+
+    for (let i = 0; i < sorted.length; i++) {
+      const acc = sorted[i];
       const key = `${acc.email}:${acc.brandSlug ?? brandSlug}`;
-      if (key === currentKey) continue;
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+
       items.push({
         type: "remembered",
-        id: acc.profileId,
+        id: acc.profileId || acc.authUserId || acc.email || `remembered-${i}`,
         name: acc.name,
         email: acc.email,
         roleLabel: acc.roleLabel,
@@ -491,7 +552,7 @@ function AccountSwitcher({
     }
 
     return items;
-  }, [rememberedAccounts, userEmail, brandSlug, displayName, displayRole]);
+  }, [rememberedAccounts, userEmail, brandSlug, displayName, displayRole, activeOperatorId, authUserId]);
 
   const openLoginModal = (email: string) => {
     setLoginEmail(email);
@@ -594,7 +655,7 @@ function AccountSwitcher({
             {combinedList.map((item) =>
               item.type === "current" ? (
                 <div
-                  key="current"
+                  key={`${item.type}-${item.id}`}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 opacity-60"
                 >
                   <Avatar className="size-8 rounded-lg">
@@ -622,7 +683,7 @@ function AccountSwitcher({
                 </div>
               ) : (
                 <button
-                  key={item.id}
+                  key={`${item.type}-${item.id}`}
                   type="button"
                   disabled={isSwitching}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent disabled:opacity-50"

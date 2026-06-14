@@ -13,6 +13,8 @@ interface RightSidebarContextValue {
   isCreateServiceOpen: boolean;
   openCreateService: () => void;
   closeCreateService: () => void;
+  onServiceUpdated?: () => void;
+  setOnServiceUpdated: (cb: (() => void) | undefined) => void;
 }
 
 const RightSidebarContext = React.createContext<RightSidebarContextValue | undefined>(undefined);
@@ -21,6 +23,7 @@ export function RightSidebarProvider({ children }: { children: React.ReactNode }
   const [type, setType] = React.useState<SidebarType>("overview");
   const [data, setData] = React.useState<ServiceRecord | null>(null);
   const [isCreateServiceOpen, setIsCreateServiceOpen] = React.useState(false);
+  const [onServiceUpdated, setOnServiceUpdatedState] = React.useState<(() => void) | undefined>(undefined);
 
   const showOverview = React.useCallback(() => {
     setType("overview");
@@ -40,6 +43,10 @@ export function RightSidebarProvider({ children }: { children: React.ReactNode }
     setIsCreateServiceOpen(false);
   }, []);
 
+  const setOnServiceUpdated = React.useCallback((cb: (() => void) | undefined) => {
+    setOnServiceUpdatedState(() => cb);
+  }, []);
+
   return (
     <RightSidebarContext.Provider
       value={{
@@ -50,6 +57,8 @@ export function RightSidebarProvider({ children }: { children: React.ReactNode }
         isCreateServiceOpen,
         openCreateService,
         closeCreateService,
+        onServiceUpdated,
+        setOnServiceUpdated,
       }}
     >
       {children}

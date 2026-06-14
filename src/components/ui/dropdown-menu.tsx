@@ -3,8 +3,32 @@
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { cn } from "@/lib/utils";
+import { scheduleScrollLockGapReset } from "@/lib/reset-scroll-lock-gap";
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
+function DropdownMenu({
+  onOpenChange,
+  modal = false,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open);
+
+      if (open) {
+        scheduleScrollLockGapReset();
+      }
+    },
+    [onOpenChange]
+  );
+
+  return (
+    <DropdownMenuPrimitive.Root
+      {...props}
+      modal={modal}
+      onOpenChange={handleOpenChange}
+    />
+  );
+}
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal;

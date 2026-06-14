@@ -40,11 +40,11 @@ export function ShiftButton() {
         <DropdownMenuLabel>Shift — Semarang Pusat</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
+          className="text-destructive focus:text-destructive font-medium"
           onClick={handleCloseShift}
         >
           <Square className="size-4" />
-          Tutup Shift
+          Akhiri Shift
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

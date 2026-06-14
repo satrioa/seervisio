@@ -7,7 +7,7 @@ import { ServiceSidebarOverview } from "@/components/services/service-sidebar-ov
 import { ServiceSidebarDetail } from "@/components/services/service-sidebar-detail";
 
 export function RightSidebarPanel() {
-  const { type, data } = useRightSidebar();
+  const { type, data, onServiceUpdated } = useRightSidebar();
   const [viewSwitchKey, setViewSwitchKey] = React.useState(0);
   const [viewSwitchDirection, setViewSwitchDirection] = React.useState(1);
 
@@ -77,7 +77,7 @@ export function RightSidebarPanel() {
             transition={sidebarTransition}
             className="flex h-full flex-col"
           >
-            <ServiceSidebarDetail service={data} />
+            <ServiceSidebarDetail service={data} onServiceUpdated={onServiceUpdated} />
           </motion.div>
         )}
       </AnimatePresence>

@@ -39,7 +39,7 @@ const WORKFLOW_TO_SERVICE_STATUS: Partial<Record<ServiceWorkflowStatus, ServiceS
   PERBAIKAN: "perbaikan",
   QC: "qc",
   SELESAI: "selesai",
-  CANCELLED: "batal",
+  CANCELLED: "cancelled",
 };
 
 interface Props {

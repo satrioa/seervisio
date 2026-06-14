@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 
 export interface ServicePaymentRow {
   id: string;
@@ -126,7 +127,7 @@ export async function callTransitionServiceStatus(
 }
 
 export async function callGenerateServiceNumber(brandId: number): Promise<string> {
-  const supabase = await createServerSupabase();
+  const supabase = createServiceRoleSupabaseClient();
   const { data, error } = await (supabase as any).rpc("generate_service_number", {
     p_brand_id: brandId,
   });

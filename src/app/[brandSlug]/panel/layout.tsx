@@ -54,6 +54,7 @@ export default async function PanelLayout({
         initialBranchId={effectiveContext.branchId}
         role={effectiveContext.role}
         canAccessAllBranches={effectiveContext.canAccessAllBranches}
+        authUserId={authResult.user.authUserId}
         activeOperatorId={effectiveContext.activeOperatorId}
         activeOperatorName={effectiveContext.activeOperatorName}
         userName={effectiveContext.name}

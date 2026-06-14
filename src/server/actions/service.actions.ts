@@ -4,9 +4,11 @@
 "use server";
 
 import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
+import { createServerSupabase } from "@/lib/supabase/server";
 import { fromDbStatus } from "@/domain/service/service-workflow";
 import {
   getServicesByBranch,
+  getServicesByBrand,
   getServiceById,
   insertService,
   addServiceTimelineEntry,
@@ -17,68 +19,308 @@ import { callGenerateServiceNumber, callRecordServicePayment, callRecordServiceP
 import { getServiceSparepartUsages } from "@/repositories/inventory.repository";
 import { getServiceStatusHistory } from "@/repositories/service.repository";
 import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
+import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
 
 /* ─── List Services ─── */
 
 export interface ListServicesInput {
   brandSlug: string;
-  branchId?: string;
-  status?: string;
+  branchId?: string | null;
+  search?: string;
+  status?: ServiceUiStatus | "all";
 }
+
+type ListServicesResult =
+  | { ok: true; data: ServiceRecord[] }
+  | { ok: false; error: string; code?: string };
 
 export async function listServicesAction(
   input: ListServicesInput
-): Promise<ActionResult<ServiceRecord[]>> {
+): Promise<ListServicesResult> {
   try {
     const session = await getSessionData(input.brandSlug);
     requireActionPermission(session.role, "service.view");
 
-    const branchId = input.branchId ?? session.defaultBranchId;
-    if (branchId) {
-      requireBranchAccess(session, branchId, "listServicesAction");
+    const requestedBranchId = input.branchId === "ALL_BRANCHES" ? null : (input.branchId ?? null);
+    let resolvedBranchId = requestedBranchId;
+
+    if (resolvedBranchId) {
+      requireBranchAccess(session, resolvedBranchId, "listServicesAction");
     } else if (!session.canAccessAllBranches) {
-      return errorResult("Anda tidak memiliki akses ke cabang ini.");
-    } else {
-      return errorResult("Branch tidak ditemukan.");
+      resolvedBranchId = session.defaultBranchId;
+      if (!resolvedBranchId) {
+        return { ok: false, error: "Anda tidak memiliki akses ke cabang ini." };
+      }
+      requireBranchAccess(session, resolvedBranchId, "listServicesAction");
     }
 
-    const rows = await getServicesByBranch(branchId!);
+    const supabase = await createServerSupabase();
+    const baseSelect = `
+      id,
+      brand_id,
+      branch_id,
+      customer_id,
+      service_number,
+      device_type,
+      device_brand,
+      device_model,
+      device_imei,
+      device_serial_number,
+      reported_issue,
+      diagnosis_result,
+      current_status,
+      assigned_technician_id,
+      estimated_cost,
+      final_cost,
+      intake_at,
+      created_at,
+      updated_at,
+      picked_up_at,
+      pickup_name,
+      pickup_phone,
+      pickup_relation,
+      pickup_note,
+      deleted_at,
+      customers:customers!services_customer_id_fkey (
+        id,
+        name,
+        phone,
+        address
+      ),
+      branches:branches!services_branch_id_fkey (
+        id,
+        name
+      ),
+      assigned_technician:profiles!services_assigned_technician_id_fkey (
+        id,
+        name
+      )
+    `;
 
-    const services: ServiceRecord[] = rows.map((row: any) => ({
-      id: row.service_number,
-      customerId: row.customer_id ?? undefined,
-      deviceType: row.device_type ?? "",
-      deviceBrand: row.device_brand ?? "",
-      deviceModel: row.device_model ?? "",
-      serialNumber: row.device_serial_number ?? undefined,
-      customerName: row.customer?.name ?? "Unknown",
-      customerPhone: row.customer?.phone ?? "",
-      customerAddress: row.customer?.address ?? undefined,
-      issue: row.reported_issue,
-      diagnosis: row.diagnosis_result ?? undefined,
-      status: fromDbStatus(row.current_status).toLowerCase() as any,
-      technician: row.technician?.full_name ?? undefined,
-      branch: branchId!,
-      createdAt: row.created_at ?? new Date().toISOString(),
-      updatedAt: row.updated_at ?? new Date().toISOString(),
-      estimatedCompletion: undefined,
-      spareparts: [],
-      payments: [],
-      timeline: [],
-      notes: [],
-      deviceIcon: "Smartphone" as any,
-      pickedUpAt: row.picked_up_at ?? undefined,
-      pickupName: row.pickup_name ?? undefined,
-      pickupPhone: row.pickup_phone ?? undefined,
-      pickupRelation: row.pickup_relation ?? undefined,
-      pickupNote: row.pickup_note ?? undefined,
-      pickedUpBy: row.picked_up_by_profile_id ?? undefined,
-    }));
-    
-    return successResult(services);
+    let query = (supabase as any)
+      .from("services")
+      .select(baseSelect)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    if (resolvedBranchId) query = query.eq("branch_id", resolvedBranchId);
+    if (input.status && input.status !== "all") {
+      const dbStatus = mapUiStatusToDb(input.status);
+      if (dbStatus) query = query.eq("current_status", dbStatus);
+    }
+    if (input.search?.trim()) {
+      const q = input.search.trim();
+      query = query.or(`service_number.ilike.%${q}%,device_brand.ilike.%${q}%,device_model.ilike.%${q}%,reported_issue.ilike.%${q}%`);
+    }
+
+    let { data, error } = await query;
+
+    if (error) {
+      console.warn("[services:list] relation query failed, retrying services-only", error);
+      let fallbackQuery = (supabase as any)
+        .from("services")
+        .select("id, brand_id, branch_id, customer_id, service_number, device_type, device_brand, device_model, device_imei, device_serial_number, reported_issue, diagnosis_result, current_status, assigned_technician_id, estimated_cost, final_cost, intake_at, created_at, updated_at, picked_up_at, pickup_name, pickup_phone, pickup_relation, pickup_note, deleted_at")
+        .eq("brand_id", session.brandId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (resolvedBranchId) fallbackQuery = fallbackQuery.eq("branch_id", resolvedBranchId);
+      if (input.status && input.status !== "all") {
+        const dbStatus = mapUiStatusToDb(input.status);
+        if (dbStatus) fallbackQuery = fallbackQuery.eq("current_status", dbStatus);
+      }
+      if (input.search?.trim()) {
+        const q = input.search.trim();
+        fallbackQuery = fallbackQuery.or(`service_number.ilike.%${q}%,device_brand.ilike.%${q}%,device_model.ilike.%${q}%,reported_issue.ilike.%${q}%`);
+      }
+      const fallback = await fallbackQuery;
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) throw error;
+
+    const services = (data ?? []).map(mapServiceRowToUiItem);
+    console.log("[services:mapper] sample", services[0]
+      ? {
+          serviceNumber: services[0].serviceNumber,
+          customerName: services[0].customerName,
+          branchName: services[0].branchName,
+          estimatedCost: services[0].estimatedCost,
+          finalCost: services[0].finalCost,
+        }
+      : null);
+
+    console.log("[services:list] result", {
+      brandId: session.brandId,
+      requestedBranchId,
+      resolvedBranchId,
+      count: services.length,
+      sample: services[0] ?? null,
+    });
+    console.log("[services:list] serializable check", {
+      count: services.length,
+      sampleKeys: Object.keys(services[0] ?? {}),
+    });
+
+    return { ok: true, data: services };
   } catch (err: any) {
     console.error("[listServicesAction]", err);
-    return errorResult(err.message ?? "Gagal memuat daftar servis.");
+    return { ok: false, error: err.message ?? "Gagal memuat daftar servis." };
+  }
+}
+
+function mapUiStatusToDb(status: ServiceUiStatus): ServiceDbStatus | null {
+  const map: Record<ServiceUiStatus, ServiceDbStatus> = {
+    masuk: "INTAKE",
+    diagnosa: "DIAGNOSIS",
+    menunggu_persetujuan: "WAITING_APPROVAL",
+    perbaikan: "REPAIRING",
+    qc: "QC",
+    selesai: "DONE",
+    cancelled: "CANCELLED",
+  };
+  return map[status] ?? null;
+}
+
+function mapServiceRowToUiItem(row: any): ServiceRecord {
+  const status = mapDbStatusToUI(row.current_status);
+  const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
+  const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+  const assignedTechnician = Array.isArray(row.assigned_technician)
+    ? row.assigned_technician[0]
+    : row.assigned_technician;
+
+  return {
+    id: row.id,
+    serviceNumber: row.service_number,
+    rawStatus: (row.current_status ?? "INTAKE") as ServiceDbStatus,
+    status,
+    statusLabel: SERVICE_STATUS_LABELS[status],
+    brandId: row.brand_id,
+    branchId: row.branch_id,
+    branchName: branch?.name ?? "Cabang tidak diketahui",
+    customerId: row.customer_id ?? null,
+    customerName: customer?.name ?? customer?.full_name ?? customer?.phone ?? "Tanpa nama",
+    customerPhone: customer?.phone ?? "",
+    customerAddress: customer?.address ?? undefined,
+    deviceType: row.device_type ?? null,
+    deviceBrand: row.device_brand ?? null,
+    deviceModel: row.device_model ?? null,
+    deviceIconKey: getDeviceIconKey(row.device_type, row.device_brand, row.device_model),
+    deviceName:
+      [row.device_brand, row.device_model].filter(Boolean).join(" ") ||
+      row.device_type ||
+      "-",
+    issue: row.reported_issue ?? "",
+    estimatedCost: Number(row.estimated_cost ?? 0),
+    finalCost: Number(row.final_cost ?? 0),
+    assignedTechnicianId: row.assigned_technician_id ?? null,
+    technicianName: assignedTechnician?.name ?? assignedTechnician?.full_name ?? null,
+    technician: assignedTechnician?.name ?? assignedTechnician?.full_name ?? undefined,
+    branch: branch?.name ?? "Cabang tidak diketahui",
+    intakeAt: row.intake_at ?? row.created_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    serialNumber: row.device_serial_number ?? undefined,
+    diagnosis: row.diagnosis_result ?? undefined,
+    estimatedCompletion: undefined,
+    spareparts: [],
+    payments: [],
+    timeline: [],
+    notes: [],
+    pickedUpAt: row.picked_up_at ?? undefined,
+    pickupName: row.pickup_name ?? undefined,
+    pickupPhone: row.pickup_phone ?? undefined,
+    pickupRelation: row.pickup_relation ?? undefined,
+    pickupNote: row.pickup_note ?? undefined,
+    pickedUpBy: row.picked_up_by_profile_id ?? undefined,
+  };
+}
+
+/* ─── Service Overview & Trend ─── */
+
+export async function getServiceOverviewAction(
+  brandSlug: string,
+  branchId?: string | null,
+): Promise<ActionResult<{
+  totalMasuk: number;
+  dalamPerbaikan: number;
+  qc: number;
+  selesaiHariIni: number;
+  trend14Days: Array<{ date: string; masuk: number; selesai: number }>;
+}>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "service.view");
+
+    const requestedBranchId = branchId === "ALL_BRANCHES" ? null : (branchId ?? null);
+    let resolvedBranchId = requestedBranchId;
+
+    if (resolvedBranchId) {
+      requireBranchAccess(session, resolvedBranchId, "getServiceOverviewAction");
+    } else if (!session.canAccessAllBranches) {
+      resolvedBranchId = session.defaultBranchId;
+      if (!resolvedBranchId) {
+        return errorResult("Anda tidak memiliki akses ke cabang ini.");
+      }
+      requireBranchAccess(session, resolvedBranchId, "getServiceOverviewAction");
+    }
+
+    console.log("[services:overview-action] input", {
+      brandSlug,
+      requestedBranchId,
+      resolvedBranchId,
+      canAccessAllBranches: session.canAccessAllBranches,
+    });
+
+    const rows = resolvedBranchId 
+      ? await getServicesByBranch(resolvedBranchId)
+      : await getServicesByBrand(session.brandId);
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const totalMasuk = rows.filter((r: any) => r.current_status === "INTAKE").length;
+    const dalamPerbaikan = rows.filter(
+      (r: any) => r.current_status === "DIAGNOSIS" || r.current_status === "REPAIRING" || r.current_status === "WAITING_APPROVAL",
+    ).length;
+    const qc = rows.filter((r: any) => r.current_status === "QC").length;
+    const selesaiHariIni = rows.filter(
+      (r: any) => r.current_status === "DONE" && (r.done_at ?? r.updated_at ?? "").startsWith(today),
+    ).length;
+
+    // Trend: last 14 days
+    const trendMap = new Map<string, { date: string; masuk: number; selesai: number }>();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      trendMap.set(key, { date: key, masuk: 0, selesai: 0 });
+    }
+
+    for (const row of rows) {
+      const createdDay = (row.created_at ?? "").slice(0, 10);
+      const doneDay = row.current_status === "DONE"
+        ? (row.done_at ?? row.updated_at ?? "").slice(0, 10)
+        : null;
+
+      if (trendMap.has(createdDay)) {
+        trendMap.get(createdDay)!.masuk += 1;
+      }
+      if (doneDay && trendMap.has(doneDay)) {
+        trendMap.get(doneDay)!.selesai += 1;
+      }
+    }
+    return successResult({
+      totalMasuk,
+      dalamPerbaikan,
+      qc,
+      selesaiHariIni,
+      trend14Days: Array.from(trendMap.values()),
+    });
+  } catch (err: any) {
+    console.error("[getServiceOverviewAction]", err);
+    return errorResult(err.message ?? "Gagal memuat overview servis.");
   }
 }
 
@@ -151,22 +393,39 @@ export async function getServiceDetailAction(
     }));
     
     // 7. Map service row to ServiceRecord
-    const status = fromDbStatus(row.current_status);
+    const uiStatus = mapDbStatusToUI(row.current_status);
+    const deviceName =
+      [row.device_brand, row.device_model].filter(Boolean).join(" ") ||
+      row.device_type ||
+      "-";
     const service: ServiceRecord = {
-      id: row.service_number,
-      customerId: row.customer_id ?? undefined,
-      deviceType: row.device_type ?? "",
-      deviceBrand: row.device_brand ?? "",
-      deviceModel: row.device_model ?? "",
+      id: row.id,
+      serviceNumber: row.service_number,
+      rawStatus: (row.current_status ?? "INTAKE") as ServiceDbStatus,
+      status: uiStatus,
+      statusLabel: SERVICE_STATUS_LABELS[uiStatus],
+      brandId: row.brand_id,
+      branchId: row.branch_id,
+      branchName: row.branch?.name ?? "Cabang tidak diketahui",
+      customerId: row.customer_id ?? null,
+      deviceType: row.device_type ?? null,
+      deviceBrand: row.device_brand ?? null,
+      deviceModel: row.device_model ?? null,
+      deviceIconKey: getDeviceIconKey(row.device_type, row.device_brand, row.device_model),
+      deviceName,
       serialNumber: row.device_serial_number ?? undefined,
-      customerName: row.customer?.name ?? "Unknown",
+      customerName: row.customer?.name ?? row.customer?.phone ?? "Tanpa nama",
       customerPhone: row.customer?.phone ?? "",
       customerAddress: row.customer?.address ?? undefined,
       issue: row.reported_issue,
       diagnosis: row.diagnosis_result ?? undefined,
-      status: status.toLowerCase() as ServiceStatus,
-      technician: row.technician?.full_name ?? undefined,
-      branch: row.branch_id,
+      estimatedCost: Number(row.estimated_cost ?? 0),
+      finalCost: Number(row.final_cost ?? 0),
+      assignedTechnicianId: row.assigned_technician_id ?? null,
+      technicianName: row.technician?.name ?? row.technician?.full_name ?? null,
+      intakeAt: row.intake_at ?? row.created_at,
+      technician: row.technician?.name ?? row.technician?.full_name ?? undefined,
+      branch: row.branch?.name ?? "Cabang tidak diketahui",
       createdAt: row.created_at ?? new Date().toISOString(),
       updatedAt: row.updated_at ?? new Date().toISOString(),
       estimatedCompletion: undefined,
@@ -174,7 +433,6 @@ export async function getServiceDetailAction(
       payments: mappedPayments,
       timeline: mappedTimeline,
       notes: [],
-      deviceIcon: "Smartphone" as any,
       pickedUpAt: row.picked_up_at ?? undefined,
       pickupName: row.pickup_name ?? undefined,
       pickupPhone: row.pickup_phone ?? undefined,
@@ -232,7 +490,34 @@ export async function createServiceAction(
 
     const brandId = session.brandId;
     const branchId = input.branchId ?? session.defaultBranchId;
-    if (!branchId) return errorResult("Branch tidak ditemukan.");
+
+    console.log("[service:create] input", {
+      branchId,
+      brandId: session.brandId,
+      role: session.role,
+      defaultBranchId: session.defaultBranchId,
+      canAccessAllBranches: session.canAccessAllBranches,
+    });
+
+    if (!branchId) return errorResult("Pilih cabang servis terlebih dahulu.");
+
+    // Validate branch exists within current brand
+    const supabase = await createServerSupabase();
+    const { data: branch } = await (supabase as any)
+      .from("branches")
+      .select("id, brand_id, name")
+      .eq("id", branchId)
+      .eq("brand_id", brandId)
+      .maybeSingle();
+
+    console.log("[service:create] branch lookup", { branchId, brandId });
+    console.log("[service:create] branch result", {
+      found: Boolean(branch),
+      branchName: branch?.name,
+      branchBrandId: branch?.brand_id,
+    });
+
+    if (!branch) return errorResult("Cabang tidak ditemukan atau bukan milik brand ini.");
     requireBranchAccess(session, branchId, "createServiceAction");
     if (!input.customerName?.trim()) return errorResult("Nama customer wajib diisi.");
     if (!input.reportedIssue?.trim()) return errorResult("Keluhan wajib diisi.");
@@ -245,6 +530,8 @@ export async function createServiceAction(
     });
 
     const serviceNumber = await callGenerateServiceNumber(brandId);
+
+    console.log("[service:create] generated service number", { serviceNumber });
 
     const service = await insertService({
       brand_id: brandId,
@@ -273,16 +560,34 @@ export async function createServiceAction(
       changed_by: session.profileId,
     });
 
-    await addAuditLog({
-      brand_id: brandId,
-      action: "SERVICE_CREATED",
-      entity_type: "service",
-      entity_id: service.id,
-      actor_id: session.profileId,
-      metadata: { service_number: serviceNumber, customer_name: input.customerName },
-    });
+    try {
+      await addAuditLog({
+        brand_id: brandId,
+        action: "SERVICE_CREATED",
+        target_type: "service",
+        target_id: service.id,
+        target_label: serviceNumber,
+        actor_id: session.profileId,
+        description: `Membuat servis ${serviceNumber}`,
+        details: {
+          service_number: serviceNumber,
+          branch_id: branchId,
+          customer_id: customer.id,
+          device_type: input.deviceType?.trim(),
+          device_brand: input.deviceBrand?.trim(),
+          device_model: input.deviceModel?.trim(),
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[service:create] failed to write audit log", auditErr);
+    }
 
     if (input.dpAmount && input.dpAmount > 0 && input.dpPaymentMethodId) {
+      // TECHNICIAN cannot receive payment
+      if (session.role === "TECHNICIAN") {
+        return errorResult("Role Anda tidak memiliki akses untuk menerima pembayaran.");
+      }
+
       if (input.estimatedCost && input.dpAmount > input.estimatedCost) {
         return errorResult("Nominal DP tidak boleh melebihi estimasi biaya.");
       }
@@ -324,19 +629,43 @@ export async function createServiceAction(
         changed_by: session.profileId,
       });
 
-      await addAuditLog({
-        brand_id: brandId,
-        action: "SERVICE_DP_RECEIVED",
-        entity_type: "service_payment",
-        entity_id: paymentResult?.service_payment_id,
-        actor_id: session.profileId,
-        metadata: { service_id: service.id, service_number: serviceNumber, amount: input.dpAmount, payment_number: paymentResult?.payment_number },
-      });
+      try {
+        await addAuditLog({
+          brand_id: brandId,
+          action: "SERVICE_DP_RECEIVED",
+          target_type: "service_payment",
+          target_id: paymentResult?.service_payment_id,
+          target_label: paymentResult?.payment_number,
+          actor_id: session.profileId,
+          description: `DP diterima: ${paymentResult?.payment_number ?? ""}`,
+          details: {
+            service_id: service.id,
+            service_number: serviceNumber,
+            amount: input.dpAmount,
+            payment_number: paymentResult?.payment_number,
+          },
+        });
+      } catch (auditErr: any) {
+        console.warn("[service:create] failed to write DP audit log", auditErr);
+      }
     }
 
     return successResult({ serviceId: service.id, serviceNumber });
   } catch (err: any) {
     console.error("[createServiceAction]", err);
     return errorResult(err.message ?? "Gagal membuat servis.");
+  }
+}
+
+/* ─── Session Role ─── */
+
+export async function getSessionRoleAction(
+  brandSlug: string,
+): Promise<ActionResult<{ role: string }>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    return successResult({ role: session.role });
+  } catch (err: any) {
+    return errorResult(err.message ?? "Unauthorized");
   }
 }

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -28,18 +29,17 @@ import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import {
   type ServiceRecord,
   type ServicePaymentRecord,
-  type ServicePaymentSummary,
   type SparepartItem,
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
   getTotalSparepartCost,
   getTotalPayment,
-  calculateServicePaymentSummary,
   getPaymentStatusLabel,
   getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
+import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { ServiceSparepartSection } from "@/components/services/service-sparepart-section";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
@@ -51,12 +51,14 @@ import {
   type PickupStatus,
 } from "@/components/services/service-data";
 import { verifyServicePickupAction } from "@/server/actions/service-workflow.actions";
+import { getSessionRoleAction } from "@/server/actions/service.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 interface ServiceSidebarDetailProps {
   service: ServiceRecord;
   brandSlug?: string;
   onServiceUpdated?: () => void;
+  role?: string;
 }
 
 const containerVariants = {
@@ -79,7 +81,20 @@ const itemVariants = {
   },
 };
 
-export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServiceUpdated }: ServiceSidebarDetailProps) {
+function formatDateTime(value?: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServiceUpdated, role }: ServiceSidebarDetailProps) {
   const params = useParams();
   const brandSlug = brandSlugProp ?? (params?.brandSlug as string) ?? "";
   const { showOverview } = useRightSidebar();
@@ -87,6 +102,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [reopenOpen, setReopenOpen] = React.useState(false);
   const [pickupDialogOpen, setPickupDialogOpen] = React.useState(false);
+  const [resolvedRole, setResolvedRole] = React.useState<string | undefined>(role);
   const [enrichedPayments, setEnrichedPayments] = React.useState<
     ServicePaymentRecord[]
   >(() => (service as any).__paymentRecords ?? []);
@@ -95,21 +111,35 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
     () => (service as any).__spareparts ?? service.spareparts ?? []
   );
 
+  React.useEffect(() => {
+    if (role || !brandSlug) {
+      setResolvedRole(role);
+      return;
+    }
+    getSessionRoleAction(brandSlug).then((result) => {
+      if (result.success) setResolvedRole(result.data.role);
+    });
+  }, [role, brandSlug]);
+
   const statusIndex = STATUS_ORDER.indexOf(service.status);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
-  const totalPaid = getTotalPayment(service.payments);
-  const isPaid =
-    service.payments.length > 0 &&
-    service.payments.every((payment) => payment.status === "lunas");
-  const isCancelled = service.status === "batal";
-  const totalDueVal = Math.max(totalSparepart, 100000);
-  const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
-    totalDueVal,
-    enrichedPayments,
-  );
+  const totalCost = Number(service.finalCost || service.estimatedCost || totalSparepart || 0);
+  const totalPaid = enrichedPayments.length > 0
+    ? enrichedPayments.reduce((sum, payment) => sum + payment.amount, 0)
+    : getTotalPayment(service.payments);
+  const remainingBalance = Math.max(0, totalCost - totalPaid);
+  const isPaid = totalCost > 0 && remainingBalance <= 0;
+  const isCancelled = service.status === "cancelled";
   const paymentStatusLabel = getPaymentStatusLabel(
-    paymentSummary.paymentStatus,
+    isPaid ? "PAID" : totalPaid > 0 ? "PARTIAL" : "UNPAID",
   );
+
+  console.log("[services:sidebar] selected", {
+    id: service?.id,
+    serviceNumber: service?.serviceNumber,
+    customerName: service?.customerName,
+    branchName: service?.branchName,
+  });
 
   return (
     <div className="flex min-h-full flex-col">
@@ -117,15 +147,15 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <service.deviceIcon className="size-4 shrink-0 text-muted-foreground" />
-              <h2 className="truncate text-base font-semibold">{service.id}</h2>
+              <ServiceDeviceIcon iconKey={service.deviceIconKey} className="size-4 shrink-0 text-muted-foreground" />
+              <h2 className="truncate text-base font-semibold">{service.serviceNumber || service.id}</h2>
               <Badge className={STATUS_CONFIG[service.status].color}>
                 <span className={`mr-1.5 size-1.5 rounded-full ${STATUS_CONFIG[service.status].dot}`} />
                 {STATUS_CONFIG[service.status].label}
               </Badge>
             </div>
             <p className="mt-1 truncate text-xs text-muted-foreground">
-              {service.deviceBrand} {service.deviceModel} Â· {service.customerName}
+              {service.deviceName} · {service.customerName}
             </p>
           </div>
           <Button
@@ -149,24 +179,24 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
         >
         <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3">
           <InfoCard icon={User} label="Pelanggan">
-            <p className="text-sm font-medium">{service.customerName}</p>
-            <p>{service.customerPhone}</p>
+            <p className="text-sm font-medium">{service.customerName || "Tanpa nama"}</p>
+            {service.customerPhone ? <p>{service.customerPhone}</p> : <p>No. HP belum ada</p>}
             {service.customerAddress && <p>{service.customerAddress}</p>}
           </InfoCard>
 
           <InfoCard icon={Smartphone} label="Perangkat">
             <p className="text-sm font-medium">
-              {service.deviceBrand} {service.deviceModel}
+              {service.deviceName}
             </p>
-            <p>{service.deviceType}</p>
+            {service.deviceType && <p>{service.deviceType}</p>}
             {service.serialNumber && <p>SN: {service.serialNumber}</p>}
           </InfoCard>
 
           <InfoCard icon={Clock} label="Layanan">
-            <p>Masuk: {service.createdAt}</p>
-            <p>Update: {service.updatedAt}</p>
-            {service.technician && <p>Teknisi: {service.technician}</p>}
-            <p>Cabang: {service.branch}</p>
+            <p>Masuk: {formatDateTime(service.intakeAt || service.createdAt)}</p>
+            <p>Update: {formatDateTime(service.updatedAt)}</p>
+            {service.technicianName && <p>Teknisi: {service.technicianName}</p>}
+            <p>Cabang: {service.branchName ?? "Cabang tidak diketahui"}</p>
           </InfoCard>
 
           <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
@@ -182,7 +212,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
                   Total Tagihan
                 </span>
                 <span className="font-medium text-foreground">
-                  {formatCurrency(totalDueVal)}
+                  {formatCurrency(totalCost)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
@@ -190,7 +220,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
                   Sudah Dibayar
                 </span>
                 <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(paymentSummary.totalPaid)}
+                  {formatCurrency(totalPaid)}
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-sm">
@@ -198,7 +228,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
                   Sisa Tagihan
                 </span>
                 <span className="font-bold text-foreground">
-                  {formatCurrency(paymentSummary.remainingBalance)}
+                  {formatCurrency(remainingBalance)}
                 </span>
               </div>
               <div className="mt-1">
@@ -325,7 +355,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
 
         <motion.div variants={itemVariants}><Section icon={Clock} title="Aktivitas">
           <div className="flex flex-col">
-            {service.timeline.map((entry, index) => (
+            {service.timeline.length > 0 ? service.timeline.map((entry, index) => (
               <div key={`${entry.timestamp}-${index}`} className="relative flex gap-3 pb-4 pl-4 last:pb-0">
                 {index < service.timeline.length - 1 && (
                   <div className="absolute bottom-0 left-[5px] top-[14px] w-px bg-border" />
@@ -341,14 +371,16 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
                   </p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-xs text-muted-foreground">Belum ada aktivitas</p>
+            )}
           </div>
         </Section></motion.div>
 
         <motion.div variants={itemVariants}>
           <ServiceSparepartSection
             serviceId={service.id}
-            serviceNumber={service.id}
+            serviceNumber={service.serviceNumber || service.id}
             spareparts={enrichedSpareparts}
             currentStatus={service.status}
             onSparepartAdded={onServiceUpdated}
@@ -440,7 +472,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
               Buka Ulang
             </Button>
           )}
-          {!isPaid && paymentSummary.remainingBalance > 0 && !isCancelled && (
+          {!isPaid && remainingBalance > 0 && !isCancelled && resolvedRole !== "TECHNICIAN" && (
             <Button
               size="sm"
               className="w-full gap-1.5 text-xs"
@@ -564,9 +596,15 @@ function PickupVerificationDialog({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => onOpenChange(false)}>
-      <div className="w-full max-w-md rounded-xl bg-background p-6 text-foreground shadow-2xl" onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/45 p-4"
+      onClick={() => onOpenChange(false)}
+    >
+      <div
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-background p-6 text-foreground shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 className="text-lg font-semibold mb-4">Verifikasi Pengambilan Unit</h3>
 
         <div className="space-y-4">
@@ -650,7 +688,8 @@ function PickupVerificationDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

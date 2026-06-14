@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Send, Coins, PiggyBank } from "lucide-react";
 import { createServiceAction } from "@/server/actions/service.actions";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { CustomerSearch } from "@/components/customers/customer-search";
 import type { CustomerMock } from "@/components/customers/customer-data";
@@ -44,7 +45,12 @@ const DEVICE_TYPES = [
   "Lainnya",
 ];
 
-const BRANCHES = ["Semarang Pusat", "Salatiga", "Sragen"];
+const formatNumber = (value: string) => {
+  if (!value) return "";
+  const number = value.replace(/\D/g, "");
+  if (number === "") return "";
+  return new Intl.NumberFormat("id-ID").format(parseInt(number));
+};
 
 export interface CreateServiceFormData {
   customerId: string | undefined;
@@ -91,6 +97,7 @@ interface CreateServiceFormProps {
   onStepChange: (step: number) => void;
   formData: CreateServiceFormData;
   onFormChange: (data: CreateServiceFormData) => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 export function CreateServiceForm({
@@ -98,13 +105,26 @@ export function CreateServiceForm({
   onStepChange,
   formData,
   onFormChange,
+  onSuccess,
 }: CreateServiceFormProps) {
   const { closeCreateService } = useRightSidebar();
-  const router = useRouter();
   const params = useParams();
   const brandSlug = params.brandSlug as string;
   const [submitting, setSubmitting] = React.useState(false);
   const [deviceTypeOpen, setDeviceTypeOpen] = React.useState(false);
+  const { activeBranchId, branches } = useActiveBranch();
+
+  const selectedBranchName = React.useMemo(
+    () => branches.find((b) => b.id === formData.branch)?.name ?? "",
+    [branches, formData.branch],
+  );
+
+  // Auto-fill branch on mount if active branch scope is set
+  React.useEffect(() => {
+    if (activeBranchId && !formData.branch) {
+      onFormChange({ ...formData, branch: activeBranchId });
+    }
+  }, [activeBranchId]);
 
   const updateField = (field: keyof CreateServiceFormData, value: any) => {
     onFormChange({ ...formData, [field]: value });
@@ -192,6 +212,7 @@ export function CreateServiceForm({
     try {
       const result = await createServiceAction({
         brandSlug,
+        branchId: formData.branch || undefined,
         customerName: formData.customerName,
         customerPhone: formData.customerPhone,
         customerAddress: formData.customerAddress,
@@ -214,7 +235,13 @@ export function CreateServiceForm({
           duration: 2200,
         });
         closeCreateService();
-        router.refresh();
+        console.log("[services:create] success refresh", {
+          serviceId: result.data?.serviceId ?? null,
+          branchId: formData.branch || null,
+          hasOnSuccess: Boolean(onSuccess),
+        });
+        await onSuccess?.();
+        window.dispatchEvent(new CustomEvent("seervis:services-refresh"));
       } else {
         triggerDynamicIslandFeedback({
           type: "error",
@@ -475,12 +502,16 @@ export function CreateServiceForm({
                 onValueChange={(v) => updateField("branch", v)}
               >
                 <SelectTrigger className="h-10 text-sm" id="cs-branch">
-                  <SelectValue placeholder="Pilih cabang" />
+                  <SelectValue placeholder={
+                    activeBranchId
+                      ? branches.find((b) => b.id === activeBranchId)?.name ?? "Pilih cabang"
+                      : "Pilih cabang"
+                  } />
                 </SelectTrigger>
                 <SelectContent className="z-[1001]">
-                  {BRANCHES.map((b) => (
-                    <SelectItem key={b} value={b} className="text-sm">
-                      {b}
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id} className="text-sm">
+                      {b.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -498,10 +529,13 @@ export function CreateServiceForm({
                 </span>
                 <Input
                   id="cs-est-cost"
-                  type="number"
-                  min={0}
-                  value={formData.estimatedCost}
-                  onChange={(e) => updateField("estimatedCost", e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatNumber(formData.estimatedCost)}
+                  onChange={(e) => {
+                    const rawValue = e.target.value.replace(/\D/g, "");
+                    updateField("estimatedCost", rawValue);
+                  }}
                   className="h-10 pl-10 text-sm"
                   placeholder="0"
                 />
@@ -554,10 +588,13 @@ export function CreateServiceForm({
                       </span>
                       <Input
                         id="cs-dp-amount"
-                        type="number"
-                        min={0}
-                        value={formData.dpAmount}
-                        onChange={(e) => updateField("dpAmount", e.target.value)}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumber(formData.dpAmount)}
+                        onChange={(e) => {
+                          const rawValue = e.target.value.replace(/\D/g, "");
+                          updateField("dpAmount", rawValue);
+                        }}
                         className="h-10 pl-10 text-sm"
                         placeholder="0"
                       />
@@ -710,7 +747,7 @@ export function CreateServiceForm({
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">Cabang:</span>
                       <Badge variant="outline" className="text-xs font-normal">
-                        {formData.branch}
+                        {selectedBranchName}
                       </Badge>
                     </div>
                   </>

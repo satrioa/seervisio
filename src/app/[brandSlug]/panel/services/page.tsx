@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import { Suspense, useCallback } from "react";
@@ -7,16 +7,20 @@ import {
   Search,
   LayoutList,
   Columns3,
-  Filter,
   SlidersHorizontal,
   Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { CreateServiceOverlay } from "@/components/services/create-service-overlay";
+import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
+import { ServiceSparepartPanel } from "@/components/services/service-sparepart-panel";
 
 import {
   type ServiceStatus,
@@ -28,8 +32,8 @@ import { ServiceListView } from "@/components/services/service-list-view";
 import { ServiceKanbanView } from "@/components/services/service-kanban-view";
 import { ServiceDetailSheet } from "@/components/services/service-detail-sheet";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
-import { listServicesAction, getServiceDetailAction } from "@/server/actions/service.actions";
-import { mapDbStatusToUI } from "@/components/services/service-ui-mappers";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
+import { listServicesAction, getServiceDetailAction, getSessionRoleAction } from "@/server/actions/service.actions";
 
 type ViewMode = "list" | "kanban";
 
@@ -63,7 +67,8 @@ function ServicesPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const brandSlug = pathname.split("/")[1];
-  const { showDetail } = useRightSidebar();
+  const { setOnServiceUpdated, showDetail } = useRightSidebar();
+  const { activeBranchId } = useActiveBranch();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
   const [viewDirection, setViewDirection] = React.useState(1);
@@ -99,61 +104,104 @@ function ServicesPageContent() {
     },
     [viewMode]
   );
+
+  // Filters State
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<ServiceStatus | "all">("all");
   const [technicianFilter, setTechnicianFilter] = React.useState("all");
+  const [pickupFilter, setPickupFilter] = React.useState<string>("all");
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+
   const [statusFilterOpen, setStatusFilterOpen] = React.useState(false);
   const [technicianFilterOpen, setTechnicianFilterOpen] = React.useState(false);
+  const [pickupFilterOpen, setPickupFilterOpen] = React.useState(false);
+
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    technicianFilter !== "all" ||
+    pickupFilter !== "all";
+
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (technicianFilter !== "all" ? 1 : 0) +
+    (pickupFilter !== "all" ? 1 : 0);
+
+  // Keep panel open if filters are active
+  React.useEffect(() => {
+    if (hasActiveFilters) {
+      setFiltersOpen(true);
+    }
+  }, [hasActiveFilters]);
+
   const [selectedServiceId, setSelectedServiceId] = React.useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedServiceDetail, setSelectedServiceDetail] = React.useState<ServiceRecord | null>(null);
-  const [isDetailLoading, setIsDetailLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [userRole, setUserRole] = React.useState<string | null>(null);
+  const [paymentServiceId, setPaymentServiceId] = React.useState<string | null>(null);
+  const [sparepartServiceId, setSparepartServiceId] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    setLoading(true);
-    listServicesAction({ brandSlug }).then((result) => {
-      if (result.success) {
-        setServices(result.data);
+  const paymentService = React.useMemo(
+    () => services.find((s) => s.id === paymentServiceId) ?? null,
+    [services, paymentServiceId],
+  );
+
+  const sparepartService = React.useMemo(
+    () => services.find((s) => s.id === sparepartServiceId) ?? null,
+    [services, sparepartServiceId],
+  );
+
+  const handleOpenPayment = React.useCallback((serviceId: string) => {
+    setPaymentServiceId(serviceId);
+  }, []);
+
+  const handleOpenSparepart = React.useCallback((serviceId: string) => {
+    setSparepartServiceId(serviceId);
+  }, []);
+
+  const fetchServices = React.useCallback(async () => {
+    const normalizedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES"
+      ? activeBranchId
+      : null;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [servicesResult, roleResult] = await Promise.all([
+        listServicesAction({ brandSlug, branchId: normalizedBranchId }),
+        getSessionRoleAction(brandSlug),
+      ]);
+      if (!servicesResult.ok) {
+        setServices([]);
+        setError(servicesResult.error ?? "Gagal memuat data servis");
+        return;
       }
-      setLoading(false);
-    });
-  }, [brandSlug]);
-
-  // Fetch full service detail when a service is selected
-  React.useEffect(() => {
-    if (!selectedServiceId) {
-      setSelectedServiceDetail(null);
-      return;
+      setServices(servicesResult.data);
+      if (roleResult.success) {
+        setUserRole(roleResult.data.role);
+      }
+    } catch (err) {
+      console.error("[services:page] fetch exception", err);
+      setServices([]);
+      setError("Gagal memuat data servis");
+    } finally {
+      setIsLoading(false);
     }
+  }, [brandSlug, activeBranchId]);
 
-    const fetchDetail = async () => {
-      setIsDetailLoading(true);
-      try {
-        const result = await getServiceDetailAction(brandSlug, selectedServiceId);
-        if (result.success) {
-          setSelectedServiceDetail(result.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch service detail:", err);
-      } finally {
-        setIsDetailLoading(false);
-      }
-    };
-
-    fetchDetail();
-  }, [brandSlug, selectedServiceId]);
+  React.useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   const selectedService = React.useMemo(
-    () => selectedServiceDetail ?? services.find((s) => s.id === selectedServiceId) ?? null,
-    [selectedServiceDetail, selectedServiceId, services]
+    () => services.find((s) => s.id === selectedServiceId) ?? null,
+    [services, selectedServiceId]
   );
 
   const technicians = React.useMemo(
     () =>
       Array.from(
-        new Set(services.map((service) => service.technician).filter(Boolean))
+        new Set(services.map((service) => service.technicianName).filter(Boolean))
       ).sort() as string[],
     [services]
   );
@@ -162,42 +210,11 @@ function ServicesPageContent() {
   React.useEffect(() => {
     const serviceId = searchParams.get("service");
     if (serviceId && services.length > 0) {
-      const service = services.find((s) => s.id === serviceId);
-      if (service) {
-        showDetail(service);
-      }
+      setSelectedServiceId(serviceId);
+      setIsDetailOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
-
-  // Filter services
-  const filteredServices = React.useMemo(() => {
-    let result = services;
-
-    if (statusFilter !== "all") {
-      result = result.filter((s) => s.status === statusFilter);
-    }
-
-    if (technicianFilter === "unassigned") {
-      result = result.filter((s) => !s.technician);
-    } else if (technicianFilter !== "all") {
-      result = result.filter((s) => s.technician === technicianFilter);
-    }
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (s) =>
-          s.id.toLowerCase().includes(q) ||
-          s.customerName.toLowerCase().includes(q) ||
-          s.deviceBrand.toLowerCase().includes(q) ||
-          s.deviceModel.toLowerCase().includes(q) ||
-          s.issue.toLowerCase().includes(q)
-      );
-    }
-
-    return result;
-  }, [search, statusFilter, technicianFilter, services]);
 
   const updateUrlParam = React.useCallback(
     (serviceId: string | null) => {
@@ -220,32 +237,44 @@ function ServicesPageContent() {
       setSelectedServiceId(service.id);
       setIsDetailOpen(true);
       updateUrlParam(service.id);
-      showDetail(service);
     },
-    [updateUrlParam, showDetail]
+    [updateUrlParam]
   );
 
   const handleSheetOpenChange = React.useCallback(
     (open: boolean) => {
       setIsDetailOpen(open);
       if (!open) {
-        // Clear URL param when sheet closes
         updateUrlParam(null);
       }
     },
     [updateUrlParam]
   );
 
-  const handleServiceUpdated = useCallback(() => {
-    listServicesAction({ brandSlug }).then((result) => {
-      if (result.success) setServices(result.data);
-    });
+  const handleServiceUpdated = useCallback(async () => {
+    await fetchServices();
     if (selectedServiceId) {
-      getServiceDetailAction(brandSlug, selectedServiceId).then(result => {
-        if (result.success) setSelectedServiceDetail(result.data);
-      });
+      const result = await getServiceDetailAction(brandSlug, selectedServiceId);
+      if (result.success) {
+        showDetail(result.data);
+      }
     }
-  }, [brandSlug, selectedServiceId]);
+  }, [brandSlug, selectedServiceId, fetchServices, showDetail]);
+
+  // Wire refresh callback into right sidebar context so sidebar mutations refresh the page
+  React.useEffect(() => {
+    setOnServiceUpdated(handleServiceUpdated);
+    return () => setOnServiceUpdated(undefined);
+  }, [handleServiceUpdated, setOnServiceUpdated]);
+
+  // Listen for refresh events from Kanban (dispatched after status update)
+  React.useEffect(() => {
+    const handleRefresh = () => {
+      handleServiceUpdated();
+    };
+    window.addEventListener("seervis:services-refresh", handleRefresh);
+    return () => window.removeEventListener("seervis:services-refresh", handleRefresh);
+  }, [handleServiceUpdated]);
 
   const statusFilterLabel =
     statusFilter === "all" ? "Semua Status" : STATUS_CONFIG[statusFilter].label;
@@ -255,135 +284,225 @@ function ServicesPageContent() {
       : technicianFilter === "unassigned"
         ? "Belum Ditugaskan"
         : technicianFilter;
+  const pickupFilterLabel = 
+    pickupFilter === "all" ? "Semua Pengambilan" :
+    pickupFilter === "not_ready" ? "Belum Siap" :
+    pickupFilter === "ready" ? "Siap Diambil" :
+    pickupFilter === "picked_up" ? "Sudah Diambil" : "Semua";
 
   return (
     <>
       <div className="flex flex-col gap-4">
         {/* ---------- Toolbar ---------- */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Cari servis, pelanggan, perangkat..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-8 text-xs"
-            />
-          </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Cari servis, pelanggan, perangkat..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-8 text-xs"
+              />
+            </div>
 
-          <div className="flex items-center gap-2">
-            {/* Status Filter */}
-            <Popover open={statusFilterOpen} onOpenChange={setStatusFilterOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-[140px] justify-start px-3 text-xs font-normal"
-                >
-                  <Filter className="mr-1.5 size-3.5 text-muted-foreground" />
-                  <span className="truncate">{statusFilterLabel}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="z-[1001] w-[180px] p-1">
+            <div className="flex items-center gap-2">
+              {/* Filter Button */}
+              <Button
+                type="button"
+                variant={filtersOpen || hasActiveFilters ? "default" : "outline"}
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                className="h-9 gap-1.5 px-3 text-xs"
+              >
+                <SlidersHorizontal className="size-3.5" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <Badge variant={filtersOpen || hasActiveFilters ? "secondary" : "default"} className="ml-1 h-4 px-1 text-[10px]">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+                {filtersOpen ? (
+                  <ChevronUp className="ml-0.5 size-3.5 opacity-50" />
+                ) : (
+                  <ChevronDown className="ml-0.5 size-3.5 opacity-50" />
+                )}
+              </Button>
+
+              {/* View Toggle */}
+              <div className="inline-flex items-center rounded-lg border bg-muted p-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setStatusFilter("all");
-                    setStatusFilterOpen(false);
-                  }}
-                  className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                  aria-pressed={viewMode === "list"}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    viewMode === "list"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => handleViewModeChange("list")}
                 >
-                  <span>Semua Status</span>
-                  {statusFilter === "all" && <Check className="size-3.5" />}
+                  <LayoutList className="size-3.5" />
+                  Table
                 </button>
-                {STATUS_ORDER.map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter(status);
-                      setStatusFilterOpen(false);
-                    }}
-                    className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <span>{STATUS_CONFIG[status].label}</span>
-                    {statusFilter === status && <Check className="size-3.5" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-
-            {/* Technician Filter */}
-            <Popover
-              open={technicianFilterOpen}
-              onOpenChange={setTechnicianFilterOpen}
-            >
-              <PopoverTrigger asChild>
-                <Button
+                <button
                   type="button"
-                  variant="outline"
-                  className="h-9 w-[150px] justify-start px-3 text-xs font-normal"
+                  aria-pressed={viewMode === "kanban"}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    viewMode === "kanban"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => handleViewModeChange("kanban")}
                 >
-                  <SlidersHorizontal className="mr-1.5 size-3.5 text-muted-foreground" />
-                  <span className="truncate">{technicianFilterLabel}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="z-[1001] w-[200px] p-1">
-                {[
-                  { value: "all", label: "Semua Teknisi" },
-                  { value: "unassigned", label: "Belum Ditugaskan" },
-                  ...technicians.map((technician) => ({
-                    value: technician,
-                    label: technician,
-                  })),
-                ].map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      setTechnicianFilter(item.value);
-                      setTechnicianFilterOpen(false);
-                    }}
-                    className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <span className="truncate">{item.label}</span>
-                    {technicianFilter === item.value && <Check className="size-3.5" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-
-            {/* View Toggle */}
-            <div className="inline-flex items-center rounded-lg border bg-muted p-0.5">
-              <button
-                type="button"
-                aria-pressed={viewMode === "list"}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  viewMode === "list"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => handleViewModeChange("list")}
-              >
-                <LayoutList className="size-3.5" />
-                Table
-              </button>
-              <button
-                type="button"
-                aria-pressed={viewMode === "kanban"}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  viewMode === "kanban"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => handleViewModeChange("kanban")}
-              >
-                <Columns3 className="size-3.5" />
-                Kanban
-              </button>
+                  <Columns3 className="size-3.5" />
+                  Kanban
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Filter Panel (Collapsible) */}
+          <AnimatePresence>
+            {filtersOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="grid gap-3 rounded-xl border bg-muted/30 p-3 sm:grid-cols-3">
+                  {/* Status Filter */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider ml-1">Status</span>
+                    <Popover open={statusFilterOpen} onOpenChange={setStatusFilterOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 w-full justify-between px-3 text-xs font-normal bg-background"
+                        >
+                          <span className="truncate">{statusFilterLabel}</span>
+                          <ChevronDown className="size-3.5 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="z-[1001] w-[180px] p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStatusFilter("all");
+                            setStatusFilterOpen(false);
+                          }}
+                          className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <span>Semua Status</span>
+                          {statusFilter === "all" && <Check className="size-3.5" />}
+                        </button>
+                        {STATUS_ORDER.map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() => {
+                              setStatusFilter(status);
+                              setStatusFilterOpen(false);
+                            }}
+                            className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <span>{STATUS_CONFIG[status].label}</span>
+                            {statusFilter === status && <Check className="size-3.5" />}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Technician Filter */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider ml-1">Teknisi</span>
+                    <Popover
+                      open={technicianFilterOpen}
+                      onOpenChange={setTechnicianFilterOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 w-full justify-between px-3 text-xs font-normal bg-background"
+                        >
+                          <span className="truncate">{technicianFilterLabel}</span>
+                          <ChevronDown className="size-3.5 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="z-[1001] w-[200px] p-1">
+                        {[
+                          { value: "all", label: "Semua Teknisi" },
+                          { value: "unassigned", label: "Belum Ditugaskan" },
+                          ...technicians.map((technician) => ({
+                            value: technician,
+                            label: technician,
+                          })),
+                        ].map((item) => (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => {
+                              setTechnicianFilter(item.value);
+                              setTechnicianFilterOpen(false);
+                            }}
+                            className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <span className="truncate">{item.label}</span>
+                            {technicianFilter === item.value && <Check className="size-3.5" />}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Pickup Filter */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider ml-1">Pengambilan</span>
+                    <Popover
+                      open={pickupFilterOpen}
+                      onOpenChange={setPickupFilterOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 w-full justify-between px-3 text-xs font-normal bg-background"
+                        >
+                          <span className="truncate">{pickupFilterLabel}</span>
+                          <ChevronDown className="size-3.5 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="z-[1001] w-[180px] p-1">
+                        {[
+                          { value: "all", label: "Semua" },
+                          { value: "not_ready", label: "Belum Siap" },
+                          { value: "ready", label: "Siap Diambil" },
+                          { value: "picked_up", label: "Sudah Diambil" },
+                        ].map((item) => (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => {
+                              setPickupFilter(item.value);
+                              setPickupFilterOpen(false);
+                            }}
+                            className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <span>{item.label}</span>
+                            {pickupFilter === item.value && <Check className="size-3.5" />}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* ---------- Views ---------- */}
@@ -400,7 +519,20 @@ function ServicesPageContent() {
                 transition={viewTransition.transition}
                 className="w-full"
               >
-                <ServiceListView services={filteredServices} />
+                <ServiceListView
+                  services={services}
+                  isLoading={isLoading}
+                  error={error}
+                  search={search}
+                  statusFilter={statusFilter}
+                  technicianFilter={technicianFilter}
+                  pickupFilter={pickupFilter}
+                  role={userRole ?? undefined}
+                  brandSlug={brandSlug}
+                  onServiceUpdated={handleServiceUpdated}
+                  onOpenPayment={handleOpenPayment}
+                  onOpenSparepart={handleOpenSparepart}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -414,8 +546,15 @@ function ServicesPageContent() {
                 className="w-full"
               >
                 <ServiceKanbanView
-                  services={filteredServices}
+                  services={services}
                   brandSlug={brandSlug}
+                  isLoading={isLoading}
+                  error={error}
+                  search={search}
+                  statusFilter={statusFilter}
+                  technicianFilter={technicianFilter}
+                  pickupFilter={pickupFilter}
+                  role={userRole ?? undefined}
                   onCardDoubleClick={handleCardDoubleClick}
                 />
               </motion.div>
@@ -423,14 +562,37 @@ function ServicesPageContent() {
           </AnimatePresence>
         </div>
       </div>
-      <CreateServiceOverlay />
+      <CreateServiceOverlay onSuccess={fetchServices} />
       <ServiceDetailSheet
         service={selectedService}
         open={isDetailOpen}
         onOpenChange={handleSheetOpenChange}
-        loading={isDetailLoading}
+        loading={false}
         brandSlug={brandSlug}
         onServiceUpdated={handleServiceUpdated}
+        role={userRole ?? undefined}
+      />
+      {paymentService && (
+        <ServicePaymentPanel
+          service={paymentService}
+          open
+          onOpenChange={(open) => { if (!open) setPaymentServiceId(null); }}
+          brandSlug={brandSlug}
+          onPaymentRecorded={() => {
+            setPaymentServiceId(null);
+            handleServiceUpdated();
+          }}
+        />
+      )}
+      <ServiceSparepartPanel
+        service={sparepartService}
+        open={Boolean(sparepartService)}
+        onOpenChange={(open) => { if (!open) setSparepartServiceId(null); }}
+        brandSlug={brandSlug}
+        onSparepartAdded={() => {
+          setSparepartServiceId(null);
+          handleServiceUpdated();
+        }}
       />
     </>
   );

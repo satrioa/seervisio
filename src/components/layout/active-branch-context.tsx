@@ -12,6 +12,8 @@ interface ActiveBranchContextValue {
   activeBranchName: string | null;
   branches: ActiveBranchOption[];
   setActiveBranchId: (branchId: string | null) => void;
+  isSwitching: boolean;
+  setIsSwitching: (loading: boolean) => void;
 }
 
 const ActiveBranchContext = React.createContext<ActiveBranchContextValue | null>(null);
@@ -35,6 +37,7 @@ export function ActiveBranchProvider({
     ? initialBranchId
     : branches[0]?.id ?? null;
   const [activeBranchId, setActiveBranchIdState] = React.useState<string | null>(fallbackBranchId);
+  const [isSwitching, setIsSwitching] = React.useState(false);
 
   React.useEffect(() => {
     const storedBranchId = window.localStorage.getItem(storageKey);
@@ -61,7 +64,7 @@ export function ActiveBranchProvider({
 
     window.localStorage.setItem(storageKey, branchId);
     setActiveBranchIdState(branchId);
-  }, [branchIds, fallbackBranchId, storageKey]);
+  }, [branchIds, storageKey]);
 
   const activeBranchName = branches.find((branch) => branch.id === activeBranchId)?.name ?? null;
 
@@ -70,7 +73,9 @@ export function ActiveBranchProvider({
     activeBranchName,
     branches,
     setActiveBranchId,
-  }), [activeBranchId, activeBranchName, branches, setActiveBranchId]);
+    isSwitching,
+    setIsSwitching,
+  }), [activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching]);
 
   return (
     <ActiveBranchContext.Provider value={value}>

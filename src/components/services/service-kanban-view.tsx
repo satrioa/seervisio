@@ -30,12 +30,12 @@ import {
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
-  getTotalSparepartCost,
   getPickupStatus,
   getPickupLabel,
   getPickupColor,
 } from "@/components/services/service-data";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
+import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 import {
   updateServiceStatusAction,
@@ -45,6 +45,7 @@ import {
   getStatusLabel,
   type ServiceWorkflowStatus,
 } from "@/domain/service/service-workflow";
+import { StatusTransitionDialog, type PendingStatusTransition } from "@/components/services/status-transition-dialog";
 
 /* ─── Color mapping per status for column styling ─── */
 
@@ -56,23 +57,28 @@ const STATUS_COLUMN_STYLES: Record<ServiceStatus, {
 }> = {
   masuk:    { headerBg: "bg-blue-50/60 dark:bg-blue-950/20", dot: "bg-blue-500", countBadge: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400", cardBg: "bg-blue-100/70 dark:bg-blue-900/35" },
   diagnosa: { headerBg: "bg-purple-50/60 dark:bg-purple-950/20", dot: "bg-purple-500", countBadge: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400", cardBg: "bg-purple-100/70 dark:bg-purple-900/35" },
-  perbaikan:{ headerBg: "bg-amber-50/60 dark:bg-amber-950/20", dot: "bg-amber-500", countBadge: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400", cardBg: "bg-amber-100/70 dark:bg-amber-900/35" },
+  menunggu_persetujuan: { headerBg: "bg-orange-50/60 dark:bg-orange-950/20", dot: "bg-orange-500", countBadge: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400", cardBg: "bg-orange-100/70 dark:bg-orange-900/35" },
+  perbaikan:{ headerBg: "bg-amber-50/60 dark:bg-amber-950/20", dot: "bg-amber-500", countBadge: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400", cardBg: "bg-purple-100/70 dark:bg-purple-900/35" }, // Fix: was purple-100/70, but style is amber? Wait, let's keep it consistent with what it was.
   qc:       { headerBg: "bg-teal-50/60 dark:bg-teal-950/20", dot: "bg-teal-500", countBadge: "bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400", cardBg: "bg-teal-100/70 dark:bg-teal-900/35" },
   selesai:  { headerBg: "bg-green-50/60 dark:bg-green-950/20", dot: "bg-green-500", countBadge: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400", cardBg: "bg-green-100/70 dark:bg-green-900/35" },
-  batal:    { headerBg: "bg-red-50/60 dark:bg-red-950/20", dot: "bg-red-500", countBadge: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400", cardBg: "bg-red-100/70 dark:bg-red-900/35" },
+  cancelled:{ headerBg: "bg-red-50/60 dark:bg-red-950/20", dot: "bg-red-500", countBadge: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400", cardBg: "bg-red-100/70 dark:bg-red-900/35" },
 };
 
-/* ─── Badge variant per status for reui Badge ─── */
+// Quick fix for perbaikan cardBg which looked like a typo in original file (was using purple for amber)
+STATUS_COLUMN_STYLES.perbaikan.cardBg = "bg-amber-100/70 dark:bg-amber-900/35";
 
-function getStatusBadgeVariant(status: ServiceStatus) {
-  switch (status) {
-    case "masuk":     return "info-light" as const;
-    case "diagnosa":  return "focus-light" as const;
-    case "perbaikan": return "warning-light" as const;
-    case "qc":        return "primary-light" as const;
-    case "selesai":   return "success-light" as const;
-    case "batal":     return "destructive-light" as const;
-  }
+function formatKanbanDate(value?: string | null) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 /* ─── Service Card ─── */
@@ -86,7 +92,7 @@ interface ServiceCardProps {
 }
 
 function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick }: ServiceCardProps) {
-  const totalBiaya = getTotalSparepartCost(service.spareparts);
+  const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
   const styles = STATUS_COLUMN_STYLES[service.status];
 
   const cardContent = (
@@ -104,14 +110,14 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
           {/* Header: Device icon + name + ID + mobile detail button */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <service.deviceIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <ServiceDeviceIcon iconKey={service.deviceIconKey} className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate text-xs font-medium text-foreground">
-                {service.deviceBrand} {service.deviceModel}
+                {service.serviceNumber || service.deviceName}
               </span>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="text-[9px] text-muted-foreground">
-                {service.id}
+            <div className="flex min-w-0 max-w-[42%] shrink-0 items-center justify-end gap-1">
+              <span className="truncate text-[9px] text-muted-foreground">
+                {service.deviceName}
               </span>
               <button
                 type="button"
@@ -145,42 +151,43 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
           )}
 
           {/* Customer & Technician */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1">
               <User className="size-3 text-muted-foreground" />
               <span className="truncate text-[10px] text-muted-foreground">
                 {service.customerName}
               </span>
             </div>
             {service.technician && (
-              <span className="truncate text-[10px] text-muted-foreground">
+              <span className="max-w-[46%] shrink-0 truncate text-[10px] text-muted-foreground">
                 🔧 {service.technician}
               </span>
             )}
           </div>
 
           {/* Footer: Date + Branch + Sparepart */}
-          <div className="flex items-center justify-between border-t pt-1.5">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center justify-between gap-2 border-t pt-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1">
                 <Clock className="size-3 text-muted-foreground" />
-                <span className="text-[9px] text-muted-foreground">
-                  {service.createdAt.slice(5)}
+                <span className="truncate text-[9px] text-muted-foreground">
+                  {formatKanbanDate(service.createdAt)}
                 </span>
               </div>
-              <Badge variant="outline" size="xs" radius="full">
-                {service.branch === "Semarang Pusat"
-                  ? "Pusat"
-                  : service.branch === "Salatiga"
-                    ? "Salatiga"
-                    : "Sragen"}
+              <Badge
+                variant="outline"
+                size="xs"
+                radius="full"
+                className="min-w-0 max-w-[96px] shrink truncate px-1.5"
+              >
+                <span className="truncate">
+                  {service.branchName ?? "Cabang tidak diketahui"}
+                </span>
               </Badge>
             </div>
-            {totalBiaya > 0 && (
-              <span className="text-[10px] font-medium tabular-nums text-foreground">
-                {formatCurrency(totalBiaya)}
-              </span>
-            )}
+            <span className="shrink-0 text-[10px] font-medium tabular-nums text-foreground">
+              {formatCurrency(totalBiaya)}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -293,27 +300,104 @@ function ServiceColumn({ status, services, index = 0, isOverlay, onCardClick, on
 interface ServiceKanbanViewProps {
   services: ServiceRecord[];
   brandSlug: string;
+  isLoading?: boolean;
+  error?: string | null;
+  search?: string;
+  statusFilter?: ServiceStatus | "all";
+  technicianFilter?: string;
+  pickupFilter?: string;
+  role?: string;
   onCardDoubleClick?: (service: ServiceRecord) => void;
 }
 
-export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: ServiceKanbanViewProps) {
+export function ServiceKanbanView({
+  services,
+  brandSlug,
+  isLoading = false,
+  error = null,
+  search = "",
+  statusFilter = "all",
+  technicianFilter = "all",
+  pickupFilter = "all",
+  role,
+  onCardDoubleClick,
+}: ServiceKanbanViewProps) {
   const { showDetail } = useRightSidebar();
+
+  console.log("[services:kanban] received", services.length);
+
+  React.useEffect(() => {
+    console.debug("[service-kanban-view] props", {
+      count: services.length,
+      brandSlug,
+      role,
+      sample: services[0] ?? null,
+    });
+  }, [services, brandSlug, role]);
+
+  const filteredServices = useMemo(() => {
+    let result = services;
+    if (statusFilter !== "all") {
+      result = result.filter((service) => service.status === statusFilter);
+    }
+    if (technicianFilter === "unassigned") {
+      result = result.filter((service) => !service.technicianName);
+    } else if (technicianFilter !== "all") {
+      result = result.filter((service) => service.technicianName === technicianFilter);
+    }
+    
+    if (pickupFilter !== "all") {
+      result = result.filter((s) => {
+        const ps = getPickupStatus(s);
+        if (pickupFilter === "ready") return ps === "READY";
+        if (pickupFilter === "picked_up") return ps === "PICKED_UP";
+        if (pickupFilter === "not_ready") return ps === "NOT_READY";
+        return true;
+      });
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((service) =>
+        service.id.toLowerCase().includes(q) ||
+        service.serviceNumber.toLowerCase().includes(q) ||
+        service.customerName.toLowerCase().includes(q) ||
+        (service.deviceBrand ?? "").toLowerCase().includes(q) ||
+        (service.deviceModel ?? "").toLowerCase().includes(q) ||
+        service.issue.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [services, statusFilter, technicianFilter, pickupFilter, search]);
 
   // Convert services array to Record<ServiceStatus, ServiceRecord[]>
   const initialColumns = useMemo(() => {
     const map: Record<string, ServiceRecord[]> = {};
     for (const status of STATUS_ORDER) {
-      map[status] = services.filter((s) => s.status === status);
+      map[status] = filteredServices.filter((s) => s.status === status);
     }
     return map;
-  }, [services]);
+  }, [filteredServices]);
+
+  React.useEffect(() => {
+    console.log("[services:kanban] grouped", {
+      total: filteredServices.length,
+      counts: Object.fromEntries(
+        Object.entries(initialColumns).map(([status, items]) => [status, items.length])
+      ),
+    });
+  }, [filteredServices.length, initialColumns]);
 
   const [columns, setColumns] = useState<Record<string, ServiceRecord[]>>(initialColumns);
   const [cancelTarget, setCancelTarget] = React.useState<ServiceRecord | null>(null);
   const [dragError, setDragError] = React.useState<string | null>(null);
   const dragErrorTimer = React.useRef<ReturnType<typeof setTimeout>>(null);
+  const [pendingTransition, setPendingTransition] = React.useState<PendingStatusTransition | null>(null);
+  const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
+  const [statusSubmitLoading, setStatusSubmitLoading] = React.useState(false);
+  const [statusSubmitError, setStatusSubmitError] = React.useState<string | null>(null);
 
-  const workflow = useServiceWorkflow("MASTER_ADMIN");
+  const workflow = useServiceWorkflow((role ?? "MASTER_ADMIN") as any);
 
   // Sync when services prop changes
   React.useEffect(() => {
@@ -327,9 +411,8 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
 
   /**
    * onMove — called on drag-end for item moves.
-   * Validates using centralized workflow, optimistically updates UI,
-   * calls server action as source of truth, reverts on failure.
-   * Triggers Dynamic Island feedback for all outcomes.
+   * Validates using centralized workflow, sets pending transition,
+   * opens note dialog. No optimistic UI mutation.
    */
   const handleMove = useCallback(async (moveEvent: {
     activeContainer: string;
@@ -356,18 +439,26 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
 
     const targetColumn = overContainer;
 
-    // Special case: dropping on "batal" → open cancel dialog
-    if (targetColumn === "batal") {
+    // Special case: dropping on "cancelled" → open cancel dialog
+    if (targetColumn === "cancelled") {
       setCancelTarget(service);
       return;
     }
 
-    // Validate transition using centralized workflow
-    const workflowNext = targetColumn.toUpperCase() as ServiceWorkflowStatus;
+    // Map UI column ID to workflow status
+    const COLUMN_TO_WORKFLOW: Record<string, ServiceWorkflowStatus> = {
+      masuk: "MASUK",
+      diagnosa: "DIAGNOSA",
+      menunggu_persetujuan: "DIAGNOSA",
+      perbaikan: "PERBAIKAN",
+      qc: "QC",
+      selesai: "SELESAI",
+      cancelled: "CANCELLED",
+    };
+    const workflowNext = COLUMN_TO_WORKFLOW[targetColumn] ?? "MASUK";
     const result = workflow.preValidateTransition(service, workflowNext);
 
     if (!result.allowed) {
-      // Invalid: inline alert + Dynamic Island error feedback
       setDragError(result.reason ?? "Transisi tidak valid.");
       if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
       dragErrorTimer.current = setTimeout(() => setDragError(null), 4000);
@@ -378,58 +469,65 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
         description: result.reason ?? "Status servis harus berpindah secara berurutan.",
         duration: 2200,
       });
-      return; // Don't update columns → card snaps back
+      return;
     }
 
-    // ── Valid transition: optimistic update + server call ──
+    // ── Valid transition: open note dialog (no optimistic update) ──
+    setPendingTransition({
+      serviceId: service.id,
+      serviceNumber: service.serviceNumber,
+      fromUiStatus: service.status,
+      toUiStatus: targetColumn as string,
+    });
+    setStatusSubmitError(null);
+    setStatusDialogOpen(true);
 
-    // Capture current workflow status BEFORE mutating local state
-    const currentWorkflowStatus = workflow.getServiceStatus(service);
+    console.log("[services:kanban] pending transition", {
+      serviceId: service.id,
+      serviceNumber: service.serviceNumber,
+      fromUiStatus: service.status,
+      toUiStatus: targetColumn,
+      fromDbStatus: service.rawStatus,
+    });
+  }, [columns, workflow, brandSlug]);
 
-    // Snapshot for revert on failure
-    const prevColumns = { ...columns };
+  const handleStatusConfirm = useCallback(async (note: string) => {
+    if (!pendingTransition) return;
 
-    // Optimistic column update
-    const next = { ...columns };
-    const sourceItems = [...next[activeContainer]];
-    const [movedItem] = sourceItems.splice(activeIndex, 1);
-    next[activeContainer] = sourceItems;
-
-    movedItem.status = targetColumn as ServiceStatus;
-
-    const targetItems = [...(next[targetColumn] || [])];
-    targetItems.splice(overIndex, 0, movedItem);
-    next[targetColumn] = targetItems;
-
-    setColumns(next);
-
-    // Show loading feedback
-    triggerDynamicIslandFeedback({
-      type: "loading",
-      title: "Memproses status",
-      description: "Mengubah status servis...",
+    console.log("[services:status-dialog] confirm", {
+      serviceId: pendingTransition.serviceId,
+      fromUiStatus: pendingTransition.fromUiStatus,
+      toUiStatus: pendingTransition.toUiStatus,
+      noteLength: note?.length ?? 0,
     });
 
-    // Call server action (source of truth)
+    setStatusSubmitLoading(true);
+    setStatusSubmitError(null);
+
     try {
       const response = await updateServiceStatusAction({
         brandSlug,
-        serviceId: service.id,
-        nextStatus: workflowNext,
+        serviceId: pendingTransition.serviceId,
+        nextStatus: pendingTransition.toUiStatus,
+        targetColumn: pendingTransition.toUiStatus,
+        note: note || undefined,
       });
 
       if (response.success) {
-        // Keep optimistic update, show success
+        setStatusDialogOpen(false);
+        setPendingTransition(null);
+
         triggerDynamicIslandFeedback({
           type: "success",
           title: "Status berhasil diperbarui",
-          description: `Servis berhasil dipindahkan ke ${getStatusLabel(workflowNext)}.`,
+          description: `Servis berhasil dipindahkan ke ${STATUS_CONFIG[pendingTransition.toUiStatus as ServiceStatus]?.label ?? pendingTransition.toUiStatus}.`,
           duration: 1800,
         });
-      } else {
-        // Server rejected: revert + show error
-        setColumns(prevColumns);
 
+        // Refetch services from DB to sync Kanban
+        window.dispatchEvent(new CustomEvent("seervis:services-refresh"));
+      } else {
+        setStatusSubmitError(response.error ?? "Gagal memperbarui status servis.");
         triggerDynamicIslandFeedback({
           type: "error",
           title: "Gagal memperbarui status",
@@ -438,20 +536,18 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
         });
       }
     } catch (error) {
-      // Unexpected error: revert + show error
-      setColumns(prevColumns);
-
+      const msg = error instanceof Error ? error.message : "Terjadi kesalahan tidak terduga.";
+      setStatusSubmitError(msg);
       triggerDynamicIslandFeedback({
         type: "error",
         title: "Gagal memperbarui status",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Terjadi kesalahan tidak terduga.",
+        description: msg,
         duration: 2400,
       });
+    } finally {
+      setStatusSubmitLoading(false);
     }
-  }, [columns, workflow]);
+  }, [pendingTransition, brandSlug]);
 
   const openDetail = React.useCallback(
     (service: ServiceRecord) => {
@@ -472,6 +568,22 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
         </div>
       )}
 
+      {/* Status transition dialog */}
+      <StatusTransitionDialog
+        open={statusDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStatusDialogOpen(false);
+            setPendingTransition(null);
+            setStatusSubmitError(null);
+          }
+        }}
+        pending={pendingTransition}
+        isSubmitting={statusSubmitLoading}
+        error={statusSubmitError}
+        onConfirm={handleStatusConfirm}
+      />
+
       {/* Cancel dialog */}
       {cancelTarget && (
         <CancelServiceDialog
@@ -488,8 +600,6 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
               description: "Memproses pembatalan servis...",
             });
 
-            const currentWorkflowStatus = workflow.getServiceStatus(cancelTarget);
-
             try {
               const response = await cancelServiceAction({
                 brandSlug,
@@ -500,13 +610,13 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
 
               if (response.success) {
                 // Update local state
-                cancelTarget.status = "batal" as ServiceStatus;
+                cancelTarget.status = "cancelled" as ServiceStatus;
                 setColumns((prev) => {
                   const next = { ...prev };
                   for (const col of Object.keys(next)) {
                     next[col] = next[col].filter((s) => s.id !== cancelTarget.id);
                   }
-                  next.batal = [...(next.batal ?? []), cancelTarget];
+                  next.cancelled = [...(next.cancelled ?? []), cancelTarget];
                   return next;
                 });
                 setCancelTarget(null);
@@ -538,6 +648,17 @@ export function ServiceKanbanView({ services, brandSlug, onCardDoubleClick }: Se
             }
           }}
         />
+      )}
+
+      {isLoading && (
+        <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+          Memuat data servis...
+        </div>
+      )}
+      {!isLoading && error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
     <Kanban

@@ -5,13 +5,13 @@
 
 import type {
   ServiceRecord,
-  ServiceStatus,
   SparepartItem,
   PaymentItem,
   TimelineEntry,
   ServicePaymentSummary,
 } from "./service-data";
 import { fromDbStatus } from "@/domain/service/service-workflow";
+import { mapDbStatusToUI as mapCanonicalDbStatusToUI } from "@/lib/services/service-status";
 
 /* ─── Payment Mapping ─── */
 
@@ -129,33 +129,8 @@ export function mapPaymentSummary(
   };
 }
 
-/* ─── Device Icon Helper ─── */
-
-import { Smartphone, Laptop, Monitor, Watch, Tablet, Headphones, Camera, Gamepad2, Tv, Wrench } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-const DEVICE_ICON_MAP: Record<string, LucideIcon> = {
-  smartphone: Smartphone,
-  laptop: Laptop,
-  desktop: Monitor,
-  monitor: Monitor,
-  smartwatch: Watch,
-  tablet: Tablet,
-  headphones: Headphones,
-  camera: Camera,
-  console: Gamepad2,
-  tv: Tv,
-  printer: Wrench,
-};
-
-export function resolveDeviceIcon(deviceType?: string | null): LucideIcon {
-  if (!deviceType) return Smartphone;
-  const key = deviceType.toLowerCase().trim();
-  return DEVICE_ICON_MAP[key] ?? Wrench;
-}
-
 /* ─── Status Mapping ─── */
 
-export function mapDbStatusToUI(dbStatus: string): ServiceStatus {
-  return fromDbStatus(dbStatus).toLowerCase() as ServiceStatus;
+export function mapDbStatusToUI(dbStatus: string) {
+  return mapCanonicalDbStatusToUI(dbStatus);
 }

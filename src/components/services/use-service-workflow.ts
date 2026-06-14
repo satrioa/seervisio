@@ -32,6 +32,7 @@ function toWorkflowStatus(status: string): ServiceWorkflowStatus {
   const map: Record<string, ServiceWorkflowStatus> = {
     masuk: "MASUK",
     diagnosa: "DIAGNOSA",
+    menunggu_persetujuan: "DIAGNOSA",
     perbaikan: "PERBAIKAN",
     qc: "QC",
     selesai: "SELESAI",

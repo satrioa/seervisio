@@ -35,17 +35,16 @@ import {
   type ServiceRecord,
   type ServiceStatus,
   type ServicePaymentRecord,
-  type ServicePaymentSummary,
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
   getTotalSparepartCost,
   getTotalPayment,
-  calculateServicePaymentSummary,
   getPaymentStatusLabel,
   getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
+import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
@@ -65,6 +64,20 @@ interface ServiceDetailContentProps {
   onClose: () => void;
   brandSlug?: string;
   onServiceUpdated?: () => void;
+  role?: string;
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /* ─── Component ─── */
@@ -74,6 +87,7 @@ export function ServiceDetailContent({
   onClose,
   brandSlug: brandSlugProp,
   onServiceUpdated,
+  role,
 }: ServiceDetailContentProps) {
   const params = useParams();
   const brandSlug = brandSlugProp ?? (params?.brandSlug as string) ?? "";
@@ -103,18 +117,15 @@ export function ServiceDetailContent({
 
   const statusIndex = STATUS_ORDER.indexOf(localStatus);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
-  const totalPaid = getTotalPayment(service.payments);
-  const isPaid =
-    service.payments.length > 0 &&
-    service.payments.every((p) => p.status === "lunas");
-  const isCancelled = localStatus === "batal";
-  const totalDueVal = Math.max(totalSparepart, 100000);
-  const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
-    totalDueVal,
-    enrichedPayments,
-  );
+  const totalCost = Number(service.finalCost || service.estimatedCost || totalSparepart || 0);
+  const totalPaid = enrichedPayments.length > 0
+    ? enrichedPayments.reduce((sum, payment) => sum + payment.amount, 0)
+    : getTotalPayment(service.payments);
+  const remainingBalance = Math.max(0, totalCost - totalPaid);
+  const isPaid = totalCost > 0 && remainingBalance <= 0;
+  const isCancelled = localStatus === "cancelled";
   const paymentStatusLabel = getPaymentStatusLabel(
-    paymentSummary.paymentStatus,
+    isPaid ? "PAID" : totalPaid > 0 ? "PARTIAL" : "UNPAID",
   );
 
   return (
@@ -123,8 +134,8 @@ export function ServiceDetailContent({
       <div className="border-b px-6 py-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-            <service.deviceIcon className="size-4 text-muted-foreground" />
-            {service.id}
+            <ServiceDeviceIcon iconKey={service.deviceIconKey} className="size-4 text-muted-foreground" />
+            {service.serviceNumber || service.id}
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_CONFIG[localStatus].color}`}
             >
@@ -135,8 +146,7 @@ export function ServiceDetailContent({
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            {service.deviceBrand} {service.deviceModel} —{" "}
-            {service.customerName}
+            {service.deviceName} · {service.customerName}
           </p>
         </div>
       </div>
@@ -157,7 +167,7 @@ export function ServiceDetailContent({
                   {service.customerName}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {service.customerPhone}
+                  {service.customerPhone || "No. HP belum ada"}
                 </span>
                 {service.customerAddress && (
                   <span className="text-[10px] text-muted-foreground">
@@ -175,10 +185,10 @@ export function ServiceDetailContent({
               </h4>
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium text-foreground">
-                  {service.deviceBrand} {service.deviceModel}
+                  {service.deviceName}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {service.deviceType}
+                  {service.deviceType ?? "-"}
                 </span>
                 {service.serialNumber && (
                   <span className="text-[10px] text-muted-foreground">
@@ -196,18 +206,18 @@ export function ServiceDetailContent({
               </h4>
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs text-muted-foreground">
-                  Masuk: {service.createdAt}
+                  Masuk: {formatDateTime(service.intakeAt || service.createdAt)}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Update: {service.updatedAt}
+                  Update: {formatDateTime(service.updatedAt)}
                 </span>
-                {service.technician && (
+                {service.technicianName && (
                   <span className="text-xs text-foreground">
-                    Teknisi: {service.technician}
+                    Teknisi: {service.technicianName}
                   </span>
                 )}
                 <span className="text-xs text-muted-foreground">
-                  Cabang: {service.branch}
+                  Cabang: {service.branchName ?? "Cabang tidak diketahui"}
                 </span>
               </div>
             </div>
@@ -225,7 +235,7 @@ export function ServiceDetailContent({
                     Total Tagihan
                   </span>
                   <span className="font-medium text-foreground">
-                    {formatCurrency(totalDueVal)}
+                    {formatCurrency(totalCost)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -233,7 +243,7 @@ export function ServiceDetailContent({
                     Sudah Dibayar
                   </span>
                   <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(paymentSummary.totalPaid)}
+                    {formatCurrency(totalPaid)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-sm">
@@ -241,7 +251,7 @@ export function ServiceDetailContent({
                     Sisa Tagihan
                   </span>
                   <span className="font-bold text-foreground">
-                    {formatCurrency(paymentSummary.remainingBalance)}
+                    {formatCurrency(remainingBalance)}
                   </span>
                 </div>
                 <div className="mt-1">
@@ -406,7 +416,7 @@ export function ServiceDetailContent({
               Aktivitas
             </h4>
             <div className="flex flex-col gap-0">
-              {service.timeline.map((entry, i) => (
+              {service.timeline.length > 0 ? service.timeline.map((entry, i) => (
                 <div
                   key={i}
                   className="relative flex gap-3 pb-4 pl-4 last:pb-0"
@@ -429,7 +439,9 @@ export function ServiceDetailContent({
                     </span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-xs text-muted-foreground">Belum ada aktivitas</p>
+              )}
             </div>
           </div>
 
@@ -567,7 +579,7 @@ export function ServiceDetailContent({
                   </Button>
                 </div>
 
-                {!isPaid && paymentSummary.remainingBalance > 0 && (
+                {!isPaid && remainingBalance > 0 && role !== "TECHNICIAN" && (
                   <Button
                     size="sm"
                     className="w-full gap-1.5 text-xs"
@@ -773,7 +785,7 @@ function PickupVerificationDialog({
             Verifikasi Pengambilan
           </DialogTitle>
           <DialogDescription>
-            {service.deviceBrand} {service.deviceModel} — {service.id}
+            {service.deviceName} — {service.serviceNumber || service.id}
           </DialogDescription>
         </DialogHeader>
 

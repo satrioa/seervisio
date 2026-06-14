@@ -21,6 +21,7 @@ interface ServiceDetailSheetProps {
   loading?: boolean;
   brandSlug: string;
   onServiceUpdated?: () => void;
+  role?: string;
 }
 
 /* ─── Component ─── */
@@ -32,21 +33,16 @@ export function ServiceDetailSheet({
   loading = false,
   brandSlug,
   onServiceUpdated,
+  role,
 }: ServiceDetailSheetProps) {
   const title =
     service && service.customerName
-      ? service.id + " — " + service.customerName
+      ? `${service.serviceNumber || service.id} — ${service.customerName}`
       : "Detail Servis";
 
   const description =
-    service && service.deviceBrand
-      ? service.deviceBrand +
-        " " +
-        service.deviceModel +
-        " • " +
-        (service.status
-          ? service.status.charAt(0).toUpperCase() + service.status.slice(1)
-          : "")
+    service
+      ? `${service.deviceName} • ${service.statusLabel}`
       : "";
 
   return (
@@ -69,6 +65,7 @@ export function ServiceDetailSheet({
             onClose={() => onOpenChange(false)}
             brandSlug={brandSlug}
             onServiceUpdated={onServiceUpdated}
+            role={role}
           />
         )}
       </SheetContent>

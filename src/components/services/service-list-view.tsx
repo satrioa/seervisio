@@ -6,21 +6,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Smartphone,
-  Laptop,
-  Tablet,
-  Monitor,
-  Headphones,
   User,
   Wrench,
   CreditCard,
-  ArrowRight,
   Clock,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -34,7 +27,6 @@ import {
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
-  getTotalSparepartCost,
   getTotalPayment,
   getPickupStatus,
   getPickupLabel,
@@ -44,13 +36,17 @@ import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
+import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { XCircle, RotateCcw, ArrowRightCircle } from "lucide-react";
+import { StatusTransitionDialog, type PendingStatusTransition } from "@/components/services/status-transition-dialog";
+import { updateServiceStatusAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 
 /* ─── Status Stepper Mini ─── */
 
 function StatusStepper({ status }: { status: ServiceStatus }) {
   const statusIndex = STATUS_ORDER.indexOf(status);
-  const visibleStatuses: ServiceStatus[] = ["masuk", "diagnosa", "perbaikan", "qc", "selesai"];
+  const visibleStatuses: ServiceStatus[] = ["masuk", "diagnosa", "menunggu_persetujuan", "perbaikan", "qc", "selesai"];
 
   return (
     <div className="flex items-center gap-1">
@@ -81,7 +77,7 @@ function StatusStepper({ status }: { status: ServiceStatus }) {
           </React.Fragment>
         );
       })}
-      {status === "batal" && (
+      {status === "cancelled" && (
         <>
           <div className="h-0.5 w-2 rounded-full bg-border" />
           <div className="flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
@@ -96,8 +92,7 @@ function StatusStepper({ status }: { status: ServiceStatus }) {
 /* ─── Device Icon Helper ─── */
 
 function DeviceIcon({ record }: { record: ServiceRecord }) {
-  const Icon = record.deviceIcon;
-  return <Icon className="size-4 shrink-0 text-muted-foreground" />;
+  return <ServiceDeviceIcon iconKey={record.deviceIconKey} className="size-4 shrink-0 text-muted-foreground" />;
 }
 
 /* ══════════════════════════════════════════════
@@ -106,6 +101,17 @@ function DeviceIcon({ record }: { record: ServiceRecord }) {
 
 interface ServiceListViewProps {
   services: ServiceRecord[];
+  isLoading?: boolean;
+  error?: string | null;
+  search?: string;
+  statusFilter?: ServiceStatus | "all";
+  technicianFilter?: string;
+  pickupFilter?: string;
+  role?: string;
+  brandSlug: string;
+  onServiceUpdated?: () => void;
+  onOpenPayment?: (serviceId: string) => void;
+  onOpenSparepart?: (serviceId: string) => void;
 }
 
 interface ServicePaginationProps {
@@ -115,6 +121,7 @@ interface ServicePaginationProps {
   totalPages: number;
   startItem: number;
   endItem: number;
+  isLoading?: boolean;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 }
@@ -126,6 +133,7 @@ function ServicePagination({
   totalPages,
   startItem,
   endItem,
+  isLoading = false,
   onPageChange,
   onPageSizeChange,
 }: ServicePaginationProps) {
@@ -137,13 +145,19 @@ function ServicePagination({
   return (
     <div className="flex flex-col gap-3 border-t bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-[11px] text-muted-foreground">
-        Menampilkan{" "}
-        <span className="font-medium text-foreground">{startItem}</span>
-        {" - "}
-        <span className="font-medium text-foreground">{endItem}</span>
-        {" dari "}
-        <span className="font-medium text-foreground">{totalItems}</span>
-        {" servis"}
+        {isLoading ? (
+          "Memuat data..."
+        ) : (
+          <>
+            Menampilkan{" "}
+            <span className="font-medium text-foreground">{startItem}</span>
+            {" - "}
+            <span className="font-medium text-foreground">{endItem}</span>
+            {" dari "}
+            <span className="font-medium text-foreground">{totalItems}</span>
+            {" servis"}
+          </>
+        )}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -152,6 +166,7 @@ function ServicePagination({
           <Select
             value={String(pageSize)}
             onValueChange={(value) => onPageSizeChange(Number(value))}
+            disabled={isLoading}
           >
             <SelectTrigger className="h-8 w-[72px] rounded-lg text-xs">
               <SelectValue />
@@ -172,7 +187,7 @@ function ServicePagination({
             variant="outline"
             size="icon"
             className="size-8 rounded-lg"
-            disabled={page <= 1}
+            disabled={isLoading || page <= 1}
             onClick={() => onPageChange(page - 1)}
             aria-label="Halaman sebelumnya"
           >
@@ -186,6 +201,7 @@ function ServicePagination({
               variant={item === page ? "default" : "outline"}
               size="icon"
               className="size-8 rounded-lg text-xs"
+              disabled={isLoading}
               onClick={() => onPageChange(item)}
               aria-current={item === page ? "page" : undefined}
             >
@@ -198,7 +214,7 @@ function ServicePagination({
             variant="outline"
             size="icon"
             className="size-8 rounded-lg"
-            disabled={page >= totalPages}
+            disabled={isLoading || page >= totalPages}
             onClick={() => onPageChange(page + 1)}
             aria-label="Halaman berikutnya"
           >
@@ -210,27 +226,161 @@ function ServicePagination({
   );
 }
 
-export function ServiceListView({ services }: ServiceListViewProps) {
+const SERVICE_TABLE_GRID = "grid-cols-[28px_1fr_130px_120px_120px_100px_60px]";
+
+function ServiceTableSkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div
+          key={`service-skeleton-${index}`}
+          className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b px-3 py-2.5 last:border-0`}
+        >
+          <div className="flex items-center">
+            <Skeleton className="size-4 rounded-sm" />
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-40" />
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-2.5 w-56 max-w-full" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-3.5 w-28" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-3.5 w-24" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <div className="flex flex-col justify-center gap-1">
+            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-2.5 w-16" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-4 w-4" />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function ServiceEmptyState() {
+  return (
+    <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+      <p className="text-sm font-medium text-foreground">Tidak ada servis ditemukan</p>
+      <p className="max-w-sm text-xs text-muted-foreground">
+        Coba ubah kata kunci, status, teknisi, atau filter pengambilan.
+      </p>
+    </div>
+  );
+}
+
+function ServiceMobileSkeletonCards() {
+  return (
+    <>
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div
+          key={`service-mobile-skeleton-${index}`}
+          className="flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-xs"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Skeleton className="h-3.5 w-36" />
+              <Skeleton className="h-3 w-48 max-w-full" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-3 w-56 max-w-full" />
+          <Skeleton className="h-3 w-28" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+export function ServiceListView({
+  services,
+  isLoading = false,
+  error = null,
+  search = "",
+  statusFilter = "all",
+  technicianFilter = "all",
+  pickupFilter = "all",
+  role,
+  brandSlug,
+  onServiceUpdated,
+  onOpenPayment,
+  onOpenSparepart,
+}: ServiceListViewProps) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
-  const [pickupFilter, setPickupFilter] = React.useState<string>("all");
   const { showDetail } = useRightSidebar();
+  const [pendingTransition, setPendingTransition] = React.useState<PendingStatusTransition | null>(null);
+  const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
+  const [statusSubmitLoading, setStatusSubmitLoading] = React.useState(false);
+  const [statusSubmitError, setStatusSubmitError] = React.useState<string | null>(null);
+
+  console.log("[services:table] received", services.length);
+
+  React.useEffect(() => {
+    console.debug("[service-list-view] props", {
+      count: services.length,
+      role,
+      sample: services[0] ?? null,
+    });
+  }, [services, role]);
 
   const toggleExpand = React.useCallback((id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   }, []);
 
+  const filteredServices = React.useMemo(() => {
+    let result = services;
+    if (statusFilter !== "all") {
+      result = result.filter((service) => service.status === statusFilter);
+    }
+    if (technicianFilter === "unassigned") {
+      result = result.filter((service) => !service.technicianName);
+    } else if (technicianFilter !== "all") {
+      result = result.filter((service) => service.technicianName === technicianFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((service) =>
+        service.id.toLowerCase().includes(q) ||
+        service.serviceNumber.toLowerCase().includes(q) ||
+        service.customerName.toLowerCase().includes(q) ||
+        (service.deviceBrand ?? "").toLowerCase().includes(q) ||
+        (service.deviceModel ?? "").toLowerCase().includes(q) ||
+        service.issue.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [services, statusFilter, technicianFilter, search]);
+
   const pickupFilteredServices = React.useMemo(() => {
-    if (pickupFilter === "all") return services;
-    return services.filter((s) => {
+    if (pickupFilter === "all") return filteredServices;
+    return filteredServices.filter((s) => {
       const ps = getPickupStatus(s);
       if (pickupFilter === "ready") return ps === "READY";
       if (pickupFilter === "picked_up") return ps === "PICKED_UP";
       if (pickupFilter === "not_ready") return ps === "NOT_READY";
       return true;
     });
-  }, [services, pickupFilter]);
+  }, [filteredServices, pickupFilter]);
+
+  console.log("[services:table] filtered", pickupFilteredServices.length);
+
+  React.useEffect(() => {
+    console.debug("[service-list-view] pickup-filter", {
+      input: services.length,
+      output: pickupFilteredServices.length,
+      pickupFilter,
+    });
+  }, [services.length, pickupFilteredServices.length, pickupFilter]);
 
   const totalItems = pickupFilteredServices.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -254,7 +404,7 @@ export function ServiceListView({ services }: ServiceListViewProps) {
   // ── Workflow state ──
   const [cancelTarget, setCancelTarget] = React.useState<ServiceRecord | null>(null);
   const [reopenTarget, setReopenTarget] = React.useState<ServiceRecord | null>(null);
-  const workflow = useServiceWorkflow("MASTER_ADMIN");
+  const workflow = useServiceWorkflow((role ?? "MASTER_ADMIN") as any);
 
   const pagination = (
     <ServicePagination
@@ -264,6 +414,7 @@ export function ServiceListView({ services }: ServiceListViewProps) {
       totalPages={totalPages}
       startItem={startItem}
       endItem={endItem}
+      isLoading={isLoading}
       onPageChange={setPage}
       onPageSizeChange={setPageSize}
     />
@@ -271,28 +422,20 @@ export function ServiceListView({ services }: ServiceListViewProps) {
 
   return (
     <>
-      {/* Pickup Status Filter */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-medium text-gray-500">Pengambilan:</span>
-        <select
-          className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
-          value={pickupFilter}
-          onChange={(e) => setPickupFilter(e.target.value)}
-        >
-          <option value="all">Semua</option>
-          <option value="not_ready">Belum Siap</option>
-          <option value="ready">Siap Diambil</option>
-          <option value="picked_up">Sudah Diambil</option>
-        </select>
-      </div>
+      {!isLoading && error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {/* Desktop: Table */}
       <div className="hidden md:block">
         <div className="flex flex-col gap-0 overflow-hidden rounded-lg border bg-card">
           {/* Header */}
-          <div className="grid grid-cols-[28px_1fr_120px_120px_100px_60px] gap-2 border-b bg-muted/50 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b bg-muted/50 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground`}>
             <span />
             <span>Service / Customer</span>
+            <span>Cabang</span>
             <span>Teknisi</span>
             <span>Status</span>
             <span>Biaya</span>
@@ -300,9 +443,12 @@ export function ServiceListView({ services }: ServiceListViewProps) {
           </div>
 
           {/* Rows */}
-          {paginatedServices.map((service) => {
+          {isLoading ? (
+            <ServiceTableSkeletonRows />
+          ) : paginatedServices.length > 0 ? (
+            paginatedServices.map((service) => {
             const isExpanded = expandedId === service.id;
-            const totalBiaya = getTotalSparepartCost(service.spareparts);
+            const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
             const totalDibayar = getTotalPayment(service.payments);
 
             return (
@@ -310,8 +456,11 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                 {/* Row */}
                 <button
                   type="button"
-                  onClick={() => toggleExpand(service.id)}
-                  className="grid grid-cols-[28px_1fr_120px_120px_100px_60px] gap-2 border-b px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/30"
+                  onClick={() => {
+                    toggleExpand(service.id);
+                    showDetail(service);
+                  }}
+                  className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/30`}
                 >
                   <div className="flex items-center">
                     <DeviceIcon record={service} />
@@ -319,12 +468,12 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-xs font-medium text-foreground">
-                        {service.deviceBrand} {service.deviceModel}
-                      </span>
-                      <span className="shrink-0 text-[9px] text-muted-foreground">
-                        {service.id}
+                        {service.serviceNumber || service.deviceName}
                       </span>
                     </div>
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      {service.deviceName}
+                    </span>
                     <div className="flex items-center gap-1.5">
                       <User className="size-3 text-muted-foreground" />
                       <span className="truncate text-[10px] text-muted-foreground">
@@ -337,9 +486,14 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                     </div>
                   </div>
                   <div className="flex items-center">
-                    {service.technician ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {service.branchName ?? "Cabang tidak diketahui"}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    {service.technicianName ? (
                       <span className="truncate text-xs text-muted-foreground">
-                        {service.technician}
+                        {service.technicianName}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground/50">—</span>
@@ -366,18 +520,13 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                     )}
                   </div>
                   <div className="flex flex-col items-start justify-center gap-0">
-                    {totalBiaya > 0 && (
-                      <span className="truncate text-xs font-medium tabular-nums text-foreground">
-                        {formatCurrency(totalBiaya)}
-                      </span>
-                    )}
+                    <span className="truncate text-xs font-medium tabular-nums text-foreground">
+                      {formatCurrency(totalBiaya)}
+                    </span>
                     {totalDibayar > 0 && (
                       <span className="text-[9px] text-muted-foreground">
                         Dibayar: {formatCurrency(totalDibayar)}
                       </span>
-                    )}
-                    {totalBiaya === 0 && (
-                      <span className="text-xs text-muted-foreground/50">—</span>
                     )}
                   </div>
                   <div className="flex items-center">
@@ -478,7 +627,16 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                               className="h-7 gap-1 text-[10px]"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                showDetail(service);
+                                const allowedActions = workflow.getAllowedActions(service);
+                                if (allowedActions.allowedNext.length > 0) {
+                                  setPendingTransition({
+                                    serviceId: service.id,
+                                    serviceNumber: service.serviceNumber || service.deviceName,
+                                    fromUiStatus: service.status,
+                                    toUiStatus: allowedActions.allowedNext[0].toLowerCase(),
+                                  });
+                                  setStatusDialogOpen(true);
+                                }
                               }}
                             >
                               <ArrowRightCircle className="size-3" />
@@ -514,27 +672,38 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                             </Button>
                           )}
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             className="h-7 gap-1 text-[10px]"
                             onClick={(e) => {
                               e.stopPropagation();
-                              showDetail(service);
+                              console.log("[services:quick-action] sparepart click", {
+                                serviceId: service.id,
+                                serviceNumber: service.serviceNumber,
+                                status: service.status,
+                              });
+                              onOpenSparepart?.(service.id);
                             }}
                           >
                             <Wrench className="size-3" />
                             Sparepart
                           </Button>
-                          {service.payments.every(
+                          {role !== "TECHNICIAN" && service.payments.every(
                             (p) => p.status === "belum"
                           ) && (
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
                               className="h-7 gap-1 text-[10px]"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                showDetail(service);
+                                console.log("[services:quick-action] payment click", {
+                                  serviceId: service.id,
+                                  serviceNumber: service.serviceNumber,
+                                });
+                                onOpenPayment?.(service.id);
                               }}
                             >
                               <CreditCard className="size-3" />
@@ -559,7 +728,10 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                 )}
               </div>
             );
-          })}
+          })
+          ) : (
+            <ServiceEmptyState />
+          )}
 
           {pagination}
         </div>
@@ -567,8 +739,11 @@ export function ServiceListView({ services }: ServiceListViewProps) {
 
       {/* Mobile: Card-style */}
       <div className="flex flex-col gap-3 md:hidden">
-        {paginatedServices.map((service) => {
-          const totalBiaya = getTotalSparepartCost(service.spareparts);
+        {isLoading ? (
+          <ServiceMobileSkeletonCards />
+        ) : paginatedServices.length > 0 ? (
+          paginatedServices.map((service) => {
+          const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
           const isExpanded = expandedId === service.id;
 
           return (
@@ -579,18 +754,21 @@ export function ServiceListView({ services }: ServiceListViewProps) {
               {/* Card Header */}
               <button
                 type="button"
-                onClick={() => toggleExpand(service.id)}
+                onClick={() => {
+                  toggleExpand(service.id);
+                  showDetail(service);
+                }}
                 className="flex items-start justify-between gap-2 text-left"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <div className="flex items-center gap-2">
                     <DeviceIcon record={service} />
                     <span className="truncate text-xs font-medium text-foreground">
-                      {service.deviceBrand} {service.deviceModel}
+                      {service.serviceNumber || service.deviceName}
                     </span>
                   </div>
                   <span className="truncate text-[10px] text-muted-foreground">
-                    {service.customerName}
+                    {service.deviceName} · {service.customerName}
                   </span>
                 </div>
                 <span
@@ -612,17 +790,13 @@ export function ServiceListView({ services }: ServiceListViewProps) {
 
               {/* Card Meta */}
               <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                <span>{service.id}</span>
+                <span>{service.branchName ?? "Cabang tidak diketahui"}</span>
                 <span>·</span>
-                <span>{service.technician || "—"}</span>
-                {totalBiaya > 0 && (
-                  <>
-                    <span>·</span>
-                    <span className="tabular-nums">
-                      {formatCurrency(totalBiaya)}
-                    </span>
-                  </>
-                )}
+                <span>{service.technicianName || "—"}</span>
+                <span>·</span>
+                <span className="tabular-nums">
+                  {formatCurrency(totalBiaya)}
+                </span>
               </div>
 
               {/* Expand Toggle */}
@@ -691,7 +865,18 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                       variant="outline"
                       size="sm"
                       className="h-7 gap-1 text-[10px]"
-                      onClick={() => showDetail(service)}
+                      onClick={() => {
+                        const allowedActions = workflow.getAllowedActions(service);
+                        if (allowedActions.allowedNext.length > 0) {
+                          setPendingTransition({
+                            serviceId: service.id,
+                            serviceNumber: service.serviceNumber || service.deviceName,
+                            fromUiStatus: service.status,
+                            toUiStatus: allowedActions.allowedNext[0].toLowerCase(),
+                          });
+                          setStatusDialogOpen(true);
+                        }
+                      }}
                     >
                       <ArrowRightCircle className="size-3" />
                       {workflow.getAllowedActions(service).nextLabel ?? "Update Status"}
@@ -719,10 +904,18 @@ export function ServiceListView({ services }: ServiceListViewProps) {
                       </Button>
                     )}
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       className="h-7 gap-1 text-[10px]"
-                      onClick={() => showDetail(service)}
+                      onClick={() => {
+                        console.log("[services:quick-action] sparepart click", {
+                          serviceId: service.id,
+                          serviceNumber: service.serviceNumber,
+                          status: service.status,
+                        });
+                        onOpenSparepart?.(service.id);
+                      }}
                     >
                       Tambah Sparepart
                     </Button>
@@ -739,7 +932,12 @@ export function ServiceListView({ services }: ServiceListViewProps) {
               )}
             </div>
           );
-        })}
+        })
+        ) : (
+          <div className="rounded-lg border bg-card">
+            <ServiceEmptyState />
+          </div>
+        )}
         <div className="overflow-hidden rounded-lg border bg-card">
           {pagination}
         </div>
@@ -751,8 +949,11 @@ export function ServiceListView({ services }: ServiceListViewProps) {
           open={cancelTarget !== null}
           onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
           service={cancelTarget}
+          brandSlug={brandSlug}
+          role={role as any}
           onConfirm={() => {
             setCancelTarget(null);
+            onServiceUpdated?.();
           }}
         />
       )}
@@ -763,11 +964,70 @@ export function ServiceListView({ services }: ServiceListViewProps) {
           open={reopenTarget !== null}
           onOpenChange={(open) => { if (!open) setReopenTarget(null); }}
           service={reopenTarget}
+          brandSlug={brandSlug}
+          role={role as any}
           onConfirm={() => {
             setReopenTarget(null);
+            onServiceUpdated?.();
           }}
         />
       )}
+
+      {/* Status transition dialog */}
+      <StatusTransitionDialog
+        open={statusDialogOpen}
+        onOpenChange={(open) => {
+          setStatusDialogOpen(open);
+          if (!open) setPendingTransition(null);
+        }}
+        pending={pendingTransition}
+        isSubmitting={statusSubmitLoading}
+        error={statusSubmitError}
+        onConfirm={async (note) => {
+          if (!pendingTransition) return;
+          setStatusSubmitLoading(true);
+          setStatusSubmitError(null);
+          try {
+            const response = await updateServiceStatusAction({
+              brandSlug,
+              serviceId: pendingTransition.serviceId,
+              nextStatus: pendingTransition.toUiStatus,
+              targetColumn: pendingTransition.toUiStatus,
+              note: note || undefined,
+            });
+            if (response.success) {
+              setStatusDialogOpen(false);
+              setPendingTransition(null);
+              triggerDynamicIslandFeedback({
+                type: "success",
+                title: "Status berhasil diperbarui",
+                description: `Servis berhasil dipindahkan.`,
+                duration: 1800,
+              });
+              onServiceUpdated?.();
+            } else {
+              setStatusSubmitError(response.error ?? "Gagal memperbarui status servis.");
+              triggerDynamicIslandFeedback({
+                type: "error",
+                title: "Gagal memperbarui status",
+                description: response.error ?? "Status servis gagal diperbarui.",
+                duration: 2400,
+              });
+            }
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : "Terjadi kesalahan tidak terduga.";
+            setStatusSubmitError(msg);
+            triggerDynamicIslandFeedback({
+              type: "error",
+              title: "Gagal memperbarui status",
+              description: msg,
+              duration: 2400,
+            });
+          } finally {
+            setStatusSubmitLoading(false);
+          }
+        }}
+      />
     </>
   );
 }

@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   SERVICE_VIEW: "service.view",
   SERVICE_CREATE: "service.create",
   SERVICE_UPDATE: "service.update",
+  SERVICE_UPDATE_STATUS: "service.update_status",
   SERVICE_TRANSITION: "service.transition",
   SERVICE_REOPEN: "service.reopen",
   SERVICE_ADD_SPAREPART: "service.add_sparepart",

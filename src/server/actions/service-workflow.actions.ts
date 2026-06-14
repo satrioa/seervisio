@@ -22,28 +22,92 @@ import { getServiceSparepartUsages } from "@/repositories/inventory.repository";
 import {
   callReturnServiceSparepartUsage,
   callTransitionServiceStatus,
+  callRecordServicePayment,
   callRecordServicePaymentFinanceEntries,
   callCalculateServicePaymentSummary,
+  getPaymentMethodsByBrand,
 } from "@/repositories/payment.repository";
+import { createServerSupabase } from "@/lib/supabase/server";
 
 /* ─── Update Service Status ─── */
+
+const UI_STATUS_TO_DB: Record<string, string> = {
+  masuk: "INTAKE",
+  diagnosa: "DIAGNOSIS",
+  menunggu_persetujuan: "WAITING_APPROVAL",
+  perbaikan: "REPAIRING",
+  qc: "QC",
+  selesai: "DONE",
+  cancelled: "CANCELLED",
+};
 
 export interface UpdateServiceStatusInput {
   brandSlug: string;
   serviceId: string;
   nextStatus: string;
+  targetColumn?: string;
   note?: string;
   reason?: string;
 }
 
 export async function updateServiceStatusAction(
   input: UpdateServiceStatusInput
-): Promise<ActionResult<{ fromStatus: string; toStatus: string }>> {
+): Promise<ActionResult<{
+  fromStatus: string;
+  toStatus: string;
+  dbFromStatus: string;
+  dbToStatus: string;
+  serviceId: string;
+}>> {
   try {
     const session = await getSessionData(input.brandSlug);
-    requireActionPermission(session.role, "service.update");
-    const service = await getServiceById(input.serviceId);
-    if (!service) return errorResult("Servis tidak ditemukan.");
+
+    console.log("[service:update-status] input", {
+      serviceId: input.serviceId,
+      nextStatus: input.nextStatus,
+      note: input.note,
+    });
+    console.log("[service:update-status] session", {
+      profileId: session.profileId,
+      role: session.role,
+      brandId: session.brandId,
+      defaultBranchId: session.defaultBranchId,
+      canAccessAllBranches: session.canAccessAllBranches,
+    });
+
+    requireActionPermission(session.role, "service.update_status");
+
+    // Lookup by id + brand_id (not branch_id — branch_id is for access check only)
+    const supabase = await createServerSupabase();
+    console.log("[service:update-status] lookup filters", {
+      id: input.serviceId,
+      brandId: session.brandId,
+      deletedAt: null,
+      note: "Not filtering by activeBranchId here",
+    });
+    const { data: service, error: lookupError } = await (supabase as any)
+      .from("services")
+      .select("id, brand_id, branch_id, current_status, service_number, deleted_at")
+      .eq("id", input.serviceId)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+
+    console.log("[service:update-status] lookup result", {
+      found: Boolean(service),
+      serviceId: service?.id,
+      serviceBrandId: service?.brand_id,
+      serviceBranchId: service?.branch_id,
+      currentStatus: service?.current_status,
+      deletedAt: service?.deleted_at,
+    });
+
+    if (!service) {
+      return errorResult("Servis tidak ditemukan atau bukan milik brand ini.");
+    }
+
     requireBranchAccess(session, service.branch_id, "updateServiceStatusAction");
 
     const currentStatus = normalizeServiceStatus(service.current_status);
@@ -61,20 +125,177 @@ export async function updateServiceStatusAction(
       return errorResult(validation.reason ?? "Transisi status tidak valid.");
     }
 
-    const dbNextStatus = toDbStatus(nextStatus);
-if ((nextStatus as unknown as string) === "DIAMBIL") {
-  return errorResult("Diambil bukan status servis. Gunakan verifikasi pengambilan unit.");
-}
-    await callTransitionServiceStatus(
-      service.id,
-      dbNextStatus,
-      session.profileId,
-      input.note ?? input.reason ?? null
-    );
+    const dbNextStatus =
+      (input.targetColumn && UI_STATUS_TO_DB[input.targetColumn])
+        ? UI_STATUS_TO_DB[input.targetColumn]
+        : toDbStatus(nextStatus);
+
+    console.log("[service:update-status] transition", {
+      serviceId: input.serviceId,
+      currentDbStatus: service.current_status,
+      inputToStatus: input.nextStatus,
+      targetDbStatus: dbNextStatus,
+      isSame: service.current_status === dbNextStatus,
+    });
+
+    // Same-status check: compare DB canonical statuses
+    if (service.current_status === dbNextStatus) {
+      return errorResult("Status servis sudah sama.");
+    }
+
+    if ((nextStatus as unknown as string) === "DIAMBIL") {
+      return errorResult("Diambil bukan status servis. Gunakan verifikasi pengambilan unit.");
+    }
+
+    // ── Direct update (replaces RPC `transition_service_status`) ──
+    const timestampColumns: Record<string, string> = {
+      INTAKE: "intake_at",
+      DIAGNOSIS: "diagnosis_at",
+      WAITING_APPROVAL: "waiting_approval_at",
+      REPAIRING: "repairing_at",
+      QC: "qc_at",
+      DONE: "done_at",
+      CANCELLED: "cancelled_at",
+    };
+
+    const updateData: Record<string, unknown> = {
+      current_status: dbNextStatus,
+      previous_status: service.current_status,
+      updated_by: session.profileId,
+      updated_at: new Date().toISOString(),
+    };
+
+    const tsCol = timestampColumns[dbNextStatus];
+    if (tsCol) {
+      updateData[tsCol] = new Date().toISOString();
+    }
+
+    if (dbNextStatus === "CANCELLED") {
+      updateData.cancel_reason = input.note ?? input.reason ?? null;
+    }
+
+    // ── Diagnostic: log actual Supabase auth user ──
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    console.log("[service:update-status] supabase auth user", {
+      authUserId: authData.user?.id,
+      authEmail: authData.user?.email,
+      authError,
+    });
+
+    const { data: dbActor, error: dbActorError } = await (supabase as any)
+      .from("profiles")
+      .select(`
+        id,
+        auth_user_id,
+        email,
+        name,
+        is_active,
+        user_brand_memberships (
+          id,
+          brand_id,
+          role,
+          is_active
+        )
+      `)
+      .eq("auth_user_id", authData.user?.id)
+      .maybeSingle();
+    console.log("[service:update-status] db actor by auth uid", {
+      dbActor,
+      dbActorError,
+    });
+
+    // ── Diagnostic: can we SELECT the row using this client? ──
+    const { data: canSeeServiceBeforeUpdate, error: canSeeError } = await (supabase as any)
+      .from("services")
+      .select("id, brand_id, branch_id, current_status")
+      .eq("id", service.id)
+      .eq("brand_id", session.brandId)
+      .maybeSingle();
+    console.log("[service:update-status] can see before update", {
+      canSeeServiceBeforeUpdate,
+      canSeeError,
+    });
+
+    console.log("[service:update-status] update filters", {
+      id: service.id,
+      brandId: session.brandId,
+      deletedAtIsNull: true,
+      serviceBranchId: service.branch_id,
+      previousStatus: service.current_status,
+      targetDbStatus: dbNextStatus,
+      note: "No concurrency guard, no activeBranchId filter",
+    });
+
+    const { data: updatedService, error: updateError } = await (supabase as any)
+      .from("services")
+      .update(updateData)
+      .eq("id", service.id)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .select("id, brand_id, branch_id, current_status, updated_at")
+      .maybeSingle();
+
+    console.log("[service:update-status] update result", {
+      hasData: Boolean(updatedService),
+      error: updateError,
+      updatedStatus: updatedService?.current_status,
+    });
+
+    if (updateError) {
+      console.error("[service:update-status] db update failed", updateError);
+      return errorResult("Gagal memperbarui status servis.");
+    }
+
+    if (!updatedService) {
+      console.error("[service:update-status] db update affected 0 rows", {
+        serviceId: service.id,
+        brandId: session.brandId,
+        serviceBranchId: service.branch_id,
+        previousStatus: service.current_status,
+        targetDbStatus: dbNextStatus,
+        note: "RLS or concurrency guard blocked the update",
+      });
+      return errorResult("Status servis gagal tersimpan. Coba lagi atau hubungi admin.");
+    }
+
+    // Verify the DB row was actually updated
+    if (updatedService.current_status !== dbNextStatus) {
+      console.error("[service:update-status] db verification failed", {
+        expected: dbNextStatus,
+        actual: updatedService.current_status,
+      });
+      return errorResult("Status servis gagal tersimpan ke database.");
+    }
+
+    // Optional fresh select to confirm persistence
+    const { data: freshService, error: freshError } = await (supabase as any)
+      .from("services")
+      .select("id, current_status, updated_at")
+      .eq("id", service.id)
+      .eq("brand_id", session.brandId)
+      .maybeSingle();
+
+    console.log("[service:update-status] fresh db status", {
+      serviceId: service.id,
+      expected: dbNextStatus,
+      actual: freshService?.current_status,
+      freshError,
+    });
+
+    // Insert status history
+    await addServiceTimelineEntry({
+      brand_id: service.brand_id,
+      branch_id: service.branch_id,
+      service_id: service.id,
+      from_status: service.current_status,
+      to_status: dbNextStatus,
+      reason: input.note ?? input.reason ?? null,
+      changed_by: session.profileId,
+    });
+
+    // ── End direct update ──
 
     if (dbNextStatus === "DONE") {
-      const { createServerSupabase } = await import("@/lib/supabase/server");
-      const supabase = await createServerSupabase();
       const { data: payments } = await (supabase as any)
         .from("service_payments")
         .select("id")
@@ -94,18 +315,23 @@ if ((nextStatus as unknown as string) === "DIAMBIL") {
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_STATUS_UPDATED",
-      entity_type: "service",
-      entity_id: service.id,
+      target_type: "service",
+      target_id: service.id,
+      target_label: service.service_number,
       actor_id: session.profileId,
-      metadata: { from_status: service.current_status, to_status: dbNextStatus, reason: input.note ?? null },
+      description: `Status diubah: ${service.current_status} → ${dbNextStatus}`,
+      details: { from_status: service.current_status, to_status: dbNextStatus, reason: input.note ?? null },
     });
 
-    return successResult({ fromStatus: currentStatus, toStatus: nextStatus });
+    return successResult({
+      fromStatus: currentStatus,
+      toStatus: nextStatus,
+      dbFromStatus: service.current_status,
+      dbToStatus: freshService?.current_status ?? dbNextStatus,
+      serviceId: service.id,
+    });
   } catch (err: any) {
     console.error("[updateServiceStatusAction]", err);
-    if (err.message?.includes("Invalid status transition")) {
-      return errorResult("Status servis harus berpindah secara berurutan.");
-    }
     return errorResult(err.message ?? "Gagal mengubah status servis.");
   }
 }
@@ -163,10 +389,12 @@ export async function cancelServiceAction(
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_CANCELLED",
-      entity_type: "service",
-      entity_id: service.id,
+      target_type: "service",
+      target_id: service.id,
+      target_label: service.service_number,
       actor_id: session.profileId,
-      metadata: { reason: input.reason, return_stock: input.returnStock, previous_status: service.current_status },
+      description: `Servis dibatalkan: ${input.reason}`,
+      details: { reason: input.reason, return_stock: input.returnStock, previous_status: service.current_status },
     });
 
     return successResult(undefined);
@@ -210,10 +438,12 @@ export async function reopenServiceAction(
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_REOPENED",
-      entity_type: "service",
-      entity_id: service.id,
+      target_type: "service",
+      target_id: service.id,
+      target_label: service.service_number,
       actor_id: session.profileId,
-      metadata: { reason: input.reason, reopened_from: service.current_status, reopened_to: targetStatus },
+      description: `Servis dibuka ulang: ${input.reason}`,
+      details: { reason: input.reason, reopened_from: service.current_status, reopened_to: targetStatus },
     });
 
     return successResult(undefined);
@@ -301,10 +531,12 @@ export async function addServiceSparepartAction(
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_SPAREPART_ADDED",
-      entity_type: "service",
-      entity_id: service.id,
+      target_type: "service",
+      target_id: service.id,
+      target_label: service.service_number,
       actor_id: session.profileId,
-      metadata: { items: input.items as any, usage_ids: usageIds, note: input.note },
+      description: `Sparepart ditambahkan: ${input.items.length} item`,
+      details: { items: input.items as any, usage_ids: usageIds, note: input.note },
     });
 
     return successResult({ usageIds });
@@ -314,9 +546,36 @@ export async function addServiceSparepartAction(
   }
 }
 
-/* ─── Receive Service Payment ─── */
+/* ─── Get Payment Methods ─── */
 
-import { callRecordServicePayment } from "@/repositories/payment.repository";
+export async function getServicePaymentMethodsAction(
+  brandSlug: string,
+): Promise<ActionResult<Array<{ id: string; name: string; type: string; mdrPercentage: number; defaultPaymentAccountId: string | null }>>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    if (!session) return errorResult("Sesi tidak valid.");
+
+    const methods = await getPaymentMethodsByBrand(session.brandId);
+    return successResult(
+      methods.map((method: any) => ({
+        id: method.id,
+        name: method.name,
+        type: method.type,
+        mdrPercentage: method.mdr_percentage,
+        defaultPaymentAccountId: method.default_payment_account_id,
+      })),
+    );
+  } catch (err: any) {
+    console.error("[getServicePaymentMethodsAction]", err);
+    return errorResult(err.message || "Gagal mengambil metode pembayaran.");
+  }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/* ─── Receive Service Payment ─── */
 
 export interface ReceivePaymentInput {
   brandSlug: string;
@@ -332,7 +591,13 @@ export async function receiveServicePaymentAction(
 ): Promise<ActionResult<any>> {
   try {
     const session = await getSessionData(input.brandSlug);
+    if (session.role === "TECHNICIAN") {
+      return errorResult("Role Anda tidak memiliki akses untuk menerima pembayaran.");
+    }
     requireActionPermission(session.role, "service.payment.create");
+    if (!isUuid(input.paymentMethodId)) {
+      return errorResult("Metode pembayaran tidak valid. Pilih ulang metode pembayaran.");
+    }
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "receiveServicePaymentAction");
@@ -383,10 +648,12 @@ export async function receiveServicePaymentAction(
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_PAYMENT_RECEIVED",
-      entity_type: "service_payment",
-      entity_id: paymentResult?.service_payment_id,
+      target_type: "service_payment",
+      target_id: paymentResult?.service_payment_id,
+      target_label: paymentResult?.payment_number,
       actor_id: session.profileId,
-      metadata: { service_id: service.id, amount: input.amount, payment_number: paymentResult?.payment_number, payment_type: input.paymentType },
+      description: `Pembayaran diterima: ${paymentResult?.payment_number ?? ""}`,
+      details: { service_id: service.id, amount: input.amount, payment_number: paymentResult?.payment_number, payment_type: input.paymentType },
     });
 
     return successResult(paymentResult);
@@ -497,10 +764,12 @@ export async function verifyServicePickupAction(
     await addAuditLog({
       brand_id: service.brand_id,
       action: "SERVICE_PICKUP_VERIFIED",
-      entity_type: "service",
-      entity_id: service.id,
+      target_type: "service",
+      target_id: service.id,
+      target_label: service.service_number,
       actor_id: session.profileId,
-      metadata: {
+      description: `Unit diserahkan kepada ${input.pickupName.trim()}`,
+      details: {
         pickup_name: input.pickupName.trim(),
         pickup_relation: input.pickupRelation.trim(),
         pickup_phone: input.pickupPhone?.trim() || null,

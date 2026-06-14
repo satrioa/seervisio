@@ -5,8 +5,10 @@ import {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import * as React from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   DynamicIslandProvider,
   useDynamicIslandSize,
@@ -24,18 +26,16 @@ import {
   LogOut,
 } from "lucide-react";
 import { type DynamicIslandFeedbackPayload } from "@/lib/dynamic-island/dynamic-island-events";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
+import { useStoreShift } from "@/features/store-shift/store-shift-provider";
 
 /* ── Types ── */
-type ShiftStatus = "NONE" | "OPEN";
 type IslandMode = "welcome" | "idle" | "expanded" | "feedback";
 type ActionState = "idle" | "loading" | "success" | "error" | "info";
 
-/* ── Mock constants ── */
-const MOCK_USER_NAME = "Master Admin";
-const MOCK_BRANCH_NAME = "Kasservice Semarang";
-
 /* ── Spring config ── */
 const spring = { type: "spring" as const, stiffness: 400, damping: 30 };
+const feedbackTextTransition = { duration: 0.22, ease: "easeOut" as const };
 
 /* ── Helpers ── */
 function formatDuration(ms: number): string {
@@ -56,32 +56,42 @@ function getPresetDimensions(size: keyof typeof DynamicIslandSizePresets) {
   };
 }
 
-function getFeedbackDimensions(actionState: ActionState, hasDescription?: boolean) {
-  if (hasDescription) {
-    switch (actionState) {
-      case "loading": return { width: 260, height: 58 };
-      case "success": return { width: 240, height: 58 };
-      case "error":   return { width: 260, height: 58 };
-      case "info":    return { width: 200, height: 58 };
-      default:        return { width: 200, height: 58 };
-    }
-  }
+function getDynamicIslandFeedbackLines(title: string, description?: string | null) {
+  const lines: string[] = [];
+  if (title && title.trim()) lines.push(title);
+  if (description && description.trim()) lines.push(description);
+  return lines;
+}
+
+function getFeedbackDimensions(actionState: ActionState) {
+  const height = 44;
   switch (actionState) {
-    case "loading": return { width: 260, height: 38 };
-    case "success": return { width: 230, height: 38 };
-    case "error":   return { width: 240, height: 38 };
-    case "info":    return { width: 180, height: 38 };
-    default:        return { width: 180, height: 38 };
+    case "loading": return { width: 280, height };
+    case "success": return { width: 260, height };
+    case "error":   return { width: 260, height };
+    case "info":    return { width: 220, height };
+    default:        return { width: 220, height };
   }
 }
 
 /* ── Inner component ── */
-function SeervisIslandContent({ userName }: { userName?: string }) {
+function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; onOpenShift?: () => void }) {
   const { setSize } = useDynamicIslandSize();
+  const { activeBranchName } = useActiveBranch();
+  const displayBranchName = activeBranchName ?? "Semua Cabang";
+  const { activeShift, isShiftLoading } = useStoreShift();
+
+  const hasActiveShift = activeShift !== null && activeShift.shiftStatus === "OPEN";
+
+  console.log("[dynamic-island:shift] render", {
+    isShiftLoading,
+    activeShiftId: activeShift?.id,
+    status: activeShift?.shiftStatus,
+    branchName: activeBranchName,
+  });
 
   /* State */
   const [mode, setMode] = useState<IslandMode>("welcome");
-  const [shiftStatus, setShiftStatus] = useState<ShiftStatus>("NONE");
   const [actionState, setActionState] = useState<ActionState>("idle");
   const [isExpanded, setIsExpanded] = useState(false);
   const [elapsed, setElapsed] = useState("00:00:00");
@@ -93,6 +103,35 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
   const [feedbackTitle, setFeedbackTitle] = useState("");
   const [feedbackDescription, setFeedbackDescription] = useState<string | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [activeLineIndex, setActiveLineIndex] = useState(0);
+
+  const feedbackLines = useMemo(
+    () => getDynamicIslandFeedbackLines(feedbackTitle, feedbackDescription),
+    [feedbackTitle, feedbackDescription],
+  );
+
+  const shouldReduceMotion = useReducedMotion();
+
+  /* Sync active shift from provider — after welcome, set idle state */
+  useEffect(() => {
+    if (mode === "welcome" || mode === "feedback") return;
+    if (hasActiveShift) {
+      shiftStartRef.current = new Date(activeShift!.openedAt);
+      setElapsed(formatDuration(Date.now() - new Date(activeShift!.openedAt).getTime()));
+    }
+  }, [hasActiveShift, activeShift, mode]);
+
+  /* Ticker for multi-line feedback */
+  useEffect(() => {
+    setActiveLineIndex(0);
+    if (feedbackLines.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setActiveLineIndex((prev) => (prev + 1) % feedbackLines.length);
+    }, 1600);
+
+    return () => clearInterval(interval);
+  }, [feedbackLines]);
 
   /* Welcome auto-transition after 2.2s */
   useEffect(() => {
@@ -108,12 +147,12 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
 
   /* Duration ticker when shift is open */
   useEffect(() => {
-    if (shiftStatus !== "OPEN" || !shiftStartRef.current) return;
+    if (!hasActiveShift || !shiftStartRef.current) return;
     const interval = setInterval(() => {
       setElapsed(formatDuration(Date.now() - shiftStartRef.current!.getTime()));
     }, 1000);
     return () => clearInterval(interval);
-  }, [shiftStatus]);
+  }, [hasActiveShift]);
 
   /* Toggle expand/collapse */
   const handleToggle = useCallback(() => {
@@ -161,29 +200,24 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
 
       const { type, title, description, duration } = detail;
 
-      // Clear existing auto-dismiss timer
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current);
         feedbackTimerRef.current = null;
       }
 
-      // Set feedback state
       setFeedbackTitle(title);
       setFeedbackDescription(description ?? null);
       setActionState(type);
       setMode("feedback");
       setSize("compact" as any);
 
-      // Loading stays until replaced by another event
       if (type === "loading") return;
 
-      // Error shake
       if (type === "error") {
         setErrorShake(true);
         setTimeout(() => setErrorShake(false), 500);
       }
 
-      // Auto-dismiss after duration (default 1800ms)
       const dismissAfter = duration ?? 1800;
       feedbackTimerRef.current = setTimeout(() => {
         setActionState("idle");
@@ -210,27 +244,29 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
     };
   }, [setSize]);
 
-  /* Buka Toko flow: loading → success → shift running */
   const handleBukaToko = useCallback(() => {
-    setActionState("loading");
-    setMode("feedback");
-    setSize("compact" as any);
+    onOpenShift?.();
+  }, [onOpenShift]);
 
-    setTimeout(() => {
+  /* Listen for shift-changed event — refetch provider + show feedback */
+  useEffect(() => {
+    const handler = () => {
       setActionState("success");
+      setMode("feedback");
+      setSize("compact" as any);
+      shiftStartRef.current = new Date();
+      setElapsed("00:00:00");
       setTimeout(() => {
-        setShiftStatus("OPEN");
-        shiftStartRef.current = new Date();
-        setElapsed("00:00:00");
         setActionState("idle");
         setMode("idle");
         setIsExpanded(false);
         setSize("compact" as any);
       }, 1400);
-    }, 2000);
+    };
+    window.addEventListener("seervis:shift-changed", handler);
+    return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Demo error button */
   const handleError = useCallback(() => {
     setActionState("error");
     setMode("feedback");
@@ -246,16 +282,16 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
 
   /* Current dimensions based on mode */
   const dims =
-    mode === "expanded" && shiftStatus === "OPEN"
+    mode === "expanded" && hasActiveShift
       ? { width: 371, height: 150 }
-      : mode === "expanded" && shiftStatus === "NONE"
+      : mode === "expanded" && !hasActiveShift
         ? { width: 371, height: 150 }
         : mode === "welcome"
           ? { width: 371, height: 84 }
           : mode === "feedback"
-            ? getFeedbackDimensions(actionState, !!feedbackDescription)
-            : mode === "idle" && shiftStatus === "OPEN"
-              ? { width: 204, height: 38 }
+            ? getFeedbackDimensions(actionState)
+            : mode === "idle" && hasActiveShift
+              ? { width: 250, height: 44 }
               : getPresetDimensions(mode === "expanded" ? "medium" : "compact");
   const initialDims =
     mode === "welcome" ? getPresetDimensions("compact") : dims;
@@ -320,7 +356,7 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
         )}
 
         {/* ── Idle + No shift ── */}
-        {mode === "idle" && shiftStatus === "NONE" && (
+        {mode === "idle" && !hasActiveShift && !isShiftLoading && (
           <motion.div
             key="idle-none"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -349,10 +385,10 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
                 }}
               >
                 <span className="pr-6 text-xs text-white/60 dark:text-black/60">
-                  Buka toko untuk memulai session
+                  {displayBranchName} · Buka toko untuk memulai session
                 </span>
                 <span className="pr-6 text-xs text-white/60 dark:text-black/60" aria-hidden="true">
-                  Buka toko untuk memulai session
+                  {displayBranchName} · Buka toko untuk memulai session
                 </span>
               </motion.div>
             </div>
@@ -370,24 +406,39 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
         )}
 
         {/* ── Idle + Shift running ── */}
-        {mode === "idle" && shiftStatus === "OPEN" && (
+        {mode === "idle" && hasActiveShift && (
           <motion.div
             key="idle-open"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex items-center gap-2 px-4"
+            className="flex items-center justify-center gap-2.5 px-5"
           >
             <Clock className="size-3.5 shrink-0 text-white/50 dark:text-black/50" />
-            <span className="truncate text-xs text-white/60 dark:text-black/60">
-              Shift berjalan · {elapsed}
+            <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80 font-medium">
+              {displayBranchName} - {elapsed}
             </span>
           </motion.div>
         )}
 
+        {/* ── Idle + Loading ── */}
+        {mode === "idle" && isShiftLoading && (
+          <motion.div
+            key="idle-loading"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={spring}
+            className="flex items-center justify-center gap-2.5 px-5"
+          >
+            <Loader2 className="size-3.5 animate-spin text-white/50 dark:text-black/50" />
+            <span className="text-xs text-white/50 dark:text-black/50">Memuat shift...</span>
+          </motion.div>
+        )}
+
         {/* ── Expanded + No shift ── */}
-        {mode === "expanded" && shiftStatus === "NONE" && (
+        {mode === "expanded" && !hasActiveShift && (
           <motion.div
             key="expanded-none"
             initial={{ opacity: 0, y: 8 }}
@@ -415,23 +466,12 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
                 <Store className="size-3.5" />
                 Buka Toko
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 rounded-full border-white/20 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white dark:border-black/20 dark:text-black/70 dark:hover:bg-black/10 dark:hover:text-black"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleError();
-                }}
-              >
-                Demo Error
-              </Button>
             </div>
           </motion.div>
         )}
 
         {/* ── Expanded + Shift running ── */}
-        {mode === "expanded" && shiftStatus === "OPEN" && (
+        {mode === "expanded" && hasActiveShift && (
           <motion.div
             key="expanded-open"
             initial={{ opacity: 0, y: 8 }}
@@ -445,7 +485,7 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
             </div>
 
             <div className="space-y-1.5">
-              <InfoRow label="Branch" value={MOCK_BRANCH_NAME} />
+              <InfoRow label="Branch" value={displayBranchName} />
               <InfoRow label="Duration" value={elapsed} />
             </div>
 
@@ -457,7 +497,7 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <LogOut className="size-3.5" />
-                Tutup Shift
+                Akhiri Shift
               </Button>
               <Button
                 size="sm"
@@ -474,20 +514,16 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
         {/* ── Feedback states ── */}
         {mode === "feedback" && (
           <motion.div
-            key={`feedback-${actionState}`}
+            key={`feedback-container-${actionState}`}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className={`flex items-center justify-center whitespace-nowrap px-5 ${
-              feedbackDescription
-                ? "flex-col gap-0.5 py-2.5"
-                : "flex-row gap-2 py-2"
-            }`}
+            className="flex h-full items-center justify-center gap-2.5 overflow-hidden px-5"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
-                <Loader2 className="size-4 animate-spin text-white/50 dark:text-black/50" />
+                <Loader2 className="size-4 animate-spin text-white/70 dark:text-black/70" />
               )}
               {actionState === "success" && (
                 <CheckCircle className="size-4 text-green-400" />
@@ -498,37 +534,30 @@ function SeervisIslandContent({ userName }: { userName?: string }) {
               {actionState === "info" && (
                 <Info className="size-4 text-blue-400" />
               )}
-
-              <span
-                className={`text-xs font-medium ${
-                  actionState === "loading"
-                    ? "text-white/60 dark:text-black/60"
-                    : actionState === "success"
-                      ? "text-green-400"
-                      : actionState === "error"
-                        ? "text-red-400"
-                        : "text-blue-400"
-                }`}
-              >
-                {feedbackTitle}
-              </span>
             </div>
 
-            {feedbackDescription && (
-              <span
-                className={`text-[9px] ${
-                  actionState === "loading"
-                    ? "text-white/40 dark:text-black/40"
-                    : actionState === "success"
-                      ? "text-green-400/60"
-                      : actionState === "error"
-                        ? "text-red-400/60"
-                        : "text-blue-400/60"
-                }`}
-              >
-                {feedbackDescription}
-              </span>
-            )}
+            <div className="relative h-5 min-w-0 overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={`${actionState}-${activeLineIndex}-${feedbackLines[activeLineIndex]}`}
+                  className={`whitespace-nowrap text-xs font-semibold ${
+                    actionState === "loading"
+                      ? "text-white dark:text-black"
+                      : actionState === "success"
+                        ? "text-green-400"
+                        : actionState === "error"
+                          ? "text-red-400"
+                          : "text-blue-400"
+                  }`}
+                  initial={shouldReduceMotion ? { opacity: 0 } : { y: 10, opacity: 0 }}
+                  animate={shouldReduceMotion ? { opacity: 1 } : { y: 0, opacity: 1 }}
+                  exit={shouldReduceMotion ? { opacity: 0 } : { y: -10, opacity: 0 }}
+                  transition={shouldReduceMotion ? { duration: 0.15 } : feedbackTextTransition}
+                >
+                  {feedbackLines[activeLineIndex] || feedbackTitle || "Processing..."}
+                </motion.p>
+              </AnimatePresence>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -561,10 +590,10 @@ function InfoRow({
 }
 
 /* Public component */
-export function SeervisDynamicIsland({ userName }: { userName?: string }) {
+export function SeervisDynamicIsland({ userName, onOpenShift }: { userName?: string; onOpenShift?: () => void }) {
   return (
     <DynamicIslandProvider initialSize={"medium" as any}>
-      <SeervisIslandContent userName={userName} />
+      <SeervisIslandContent userName={userName} onOpenShift={onOpenShift} />
     </DynamicIslandProvider>
   );
 }

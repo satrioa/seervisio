@@ -53,7 +53,12 @@ export interface ServiceWithRelations extends ServiceRow {
   } | null;
   technician?: {
     id: string;
-    full_name: string | null;
+    name?: string | null;
+    full_name?: string | null;
+  } | null;
+  branch?: {
+    id: string;
+    name: string;
   } | null;
 }
 
@@ -65,8 +70,9 @@ export async function getServicesByBranch(
     .from("services")
     .select(`
       *,
-      customer:customers(id, name, phone, email, address),
-      technician:profiles(id, full_name)
+      customer:customers!services_customer_id_fkey(id, name, phone, email, address),
+      technician:profiles!services_assigned_technician_id_fkey(id, name),
+      branch:branches!services_branch_id_fkey(id, name)
     `)
     .eq("branch_id", branchId)
     .is("deleted_at", null)
@@ -83,8 +89,9 @@ export async function getServiceById(
     .from("services")
     .select(`
       *,
-      customer:customers(id, name, phone, email, address),
-      technician:profiles(id, full_name)
+      customer:customers!services_customer_id_fkey(id, name, phone, email, address),
+      technician:profiles!services_assigned_technician_id_fkey(id, name),
+      branch:branches!services_branch_id_fkey(id, name)
     `)
     .eq("id", id)
     .is("deleted_at", null)
@@ -101,8 +108,9 @@ export async function getServicesByBrand(
     .from("services")
     .select(`
       *,
-      customer:customers(id, name, phone, email, address),
-      technician:profiles(id, full_name)
+      customer:customers!services_customer_id_fkey(id, name, phone, email, address),
+      technician:profiles!services_assigned_technician_id_fkey(id, name),
+      branch:branches!services_branch_id_fkey(id, name)
     `)
     .eq("brand_id", brandId)
     .is("deleted_at", null)
@@ -270,21 +278,33 @@ export async function addServiceTimelineEntry(params: {
 export async function addAuditLog(params: {
   brand_id: number;
   action: string;
-  entity_type: string;
-  entity_id: string;
-  actor_id: string;
-  metadata?: Record<string, unknown>;
+  target_type?: string;
+  target_id?: string;
+  target_label?: string;
+  actor_id?: string;
+  actor_name?: string;
+  actor_role?: string;
+  description?: string;
+  details?: Record<string, unknown>;
+  request_id?: string;
+  ip_address?: string;
 }): Promise<void> {
   const supabase = await createServerSupabase();
   const { error } = await (supabase as any)
     .from("audit_logs")
     .insert({
       brand_id: params.brand_id,
+      actor_id: params.actor_id ?? null,
+      actor_name: params.actor_name ?? null,
+      actor_role: params.actor_role ?? null,
       action: params.action,
-      entity_type: params.entity_type,
-      entity_id: params.entity_id,
-      actor_id: params.actor_id,
-      metadata: params.metadata ?? {},
+      target_type: params.target_type ?? null,
+      target_id: params.target_id ?? null,
+      target_label: params.target_label ?? null,
+      description: params.description ?? null,
+      details: params.details ?? {},
+      ip_address: params.ip_address ?? null,
+      request_id: params.request_id ?? null,
       created_at: new Date().toISOString(),
     });
   if (error) throw error;

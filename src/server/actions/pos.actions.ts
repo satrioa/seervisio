@@ -185,7 +185,10 @@ export async function createPosSaleAction(
     // ── 1. Auth & Role ──
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
-    requireActionPermission(session.role, "pos.transaction");
+    if (session.role === "TECHNICIAN") {
+      return errorResult("Role Anda tidak memiliki akses untuk transaksi POS.");
+    }
+    requireActionPermission(session.role, "pos.sale.create");
 
     const supabase = await createServerSupabase();
     const branch = resolveSessionBranchId(session, input.branchId);

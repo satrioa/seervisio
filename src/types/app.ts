@@ -190,4 +190,6 @@ export interface StoreShift {
   closedAt?: string;
   openedBy?: string;
   closedBy?: string;
+  openedByName?: string;
+  closedByName?: string;
 }

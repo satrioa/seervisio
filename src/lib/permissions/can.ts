@@ -16,7 +16,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   PLATFORM_OWNER: [
     "layout.view_panel",
     "dashboard.view", "dashboard.view_all_branches",
-    "service.view", "service.create", "service.update", "service.transition",
+    "service.view", "service.create", "service.update", "service.update_status", "service.transition",
     "service.reopen", "service.add_sparepart",
     "service.payment.create", "service.verify_pickup", "service.delete",
     "customer.view", "customer.create",
@@ -32,7 +32,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   MASTER_ADMIN: [
     "layout.view_panel",
     "dashboard.view", "dashboard.view_all_branches",
-    "service.view", "service.create", "service.update", "service.transition",
+    "service.view", "service.create", "service.update", "service.update_status", "service.transition",
     "service.reopen", "service.add_sparepart",
     "service.payment.create", "service.verify_pickup", "service.delete",
     "customer.view", "customer.create",
@@ -48,7 +48,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ADMIN: [
     "layout.view_panel",
     "dashboard.view",
-    "service.view", "service.create", "service.update", "service.transition",
+    "service.view", "service.create", "service.update", "service.update_status", "service.transition",
     "service.add_sparepart",
     "service.payment.create", "service.verify_pickup",
     "customer.view", "customer.create",
@@ -62,21 +62,21 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   FRONTLINER: [
     "layout.view_panel",
     "dashboard.view",
-    "service.view", "service.create", "service.update",
+    "service.view", "service.create", "service.update", "service.update_status",
     "service.payment.create", "service.verify_pickup",
     "customer.view", "customer.create",
     "inventory.view",
     "payment_account.view",
     "pos.view", "pos.sale.create",
-    "store_shift.view",
+    "store_shift.view", "store_shift.open", "store_shift.close",
   ],
   TECHNICIAN: [
     "layout.view_panel",
     "dashboard.view",
-    "service.view", "service.update", "service.transition",
+    "service.view", "service.create", "service.update_status",
     "service.add_sparepart",
+    "customer.view", "customer.create",
     "inventory.view", "inventory.manage",
-    "store_shift.view",
   ],
 };
 

@@ -262,7 +262,7 @@ const ACTIVITY_LOG_GROUPS: { label: string; items: ActivityLogItem[] }[] = [
         type: "shift_closed",
         user: "Master Admin",
         text: "menutup shift dengan selisih kas Rp 5.000.",
-        tag: "Tutup Shift",
+        tag: "Akhiri Shift",
         time: "20:14",
       },
     ],

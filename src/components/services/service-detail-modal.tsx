@@ -44,6 +44,7 @@ import {
   getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
+import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 
 /* ══════════════════════════════════════════════
@@ -90,7 +91,7 @@ export function ServiceDetailModal({
   const isPaid =
     service.payments.length > 0 &&
     service.payments.every((p) => p.status === "lunas");
-  const isCancelled = localStatus === "batal";
+  const isCancelled = localStatus === "cancelled";
   const totalDueVal = Math.max(totalSparepart, 100000);
   const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
     totalDueVal,
@@ -107,7 +108,7 @@ export function ServiceDetailModal({
           <div className="flex items-start justify-between gap-4">
             <div className="flex flex-col gap-1">
               <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-                <service.deviceIcon className="size-4 text-muted-foreground" />
+                <ServiceDeviceIcon iconKey={service.deviceIconKey} className="size-4 text-muted-foreground" />
                 {service.id}
               </DialogTitle>
               <DialogDescription className="text-xs">

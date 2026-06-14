@@ -209,7 +209,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   TECHNICIAN: {
-    MASUK: { allowedNext: [], canCancel: false, canReopen: false },
+    MASUK: { allowedNext: ["DIAGNOSA"], canCancel: false, canReopen: false },
     DIAGNOSA: { allowedNext: ["PERBAIKAN"], canCancel: false, canReopen: false },
     PERBAIKAN: { allowedNext: ["QC"], canCancel: false, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: false, canReopen: false },

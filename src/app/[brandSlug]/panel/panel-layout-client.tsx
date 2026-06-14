@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -11,15 +12,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SeervisDynamicIsland } from "@/components/layout/seervis-dynamic-island";
+import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
 import { Bell, Moon, Sun } from "lucide-react";
 import { BrandThemeProvider } from "@/components/theme/brand-theme-provider";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { RightSidebarProvider } from "@/components/layout/right-sidebar-context";
 import { RightSidebarPanel } from "@/components/layout/right-sidebar-panel";
 import GradualBlur from "@/components/GradualBlur";
-import { ActiveBranchProvider, type ActiveBranchOption } from "@/components/layout/active-branch-context";
+import { ActiveBranchProvider, useActiveBranch, type ActiveBranchOption } from "@/components/layout/active-branch-context";
 import { PosCartProvider } from "@/components/pos/pos-cart-context";
 import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
+import { StoreShiftProvider } from "@/features/store-shift/store-shift-provider";
 import { saveRememberedAccount, loadRememberedAccounts } from "@/lib/auth/remembered-accounts";
 import { ROLE_LABELS } from "@/lib/permissions/roles";
 
@@ -30,6 +33,7 @@ interface PanelLayoutClientProps {
   initialBranchId: string | null;
   role: string;
   canAccessAllBranches: boolean;
+  authUserId: string;
   activeOperatorId: string | null;
   activeOperatorName: string | null;
   userName: string;
@@ -66,6 +70,7 @@ export function PanelLayoutClient({
   initialBranchId,
   role,
   canAccessAllBranches,
+  authUserId,
   activeOperatorId,
   activeOperatorName,
   userName,
@@ -76,7 +81,7 @@ export function PanelLayoutClient({
       <RightSidebarProvider>
         <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId}>
           <PosCartProvider>
-            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail}>{children}</PanelLayoutShell>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -89,6 +94,7 @@ function PanelLayoutShell({
   brandSlug,
   role,
   canAccessAllBranches,
+  authUserId,
   activeOperatorId,
   activeOperatorName,
   userName,
@@ -100,6 +106,23 @@ function PanelLayoutShell({
   const [isIslandDetached, setIsIslandDetached] = React.useState(false);
   const [showMainBottomBlur, setShowMainBottomBlur] = React.useState(false);
   const mainScrollRef = React.useRef<HTMLElement | null>(null);
+  const { activeBranchId, branches, activeBranchName } = useActiveBranch();
+  const [openShiftModal, setOpenShiftModal] = React.useState(false);
+
+  const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
+  const resolvedBranchName = resolvedBranchId
+    ? branches.find((b) => b.id === resolvedBranchId)?.name ?? activeBranchName ?? undefined
+    : undefined;
+
+  React.useEffect(() => {
+    const handler = () => setOpenShiftModal(true);
+    window.addEventListener("seervis:open-shift-modal", handler);
+    return () => window.removeEventListener("seervis:open-shift-modal", handler);
+  }, []);
+
+  const handleOpenShift = useCallback(() => {
+    setOpenShiftModal(true);
+  }, []);
 
   React.useEffect(() => {
     let animationFrame = 0;
@@ -186,6 +209,7 @@ function PanelLayoutShell({
     if (!existing) {
       saveRememberedAccount({
         profileId: activeOperatorId ?? "",
+        authUserId,
         name: userName ?? "",
         email: userEmail,
         role,
@@ -199,84 +223,85 @@ function PanelLayoutShell({
   const { mode: theme, toggleTheme } = useBrandTheme();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f3f2f0]">
-      <SidebarProvider>
-        <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
+    <StoreShiftProvider>
+      <div className="flex h-screen overflow-hidden bg-[#f3f2f0]">
+        <SidebarProvider>
+          <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
 
-        <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${isPosPage ? "pr-0" : "pr-2"}`}>
-          {/* ── Desktop header ── */}
-          <header className="relative z-40 flex h-16 items-center overflow-visible px-6">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger />
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                {pageTitle}
-              </h1>
-            </div>
-
-            {/* Dynamic Island — desktop only, sticky viewport top anchor */}
-            <motion.div
-              className="pointer-events-none fixed left-1/2 top-3 z-50 hidden md:block"
-              initial={false}
-              animate={{
-                x: "-50%",
-                scale: isIslandDetached ? 0.95 : 1,
-                y: isIslandDetached ? -1 : 0,
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 360,
-                damping: 32,
-                mass: 0.7,
-              }}
-            >
-              <div className="pointer-events-auto">
-                <SeervisDynamicIsland userName={userName} />
+          <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${isPosPage ? "pr-0" : "pr-2"}`}>
+            {/* ── Desktop header ── */}
+            <header className="relative z-40 flex h-16 items-center overflow-visible px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger />
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                  {pageTitle}
+                </h1>
               </div>
-            </motion.div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                onClick={toggleTheme}
-                aria-label={
-                  theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-                }
+              {/* Dynamic Island — desktop only, sticky viewport top anchor */}
+              <motion.div
+                className="pointer-events-none fixed left-1/2 top-3 z-50 hidden md:block"
+                initial={false}
+                animate={{
+                  x: "-50%",
+                  scale: isIslandDetached ? 0.95 : 1,
+                  y: isIslandDetached ? -1 : 0,
+                }}
+                transition={{
+                  type: "spring",
+                  stiffness: 360,
+                  damping: 32,
+                  mass: 0.7,
+                }}
               >
-                {theme === "dark" ? (
-                  <Sun className="size-4" />
-                ) : (
-                  <Moon className="size-4" />
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="relative size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                aria-label="Notifications"
-              >
-                <Bell className="size-4" />
-                <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />
-              </Button>
+                <div className="pointer-events-auto">
+                  <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} />
+                </div>
+              </motion.div>
+
+              <div className="ml-auto flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  onClick={toggleTheme}
+                  aria-label={
+                    theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+                  }
+                >
+                  {theme === "dark" ? (
+                    <Sun className="size-4" />
+                  ) : (
+                    <Moon className="size-4" />
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="relative size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  aria-label="Notifications"
+                >
+                  <Bell className="size-4" />
+                  <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />
+                </Button>
+              </div>
+            </header>
+
+            {/* ── Mobile Dynamic Island row ── */}
+            <div className="relative z-50 flex justify-center px-4 pb-3 pt-1 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
+              <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} />
             </div>
-          </header>
 
-          {/* ── Mobile Dynamic Island row ── */}
-          <div className="relative z-50 px-4 pb-3 md:hidden">
-            <SeervisDynamicIsland />
-          </div>
-
-          {/* Page content */}
-          <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-2xl shadow-sm outline-none ring-0 ${isPosPage ? "bg-card" : ""}`}>
-            <main
-              ref={mainScrollRef}
-              className={`relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden ${isPosPage ? "bg-card" : ""}`}
-            >
-              {children}
-            </main>
+            {/* Page content */}
+            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-2xl shadow-sm outline-none ring-0 ${isPosPage ? "bg-card" : ""}`}>
+              <main
+                ref={mainScrollRef}
+                className={`relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden ${isPosPage ? "bg-card" : ""}`}
+              >
+                {children}
+              </main>
             <GradualBlur
               target="parent"
               position="bottom"
@@ -305,6 +330,17 @@ function PanelLayoutShell({
       </SidebarProvider>
           {pathname?.includes("/panel/services") && <RightSidebarPanel />}
           {pathname?.includes("/panel/pos") && <PosCartSidebar />}
+
+      {resolvedBranchId && (
+        <StoreShiftOpenModal
+          open={openShiftModal}
+          onOpenChange={setOpenShiftModal}
+          brandSlug={brandSlug}
+          branchId={resolvedBranchId}
+          branchName={resolvedBranchName}
+        />
+      )}
     </div>
+    </StoreShiftProvider>
   );
 }

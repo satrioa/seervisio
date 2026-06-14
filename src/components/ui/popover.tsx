@@ -4,8 +4,25 @@ import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
+import { scheduleScrollLockGapReset } from "@/lib/reset-scroll-lock-gap"
 
-const Popover = PopoverPrimitive.Root
+function Popover({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+
+      if (open) {
+        scheduleScrollLockGapReset()
+      }
+    },
+    [onOpenChange]
+  )
+
+  return <PopoverPrimitive.Root {...props} onOpenChange={handleOpenChange} />
+}
 
 const PopoverTrigger = PopoverPrimitive.Trigger
 

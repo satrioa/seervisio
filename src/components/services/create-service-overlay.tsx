@@ -27,7 +27,11 @@ const initialFormData: CreateServiceFormData = {
   branch: "",
 };
 
-export function CreateServiceOverlay() {
+interface CreateServiceOverlayProps {
+  onSuccess?: () => void | Promise<void>;
+}
+
+export function CreateServiceOverlay({ onSuccess }: CreateServiceOverlayProps) {
   const { isCreateServiceOpen, closeCreateService } = useRightSidebar();
   const [currentStep, setCurrentStep] = React.useState(1);
   const [formData, setFormData] = React.useState<CreateServiceFormData>(initialFormData);
@@ -107,6 +111,7 @@ export function CreateServiceOverlay() {
                 onStepChange={setCurrentStep}
                 formData={formData}
                 onFormChange={setFormData}
+                onSuccess={onSuccess}
               />
             </div>
           </div>

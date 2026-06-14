@@ -13,7 +13,14 @@ import { PermissionError } from "@/lib/utils/errors";
  * Use in server actions and domain services.
  */
 export function requirePermission(role: Role | null | undefined, permission: Permission): void {
-  if (!can(role, permission)) {
+  const allowed = can(role, permission);
+  console.log("[permission:check]", {
+    action: "requirePermission",
+    role,
+    permission,
+    allowed,
+  });
+  if (!allowed) {
     throw new PermissionError("Role Anda tidak memiliki akses untuk aksi ini.");
   }
 }

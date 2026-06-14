@@ -201,7 +201,22 @@ const ChartTooltipContent = React.forwardRef<
                   )}
                 >
                   {formatter && item?.value !== undefined && item.name ? (
-                    formatter(item.value, item.name, item, index, item.payload)
+                    <>
+                      {!hideIndicator && (
+                        <div
+                          className="mt-0.5 h-2 w-3 shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]"
+                          style={
+                            {
+                              "--color-bg": indicatorColor,
+                              "--color-border": indicatorColor,
+                            } as React.CSSProperties
+                          }
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        {formatter(item.value, item.name, item, index, item.payload)}
+                      </div>
+                    </>
                   ) : (
                     <>
                       {itemConfig?.icon ? (

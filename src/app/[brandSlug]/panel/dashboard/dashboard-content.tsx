@@ -83,7 +83,7 @@ const PAYMENT_METHODS = [
 ];
 
 const FINANCE_ALERTS = [
-  "Kas perlu dicek sebelum tutup shift",
+  "Kas perlu dicek sebelum mengakhiri shift",
   "QRIS settlement belum masuk",
   "2 invoice servis belum lunas",
 ];

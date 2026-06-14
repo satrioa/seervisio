@@ -5,17 +5,7 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-
-function resetScrollLockGap() {
-  if (typeof document === "undefined") return
-
-  document.documentElement.style.setProperty("--removed-body-scroll-bar-size", "0px")
-  document.body.style.setProperty("--removed-body-scroll-bar-size", "0px")
-  document.documentElement.style.marginRight = "0px"
-  document.documentElement.style.paddingRight = "0px"
-  document.body.style.marginRight = "0px"
-  document.body.style.paddingRight = "0px"
-}
+import { scheduleScrollLockGapReset } from "@/lib/reset-scroll-lock-gap"
 
 function Select({
   onOpenChange,
@@ -26,12 +16,7 @@ function Select({
       onOpenChange?.(open)
 
       if (open) {
-        resetScrollLockGap()
-        window.requestAnimationFrame(resetScrollLockGap)
-        window.setTimeout(resetScrollLockGap, 0)
-        window.setTimeout(resetScrollLockGap, 50)
-        window.setTimeout(resetScrollLockGap, 150)
-        window.setTimeout(resetScrollLockGap, 300)
+        scheduleScrollLockGapReset()
       }
     },
     [onOpenChange]
