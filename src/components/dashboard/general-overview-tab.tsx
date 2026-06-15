@@ -214,7 +214,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
     },
     service: {
       totalActive: (data?.todayActivityCounts?.find((a) => a.label.includes("Servis"))?.count ?? 0),
-      completedToday: 0,
+      completedToday: data?.serviceCompletedToday ?? 0,
       needAttention: needActionsCount,
       overdueQc: qcCount,
       unpickedUnits: 0,

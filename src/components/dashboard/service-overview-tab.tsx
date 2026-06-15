@@ -50,6 +50,7 @@ function sevBadge(s: "high" | "medium" | "low") {
 
 type RecentServis = {
   id: string;
+  serviceNumber: string;
   customer: string;
   device: string;
   status: string;
@@ -70,10 +71,10 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
 
   const columns: ColumnDef<RecentServis>[] = [
     {
-      accessorKey: "id",
+      id: "serviceNumber",
       header: "ID Servis",
       cell: ({ row }) => (
-        <span className="text-xs font-medium text-foreground">{row.getValue("id")}</span>
+        <span className="text-xs font-medium text-foreground">{row.original.serviceNumber}</span>
       ),
     },
     {
@@ -131,6 +132,7 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
   const table = useReactTable({
     data: recentServices.map((rs) => ({
       id: rs.id,
+      serviceNumber: rs.serviceNumber,
       customer: rs.customer,
       device: rs.device,
       status: rs.status,

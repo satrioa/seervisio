@@ -142,7 +142,7 @@ export async function searchPosProducts(
       unit_name,
       is_active,
       inventory_categories(name),
-      branch_inventory_stocks!inner(
+      branch_inventory_stocks(
         current_stock,
         available_stock
       )
@@ -204,7 +204,7 @@ export async function searchPosProducts(
       };
     })
     .filter((item: PosProductResult & { trackStock: boolean }) => {
-      if (item.itemType === "DEVICE_UNIT") return item.availableStock > 0;
+      if (item.itemType === "DEVICE_UNIT") return true;
       return !item.trackStock || item.availableStock > 0;
     })
     .map(({ trackStock, ...item }) => item);
@@ -223,15 +223,24 @@ export async function countAvailableUnits(
     .select("id", { count: "exact", head: true })
     .eq("inventory_item_id", inventoryItemId)
     .eq("status", "AVAILABLE");
-
   if (branchId) {
     query = query.eq("branch_id", branchId);
   }
-
   const { count, error } = await query;
+  if (!error && (count ?? 0) > 0) return count ?? 0;
 
-  if (error) return 0;
-  return count ?? 0;
+  // Fallback: check inventory_serialized_units (newer, from migration 023)
+  let query2 = supabase
+    .from("inventory_serialized_units")
+    .select("id", { count: "exact", head: true })
+    .eq("inventory_item_id", inventoryItemId)
+    .eq("status", "READY_STOCK");
+  if (branchId) {
+    query2 = query2.eq("branch_id", branchId);
+  }
+  const { count: serializedCount, error: serializedError } = await query2;
+  if (serializedError) return 0;
+  return serializedCount ?? 0;
 }
 
 /** Get available DEVICE_UNIT units for a specific item. */
@@ -245,18 +254,14 @@ export async function getAvailableDeviceUnits(
     .select("*")
     .eq("inventory_item_id", inventoryItemId)
     .eq("status", "AVAILABLE");
-
   if (branchId) {
     query = query.eq("branch_id", branchId);
   }
-
   const { data, error } = await query.order("created_at", { ascending: true });
-
   if (error) {
     console.error("[PosRepository] getAvailableDeviceUnits error:", error);
     return [];
   }
-
   return (data as InventoryItemUnitRow[]) || [];
 }
 

@@ -43,9 +43,11 @@ function formatRp(n: number) {
    ══════════════════════════════════════════════ */
 
 export function DashboardContent({ brandSlug }: DashboardContentProps) {
-  const [dateRange, setDateRange] = React.useState<DateRange|undefined>({
-    from: new Date(),
-    to: new Date(),
+  const [dateRange, setDateRange] = React.useState<DateRange|undefined>(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    return { from, to };
   });
   const [mode, setMode] = React.useState<DateRangeMode>("date");
   const [startYear, setStartYear] = React.useState<number|undefined>(undefined);

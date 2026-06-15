@@ -319,6 +319,11 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
             Cabang POS aktif: <span className="font-medium text-foreground">{activeBranchName}</span>
           </div>
         )}
+        {state.error && !state.submitting && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            {state.error}
+          </div>
+        )}
         <ProductBrowser
           products={state.products}
           loading={state.loading}

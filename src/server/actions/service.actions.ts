@@ -18,8 +18,9 @@ import { findOrCreateCustomer } from "@/repositories/customer.repository";
 import { callGenerateServiceNumber, callRecordServicePayment, callRecordServicePaymentFinanceEntries, getServicePayments, callCalculateServicePaymentSummary } from "@/repositories/payment.repository";
 import { getServiceSparepartUsages } from "@/repositories/inventory.repository";
 import { getServiceStatusHistory } from "@/repositories/service.repository";
-import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
+import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
 import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
+import { getServicesPaymentSummary } from "@/server/domain/service-payment-summary";
 
 /* ─── List Services ─── */
 
@@ -140,28 +141,21 @@ export async function listServicesAction(
 
     if (error) throw error;
 
-    const services = (data ?? []).map(mapServiceRowToUiItem);
-    console.log("[services:mapper] sample", services[0]
-      ? {
-          serviceNumber: services[0].serviceNumber,
-          customerName: services[0].customerName,
-          branchName: services[0].branchName,
-          estimatedCost: services[0].estimatedCost,
-          finalCost: services[0].finalCost,
-        }
-      : null);
+    const services: ServiceRecord[] = (data ?? []).map(mapServiceRowToUiItem);
 
-    console.log("[services:list] result", {
-      brandId: session.brandId,
-      requestedBranchId,
-      resolvedBranchId,
-      count: services.length,
-      sample: services[0] ?? null,
-    });
-    console.log("[services:list] serializable check", {
-      count: services.length,
-      sampleKeys: Object.keys(services[0] ?? {}),
-    });
+    const serviceIds = services.map((s) => s.id);
+    const chargesMap: Record<string, number> = {};
+    for (const s of services) {
+      chargesMap[s.id] = Number(s.finalCost || s.estimatedCost || 0);
+    }
+    const paymentSummaries = await getServicesPaymentSummary(serviceIds, chargesMap);
+    for (const s of services) {
+      const summary = paymentSummaries[s.id];
+      if (summary) {
+        s.payments = summary.payments;
+        (s as any).__paymentRecords = summary.paymentRecords;
+      }
+    }
 
     return { ok: true, data: services };
   } catch (err: any) {
@@ -365,9 +359,21 @@ export async function getServiceDetailAction(
     const mappedPayments: PaymentItem[] = payments.map((p: any) => ({
       id: p.id,
       type: resolvePaymentType(p.metadata),
-      amount: Number(p.net_amount) || 0,
+      amount: Number(p.gross_amount) || 0,
       method: p.payment_method?.name ?? "",
       date: p.paid_at ?? p.created_at,
+      note: p.notes ?? undefined,
+    }));
+    const mappedPaymentRecords: ServicePaymentRecord[] = payments.map((p: any) => ({
+      id: p.id,
+      serviceId: service.id,
+      paymentType: resolveServicePaymentRecordType(p.metadata),
+      amount: Number(p.gross_amount) || 0,
+      method: p.payment_method?.name ?? "",
+      methodType: p.payment_method?.type ?? "",
+      accountName: p.payment_account?.name ?? "",
+      status: "SUCCEEDED" as const,
+      paidAt: p.paid_at ?? p.created_at,
       note: p.notes ?? undefined,
     }));
 
@@ -471,6 +477,7 @@ export async function getServiceDetailAction(
       pickupNote: row.pickup_note ?? undefined,
       pickedUpBy: row.picked_up_by_profile_id ?? undefined,
     };
+    (service as any).__paymentRecords = mappedPaymentRecords;
     
     return successResult(service);
   } catch (err: any) {
@@ -487,6 +494,14 @@ function resolvePaymentType(metadata?: Record<string, unknown> | null): PaymentI
   if (meta.payment_type === "DOWN_PAYMENT" || meta.is_dp === true) return "dp";
   if (meta.payment_type === "FINAL_PAYMENT") return "full";
   return "partial";
+}
+
+function resolveServicePaymentRecordType(metadata?: Record<string, unknown> | null): ServicePaymentRecordType {
+  const meta = metadata ?? {};
+  if (meta.payment_type === "DOWN_PAYMENT" || meta.is_dp === true) return "DOWN_PAYMENT";
+  if (meta.payment_type === "FINAL_PAYMENT") return "FINAL_PAYMENT";
+  if (meta.payment_type === "PARTIAL_PAYMENT") return "PARTIAL_PAYMENT";
+  return "FINAL_PAYMENT";
 }
 
 /* ─── Create Service ─── */

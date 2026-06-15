@@ -30,6 +30,7 @@ export interface DashboardGeneral {
   todayActivityCounts: TodayActivityCount[];
   needActions: NeedActionItem[];
   shiftStatuses: ShiftStatusItem[];
+  serviceCompletedToday?: number;
 }
 
 export interface RevenueTrendPoint {
@@ -201,6 +202,11 @@ export async function getDashboardOverviewAction(
       paymentMethodsResult,
       branchStocksResult,
       servicesHeatmapResult,
+      inventoryMovementsResult,
+      activeServicesResult,
+      completedServicesResult,
+      customersResult,
+      profilesResult,
     ] = await Promise.all([
       (supabase as any)
         .from("payment_account_movements")
@@ -208,7 +214,7 @@ export async function getDashboardOverviewAction(
         .eq("brand_id", session.brandId)
         .in("branch_id", branchFilter)
         .gte("created_at", dateFromStr)
-        .lte("created_at", dateToStr)
+        .lte("created_at", dateToEndOfDay)
         .order("created_at", { ascending: false }),
 
       (supabase as any)
@@ -218,7 +224,7 @@ export async function getDashboardOverviewAction(
         .in("branch_id", branchFilter)
         .eq("payment_status", "PAID")
         .gte("paid_at", dateFromStr)
-        .lte("paid_at", dateToStr),
+        .lte("paid_at", dateToEndOfDay),
 
       (supabase as any)
         .from("pos_sales")
@@ -235,7 +241,8 @@ export async function getDashboardOverviewAction(
         .eq("brand_id", session.brandId)
         .in("branch_id", branchFilter)
         .gte("created_at", dateFromStr)
-        .lte("created_at", dateToEndOfDay),
+        .lte("created_at", dateToEndOfDay)
+        .order("created_at", { ascending: false }),
 
       (supabase as any)
         .from("payment_accounts")
@@ -279,8 +286,43 @@ export async function getDashboardOverviewAction(
         .in("branch_id", branchFilter)
         .gte("created_at", dateFromStr)
         .lte("created_at", dateToEndOfDay),
-    ]);
 
+      (supabase as any)
+        .from("inventory_movements")
+        .select("id, item_id, movement_type, direction, quantity, created_at")
+        .eq("brand_id", session.brandId)
+        .in("branch_id", branchFilter)
+        .gte("created_at", dateFromStr)
+        .lte("created_at", dateToEndOfDay),
+
+      (supabase as any)
+        .from("services")
+        .select("id, branch_id, current_status, assigned_technician_id, service_number, customer_id, created_at, intake_at, done_at, final_cost, device_type, device_brand, device_model")
+        .eq("brand_id", session.brandId)
+        .in("branch_id", branchFilter)
+        .is("deleted_at", null)
+        .neq("current_status", "DONE")
+        .neq("current_status", "CANCELLED"),
+
+      (supabase as any)
+        .from("services")
+        .select("id, branch_id, done_at, assigned_technician_id, service_number")
+        .eq("brand_id", session.brandId)
+        .in("branch_id", branchFilter)
+        .not("done_at", "is", null)
+        .gte("done_at", dateFromStr)
+        .lte("done_at", dateToEndOfDay),
+
+      (supabase as any)
+        .from("customers")
+        .select("id, name")
+        .eq("brand_id", session.brandId),
+
+      (supabase as any)
+        .from("profiles")
+        .select("id, name"),
+    ]);
+    
     const movements = (movementsResult.data ?? []) as any[];
     const servicePayments = (servicePaymentsResult.data ?? []) as any[];
     const posSales = (posSalesResult.data ?? []) as any[];
@@ -292,6 +334,14 @@ export async function getDashboardOverviewAction(
     const paymentMethods = (paymentMethodsResult.data ?? []) as any[];
     const branchStocks = (branchStocksResult.data ?? []) as any[];
     const servicesHeatmap = (servicesHeatmapResult.data ?? []) as any[];
+    const inventoryMovements = (inventoryMovementsResult.data ?? []) as any[];
+    const activeServices = (activeServicesResult.data ?? []) as any[];
+    const completedServices = (completedServicesResult.data ?? []) as any[];
+    const customers = (customersResult.data ?? []) as any[];
+    const profiles = (profilesResult.data ?? []) as any[];
+
+    const customerMap = new Map(customers.map((c: any) => [c.id, c.name]));
+    const profileMap = new Map(profiles.map((p: any) => [p.id, p.name]));
 
     const branchMap = new Map(allBranches.map((b: any) => [b.id, b.name || b.id]));
 
@@ -441,6 +491,15 @@ export async function getDashboardOverviewAction(
       const type = m.movement_type || "OTHER";
       expenseMap.set(type, (expenseMap.get(type) || 0) + Number(m.amount || 0));
     }
+    // Add MDR from pos_sales and service_payments as an expense category
+    const mdrFromPos = posSales.reduce((s: number, p: any) => s + Number(p.mdr_amount || 0), 0);
+    const mdrFromSvcp = servicePayments.reduce((s: number, p: any) => s + Number(p.mdr_amount || 0), 0);
+    const totalMdrFromSales = mdrFromPos + mdrFromSvcp;
+    if (totalMdrFromSales > 0) {
+      // Add to existing MDR_FEE category or create a new one
+      const existingMdr = expenseMap.get("MDR_FEE") || 0;
+      expenseMap.set("MDR_FEE", existingMdr + totalMdrFromSales);
+    }
     const expenseCategoryRadar = Array.from(expenseMap.entries())
       .filter(([, amount]) => amount > 0)
       .map(([type, amount]) => ({
@@ -523,9 +582,9 @@ export async function getDashboardOverviewAction(
     const todayStr = new Date().toISOString().split("T")[0];
     const serviceInCountToday = services.filter((s: any) => (s.created_at || "").startsWith(todayStr)).length;
     const posCountToday = posSales.filter((s: any) => (s.sold_at || "").startsWith(todayStr)).length;
-    const stockUsedCountToday = movements.filter(
-      (m: any) => m.movement_type === "CASH_OUT" && (m.created_at || "").startsWith(todayStr),
-    ).length;
+    const stockUsedCountToday = inventoryMovements.filter(
+      (m: any) => m.movement_type === "POS_SALE" && m.direction === "OUT" && (m.created_at || "").startsWith(todayStr),
+    ).reduce((s: number, m: any) => s + Number(m.quantity || 0), 0);
     const cashMovementCountToday = movements.filter((m: any) => (m.created_at || "").startsWith(todayStr)).length;
 
     const todayActivityCounts: TodayActivityCount[] = [
@@ -538,6 +597,12 @@ export async function getDashboardOverviewAction(
     const needActions: NeedActionItem[] = [];
     const qcCount = services.filter((s: any) => s.current_status === "QC").length;
     if (qcCount > 0) needActions.push({ label: "Servis menunggu QC", count: qcCount, severity: "high" });
+    const waitingApprovalCount = services.filter((s: any) => s.current_status === "WAITING_APPROVAL").length;
+    if (waitingApprovalCount > 0) needActions.push({ label: "Servis menunggu persetujuan", count: waitingApprovalCount, severity: "medium" });
+    const intakeCount = services.filter((s: any) => s.current_status === "INTAKE").length;
+    if (intakeCount > 0) needActions.push({ label: "Servis baru perlu diagnosa", count: intakeCount, severity: "medium" });
+    const openShiftCount = shifts.filter((s: any) => s.shift_status !== "OPEN").length;
+    if (openShiftCount > 0) needActions.push({ label: "Shift toko belum dibuka", count: openShiftCount, severity: "low" });
 
     /* ── Shift statuses ── */
     const shiftStatuses: ShiftStatusItem[] = [];
@@ -549,16 +614,6 @@ export async function getDashboardOverviewAction(
     }
 
     /* ══ SERVICE TAB ══ */
-    const serviceUnpaidCount = services.filter((s: any) => Number(s.final_cost || 0) > 0).length;
-    const serviceDoneCount = services.filter((s: any) => s.current_status === "DONE").length;
-    const serviceInCount = services.filter((s: any) =>
-      ["INTAKE", "DIAGNOSIS", "WAITING_APPROVAL"].includes(s.current_status)
-    ).length;
-
-    const statusCounts: Record<string, number> = {};
-    for (const s of services) {
-      statusCounts[s.current_status] = (statusCounts[s.current_status] || 0) + 1;
-    }
 
     const pipelineVariant = (status: string): "muted" | "secondary" | "default" | "outline" | "destructive" => {
       const map: Record<string, any> = {
@@ -583,50 +638,105 @@ export async function getDashboardOverviewAction(
       REPAIRING: "sedang diperbaiki", QC: "quality check", DONE: "selesai", CANCELLED: "dibatalkan",
     };
 
+    // Service counts: use created-in-range services for "masuk", done_at in range for "selesai"
+    const serviceInCount = services.length;
+    const serviceDoneCount = completedServices.length;
+    const serviceUnpaidCount = services.filter((s: any) => s.current_status === "DONE" && Number(s.final_cost || 0) > 0).length;
+    const serviceUncollectedCount = services.filter((s: any) => s.current_status === "DONE").length;
+
+    // Pipeline distribution: use active services (not DONE/CANCELLED, not deleted) for current state
+    const statusCounts: Record<string, number> = {};
+    for (const st of pipelineStatuses) {
+      statusCounts[st] = 0;
+    }
+    for (const s of activeServices) {
+      const st = s.current_status;
+      if (st in statusCounts) (statusCounts as any)[st]++;
+    }
+    // Include terminal statuses from the created-in-range services
+    for (const s of services) {
+      const st = s.current_status;
+      if (st === "DONE" || st === "CANCELLED") {
+        (statusCounts as any)[st] = ((statusCounts as any)[st] || 0) + 1;
+      }
+    }
+
     const pipelineData: PipelineItem[] = pipelineStatuses.map((st) => ({
       label: pipelineLabels[st] || st,
-      count: statusCounts[st] || 0,
+      count: Number(statusCounts[st]) || 0,
       variant: pipelineVariant(st),
       desc: pipelineDescs[st] || "",
     }));
 
+    // Recent services: show latest created in range, resolve customer/tech names
     const recentServices: RecentServiceItem[] = services.slice(0, 10).map((s: any) => ({
       id: s.id,
       serviceNumber: s.service_number || s.id.slice(0, 8),
-      customer: s.customer_name || "-",
+      customer: customerMap.get(s.customer_id) || "-",
       device: [s.device_brand, s.device_model].filter(Boolean).join(" ") || s.device_type || "-",
       status: pipelineLabels[s.current_status] || s.current_status,
-      tech: s.assigned_technician_id ? s.assigned_technician_id.slice(0, 8) : "Belum ditugaskan",
+      tech: profileMap.get(s.assigned_technician_id) || (s.assigned_technician_id ? s.assigned_technician_id.slice(0, 8) : "Belum ditugaskan"),
       time: s.created_at ? new Date(s.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short" }) : "-",
       variant: pipelineVariant(s.current_status) as any,
     }));
 
+    // Need attention: active services stuck too long in non-terminal statuses
     const needAttention: NeedAttentionItem[] = [];
-    const qcServices = services.filter((s: any) => s.current_status === "QC").slice(0, 5);
-    for (const s of qcServices) {
+    const stuckThresholdHours: Record<string, number> = {
+      QC: 2,
+      WAITING_APPROVAL: 4,
+      DIAGNOSIS: 24,
+      INTAKE: 24,
+      REPAIRING: 48,
+    };
+    const now = new Date();
+    for (const s of activeServices.slice(0, 20)) {
+      const status = s.current_status as string;
+      const threshold = (stuckThresholdHours as any)[status];
+      if (!threshold) continue;
+      const createdDate = new Date(s.created_at || now);
+      const ageHours = (now.getTime() - createdDate.getTime()) / 3600000;
+      if (ageHours < threshold) continue;
+      const deviceName = [s.device_brand, s.device_model].filter(Boolean).join(" ") || s.device_type || "Unknown";
+      const categoryLabels: Record<string, string> = {
+        QC: "Menunggu QC",
+        WAITING_APPROVAL: "Menunggu persetujuan",
+        DIAGNOSIS: "Menunggu diagnosa",
+        INTAKE: "Belum diproses",
+        REPAIRING: "Dalam perbaikan lama",
+      };
+      const categoryLabel = (categoryLabels as any)[status] || "Perlu perhatian";
+      const severity: "high" | "medium" | "low" = threshold <= 2 ? "high" : threshold <= 24 ? "medium" : "low";
       needAttention.push({
-        device: [s.device_brand, s.device_model].filter(Boolean).join(" ") || s.device_type || "Unknown",
-        reason: "Menunggu QC lebih dari 2 jam",
-        severity: "high",
+        device: deviceName,
+        reason: `${categoryLabel} (${Math.round(ageHours)} jam)`,
+        severity,
       });
     }
 
-    const techMap = new Map<string, { selesai: number; proses: number }>();
-    for (const s of services) {
+    // Technician performance: count completed vs active per tech from all services (active + completed)
+    const techSelesaiMap = new Map<string, number>();
+    const techProsesMap = new Map<string, number>();
+    for (const s of completedServices) {
       const tid = s.assigned_technician_id || "unassigned";
-      if (!techMap.has(tid)) techMap.set(tid, { selesai: 0, proses: 0 });
-      const t = techMap.get(tid)!;
-      if (s.current_status === "DONE") t.selesai++;
-      else t.proses++;
+      techSelesaiMap.set(tid, (techSelesaiMap.get(tid) || 0) + 1);
     }
-    const techPerformances: TechPerformanceItem[] = Array.from(techMap.entries()).map(([id, data]) => ({
-      name: id === "unassigned" ? "Belum ditugaskan" : id.slice(0, 8),
-      selesai: data.selesai,
-      proses: data.proses,
-      rating: data.selesai + data.proses > 0
-        ? Math.round((data.selesai / (data.selesai + data.proses)) * 100)
-        : 0,
-    }));
+    for (const s of activeServices) {
+      const tid = s.assigned_technician_id || "unassigned";
+      techProsesMap.set(tid, (techProsesMap.get(tid) || 0) + 1);
+    }
+    const allTechIds = new Set([...techSelesaiMap.keys(), ...techProsesMap.keys()]);
+    const techPerformances: TechPerformanceItem[] = Array.from(allTechIds).map((id) => {
+      const selesai = techSelesaiMap.get(id) || 0;
+      const proses = techProsesMap.get(id) || 0;
+      const total = selesai + proses;
+      return {
+        name: id === "unassigned" ? "Belum ditugaskan" : (profileMap.get(id) || id.slice(0, 8)),
+        selesai,
+        proses,
+        rating: total > 0 ? Math.round((selesai / total) * 100) : 0,
+      };
+    });
 
     /* ══ FINANCE TAB ══ */
     const totalIn = movements
@@ -635,6 +745,9 @@ export async function getDashboardOverviewAction(
     const totalOut = movements
       .filter((m: any) => m.direction === "OUT")
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
+    // Ensure cash in/out reflects real revenue even when movement records are sparse
+    const effectiveCashIn = Math.max(totalIn, serviceRevenue + posRevenue);
+    const effectiveCashOut = Math.max(totalOut, totalExpense);
 
     /* ══ INVENTORY TAB ══ */
     const branchNamesMap = new Map(allBranches.map((b: any) => [b.id, b.name || b.id]));
@@ -674,6 +787,7 @@ export async function getDashboardOverviewAction(
         todayActivityCounts,
         needActions,
         shiftStatuses,
+        serviceCompletedToday: completedServices.filter((s: any) => (s.done_at || "").startsWith(todayStr)).length,
         activityHeatmap: (() => {
           const map = new Map<string, number>();
           for (const log of auditLogs) {
@@ -704,9 +818,9 @@ export async function getDashboardOverviewAction(
       finance: {
         revenueTrend,
         totalRevenue,
-        cashIn: totalIn,
-        cashOut: totalOut,
-        netCashflow: totalIn - totalOut,
+        cashIn: effectiveCashIn,
+        cashOut: effectiveCashOut,
+        netCashflow: effectiveCashIn - effectiveCashOut,
         mdrAmount: totalMdr,
         expenseCategoryRadar,
         paymentMethodRadar,
@@ -728,6 +842,8 @@ export async function getDashboardOverviewAction(
       expenseCount: expenseCategoryRadar.length,
       paymentMethodCount: paymentMethodRadar.length,
       serviceCount: services.length,
+      activeServiceCount: activeServices.length,
+      completedServiceCount: completedServices.length,
       posCount: posSales.length,
       cashflow: { in: totalIn, out: totalOut },
       heatmapSlots: operationalHeatmap.length,

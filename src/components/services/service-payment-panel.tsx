@@ -34,9 +34,10 @@ import {
   type ServiceRecord,
   type ServicePaymentRecord,
   type ServicePaymentRecordType,
+  type ServicePaymentStatus,
   type ServicePaymentSummary,
   formatCurrency,
-  calculateServicePaymentSummary,
+  getTotalPayment,
 } from "@/components/services/service-data";
 import { receiveServicePaymentAction, getServicePaymentMethodsAction } from "@/server/actions/service-workflow.actions";
 
@@ -106,24 +107,24 @@ export function ServicePaymentPanel({
     }
   }, [open]);
 
-  // Get current payment records (from a store or passed in)
-  const paymentRecords: ServicePaymentRecord[] = useMemo(() => {
-    return (service as any).__paymentRecords ?? [];
-  }, [service]);
-
-  // Calculate payment summary
   const totalDue = useMemo(() => {
     const sparepartCost = service.spareparts.reduce(
       (sum, sp) => sum + sp.price * sp.qty, 0
     );
     const estimatedCost = Number(service.estimatedCost || 0);
     const finalCost = Number(service.finalCost || 0);
-    return Math.max(sparepartCost, finalCost || estimatedCost, 100000);
+    return finalCost || estimatedCost || sparepartCost;
   }, [service]);
 
   const summary: ServicePaymentSummary = useMemo(() => {
-    return calculateServicePaymentSummary(totalDue, paymentRecords);
-  }, [totalDue, paymentRecords]);
+    const paid = getTotalPayment(service.payments);
+    const remaining = Math.max(0, totalDue - paid);
+    let ps: ServicePaymentStatus = "UNPAID";
+    if (paid <= 0) ps = "UNPAID";
+    else if (paid < totalDue) ps = "PARTIAL";
+    else ps = "PAID";
+    return { totalCharged: totalDue, totalPaid: paid, remainingBalance: remaining, dpAmount: 0, paymentStatus: ps };
+  }, [totalDue, service.payments]);
 
   const remainingBalance = summary.remainingBalance;
 
