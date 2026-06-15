@@ -3,12 +3,12 @@
 function resetScrollLockGap() {
   if (typeof document === "undefined") return
 
-  document.documentElement.style.setProperty("--removed-body-scroll-bar-size", "0px")
-  document.body.style.setProperty("--removed-body-scroll-bar-size", "0px")
-  document.documentElement.style.marginRight = "0px"
-  document.documentElement.style.paddingRight = "0px"
-  document.body.style.marginRight = "0px"
-  document.body.style.paddingRight = "0px"
+  document.documentElement.style.setProperty("--removed-body-scroll-bar-size", "0px", "important")
+  document.body.style.setProperty("--removed-body-scroll-bar-size", "0px", "important")
+  document.documentElement.style.setProperty("margin-right", "0px", "important")
+  document.documentElement.style.setProperty("padding-right", "0px", "important")
+  document.body.style.setProperty("margin-right", "0px", "important")
+  document.body.style.setProperty("padding-right", "0px", "important")
 }
 
 export function scheduleScrollLockGapReset() {

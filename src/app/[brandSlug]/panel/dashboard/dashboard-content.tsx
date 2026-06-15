@@ -2,32 +2,18 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import {
-  Clock, Activity, AlertTriangle, Store, Wrench,
-  CheckCircle2, Users, DollarSign, TrendingUp,
-  TrendingDown, ArrowRight, CreditCard, Package,
-  Play, Wallet, ShoppingCart, AlertCircle, BarChart3,
-  Landmark, Boxes, ClipboardList, LogOut,
-} from "lucide-react";
+import { Store, Wrench, DollarSign, Package } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/layout/page-header";
-import { SummaryCard } from "@/components/dashboard/summary-card";
-import { ServicePipeline } from "@/components/dashboard/service-pipeline";
-import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { ServiceOverviewTab } from "@/components/dashboard/service-overview-tab";
 import { FinanceOverviewTab } from "@/components/dashboard/finance-overview-tab";
 import { InventoryOverviewTab } from "@/components/dashboard/inventory-overview-tab";
-import { DateRangePicker } from "@/components/dashboard/date-range-picker";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from "recharts";
 import type { DateRange } from "react-day-picker";
 import type { DateRangeMode, ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { getChartGranularity } from "@/lib/dashboard/chart-granularity";
+import { getDashboardOverviewAction, type DashboardData } from "@/server/actions/dashboard.actions";
 
 const GeneralOverviewTab = dynamic(
   () =>
@@ -48,58 +34,6 @@ interface DashboardContentProps {
   brandSlug: string;
 }
 
-/* ══════════════════════════════════════════════
-   MOCK DATA
-   ══════════════════════════════════════════════ */
-
-const GENERAL_ACTIVITY = [
-  { time: "08:02", text: "Shift dibuka oleh Master Admin", icon: Clock },
-  { time: "08:15", text: "Service baru dibuat: iPhone 11", icon: Play },
-  { time: "13:50", text: "Pembayaran QRIS diterima Rp 250.000", icon: CreditCard },
-  { time: "13:22", text: "Sparepart Battery iPhone 11 digunakan", icon: Package },
-  { time: "14:05", text: "POS transaksi selesai Rp 120.000", icon: ShoppingCart },
-];
-
-const PIPELINE = [
-  { status: "Masuk", count: 4, color: "bg-blue-500" },
-  { status: "Diagnosa", count: 3, color: "bg-amber-500" },
-  { status: "Perbaikan", count: 7, color: "bg-orange-500" },
-  { status: "QC", count: 5, color: "bg-purple-500" },
-  { status: "Selesai", count: 16, color: "bg-emerald-500" },
-  { status: "Batal", count: 1, color: "bg-gray-400" },
-];
-
-const SERVICE_ATTENTION = [
-  { label: "iPhone 11", reason: "Menunggu QC lebih dari 2 jam", severity: "destructive" as const },
-  { label: "iPhone XR", reason: "Sparepart battery kosong", severity: "default" as const },
-  { label: "iPhone 13", reason: "Pembayaran belum lunas", severity: "default" as const },
-];
-
-const PAYMENT_METHODS = [
-  { method: "Cash", pct: 35, color: "bg-emerald-500" },
-  { method: "QRIS", pct: 40, color: "bg-blue-500" },
-  { method: "Transfer", pct: 20, color: "bg-amber-500" },
-  { method: "Debit", pct: 5, color: "bg-purple-500" },
-];
-
-const FINANCE_ALERTS = [
-  "Kas perlu dicek sebelum mengakhiri shift",
-  "QRIS settlement belum masuk",
-  "2 invoice servis belum lunas",
-];
-
-const LOW_STOCK = [
-  { item: "Battery iPhone 11", sisa: 2 },
-  { item: "LCD iPhone XR", sisa: 0, habis: true },
-  { item: "Flexible Charger iPhone 12", sisa: 1 },
-];
-
-const INV_MOVEMENTS = [
-  { item: "Battery iPhone 11", qty: 4, type: "keluar" },
-  { item: "LCD iPhone XR", qty: 2, type: "masuk" },
-  { item: "Flexible Charger iPhone 12", qty: 1, type: "keluar" },
-];
-
 function formatRp(n: number) {
   return `Rp ${n.toLocaleString("id-ID")}`;
 }
@@ -110,13 +44,17 @@ function formatRp(n: number) {
 
 export function DashboardContent({ brandSlug }: DashboardContentProps) {
   const [dateRange, setDateRange] = React.useState<DateRange|undefined>({
-    from: new Date(2026, 7, 3),
-    to: new Date(2026, 8, 21),
+    from: new Date(),
+    to: new Date(),
   });
   const [mode, setMode] = React.useState<DateRangeMode>("date");
   const [startYear, setStartYear] = React.useState<number|undefined>(undefined);
   const [endYear, setEndYear] = React.useState<number|undefined>(undefined);
   const [granularity, setGranularity] = React.useState<ChartGranularity>("day");
+
+  const [dashboardData, setDashboardData] = React.useState<DashboardData | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
   const handleDateRangeChange = React.useCallback(
     (val: {
@@ -134,6 +72,43 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
     },
     []
   );
+
+  /* ── Fetch real data ── */
+  React.useEffect(() => {
+    let cancelled = false;
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const dateFrom = dateRange?.from
+          ? dateRange.from.toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+        const dateTo = dateRange?.to
+          ? dateRange.to.toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+        const result = await getDashboardOverviewAction(brandSlug, {
+          dateFrom,
+          dateTo,
+        });
+        if (cancelled) return;
+        if (result.success && result.data) {
+          setDashboardData(result.data);
+        } else {
+          setError("error" in result ? (result as any).error || "Gagal memuat data dashboard." : "Gagal memuat data dashboard.");
+          setDashboardData(null);
+        }
+      } catch (err: any) {
+        if (cancelled) return;
+        console.error("[DashboardContent] fetch error:", err);
+        setError(err.message || "Gagal memuat dashboard.");
+        setDashboardData(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchData();
+    return () => { cancelled = true; };
+  }, [brandSlug, dateRange?.from?.getTime(), dateRange?.to?.getTime()]);
 
   return (
     <div className="space-y-3">
@@ -190,24 +165,28 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
         {/* TAB 1 — GENERAL */}
         <TabsContent value="general" className="mt-3">
           <GeneralOverviewTab
+            brandSlug={brandSlug}
             dateRange={dateRange}
             granularity={granularity}
+            data={dashboardData?.general ?? null}
+            loading={loading}
+            error={error}
           />
         </TabsContent>
 
         {/* TAB 2 — SERVIS */}
         <TabsContent value="servis" className="mt-3">
-          <ServiceOverviewTab />
+          <ServiceOverviewTab data={dashboardData?.service ?? null} />
         </TabsContent>
 
         {/* TAB 3 — FINANCE */}
         <TabsContent value="finance" className="mt-3">
-          <FinanceOverviewTab />
+          <FinanceOverviewTab data={dashboardData?.finance ?? null} />
         </TabsContent>
 
         {/* TAB 4 — INVENTORY */}
         <TabsContent value="inventory" className="mt-3">
-          <InventoryOverviewTab />
+          <InventoryOverviewTab data={dashboardData?.inventory ?? null} />
         </TabsContent>
       </Tabs>
     </div>

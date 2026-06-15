@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   LayoutDashboard,
   Wrench,
@@ -28,8 +29,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
   SidebarMenuSubButton,
   SidebarRail,
 } from "@/components/ui/sidebar";
@@ -66,6 +65,7 @@ import { loadRememberedAccounts, type RememberedAccount } from "@/lib/auth/remem
 import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
+import { ShiftCashWidget } from "@/components/layout/shift-cash-widget";
 
 // Permission key for each nav item
 function itemPermission(href: string): string | null {
@@ -77,8 +77,10 @@ function itemPermission(href: string): string | null {
   if (href === "inventory") return "inventory.view";
   if (href === "stock-reports") return "inventory.view";
   if (href === "finance") return "finance.view";
+  if (href === "finance/cashflow") return "cashflow.view";
+  if (href === "finance/transactions") return "finance_transaction.view";
   if (href === "payment-accounts") return "payment_account.view";
-  if (href === "payment-methods") return "payment.method.manage";
+  if (href === "payment-methods") return "payment_method.view";
   if (href === "branches") return "branch.manage";
   if (href === "accounts") return "user.manage";
   if (href === "technician-performance") return "service.view";
@@ -110,6 +112,47 @@ const ACCOUNTS: {
   name: string;
   role: string;
 }[] = [];
+
+const springEase = [0.22, 1, 0.36, 1] as const;
+const standardEase = [0.4, 0, 0.2, 1] as const;
+
+const submenuContainerVariants: Variants = {
+  open: {
+    height: "auto",
+    opacity: 1,
+    transition: {
+      height: { duration: 0.24, ease: springEase },
+      opacity: { duration: 0.16, ease: "easeOut" },
+      staggerChildren: 0.035,
+      delayChildren: 0.03,
+    },
+  },
+  closed: {
+    height: 0,
+    opacity: 0,
+    transition: {
+      height: { duration: 0.2, ease: standardEase },
+      opacity: { duration: 0.12, ease: "easeIn" },
+      staggerChildren: 0.025,
+      staggerDirection: -1,
+    },
+  },
+};
+
+const submenuItemVariants: Variants = {
+  open: {
+    x: 0,
+    opacity: 1,
+    filter: "blur(0px)",
+    transition: { duration: 0.2, ease: springEase },
+  },
+  closed: {
+    x: -6,
+    opacity: 0,
+    filter: "blur(2px)",
+    transition: { duration: 0.14, ease: standardEase },
+  },
+};
 
 /* ── Nav data ── */
 interface SubNavItem {
@@ -147,8 +190,10 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     icon: Banknote,
     items: [
       { href: "finance", label: "Laporan Keuangan" },
-      { href: "payment-accounts", label: "Payment Account" },
-      { href: "payment-methods", label: "Payment Method" },
+      { href: "finance/cashflow", label: "Mutasi Kas & Bank" },
+      { href: "finance/transactions", label: "Pendapatan & Pengeluaran" },
+      { href: "payment-accounts", label: "Akun Pembayaran" },
+      { href: "payment-methods", label: "Metode Pembayaran" },
     ],
   },
   {
@@ -251,14 +296,36 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
   }, [pathname]);
 
   function isActive(href: string) {
+    const panelPath = `/${brandSlug}/panel/${href}`;
+    const hasMoreSpecificItem = COLLAPSIBLE_GROUPS.some((group) =>
+      group.items.some((item) => item.href.startsWith(`${href}/`)),
+    );
+
     if (href.includes("?section=")) {
       const [pathPart, queryPart] = href.split("?");
       const targetParams = new URLSearchParams(queryPart);
       const targetSection = targetParams.get("section");
-      return pathname?.includes(pathPart) && currentSection === targetSection;
+      const settingsPath = `/${brandSlug}/panel/${pathPart}`;
+      return pathname === settingsPath && currentSection === targetSection;
     }
-    return pathname?.includes(href);
+
+    if (href.includes("/")) return pathname === panelPath;
+    if (hasMoreSpecificItem) return pathname === panelPath;
+    return pathname === panelPath || pathname?.startsWith(`${panelPath}/`);
   }
+
+  React.useEffect(() => {
+    const activeGroup = visibleGroups.find((group) =>
+      group.items.some((item) => isActive(item.href))
+    );
+
+    if (!activeGroup) return;
+
+    setOpenGroups((prev) => {
+      if (prev[activeGroup.label]) return prev;
+      return { ...prev, [activeGroup.label]: true };
+    });
+  }, [pathname, currentSection, visibleGroups]);
 
   function toggleGroup(label: string) {
     setOpenGroups((prev) => ({
@@ -365,7 +432,8 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
       </SidebarHeader>
 
       {/* ── Navigation ── */}
-      <SidebarContent className="bg-sidebar">
+      <SidebarContent className="relative bg-sidebar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -374,6 +442,11 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                 <SidebarMenuButton
                   isActive={isActive("dashboard")}
                   tooltip="Dashboard"
+                  className={
+                    isActive("dashboard")
+                      ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                      : ""
+                  }
                   asChild
                 >
                   <Link href={`/${brandSlug}/panel/dashboard`}>
@@ -386,6 +459,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
               {/* Collapsible nav groups */}
               {visibleGroups.map((group) => {
                 const isOpen = openGroups[group.label] ?? false;
+                const hasActiveChild = group.items.some((item) => isActive(item.href));
                 const Icon = group.icon;
 
                 return (
@@ -394,47 +468,76 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                       <SidebarMenuButton
                         tooltip={group.label}
                         onClick={() => toggleGroup(group.label)}
-                        className="cursor-pointer"
+                        className={`cursor-pointer ${
+                          hasActiveChild
+                            ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                            : ""
+                        }`}
                       >
                         <Icon />
                         <span>{group.label}</span>
                         <ChevronRight
-                          className={`ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          className={`ml-auto size-4 shrink-0 transition-transform duration-200 ${
+                            hasActiveChild ? "text-foreground" : "text-muted-foreground"
+                          } ${
                             isOpen ? "rotate-90" : ""
                           }`}
                         />
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {isOpen && (
-                      <SidebarMenuSub>
-                        {group.items.map((item) => (
-                          <SidebarMenuSubItem key={item.href}>
-                            <SidebarMenuSubButton
-                              isActive={isActive(item.href)}
-                              asChild
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.ul
+                          key={`${group.label}-submenu`}
+                          data-sidebar="menu-sub"
+                          variants={submenuContainerVariants}
+                          initial="closed"
+                          animate="open"
+                          exit="closed"
+                          className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
+                        >
+                          {group.items.map((item) => (
+                            <motion.li
+                              key={item.href}
+                              variants={submenuItemVariants}
                             >
-                              <Link
-                                href={`/${brandSlug}/panel/${item.href}`}
+                              <SidebarMenuSubButton
+                                isActive={isActive(item.href)}
+                                asChild
                               >
-                                <span>{item.label}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    )}
+                                <Link
+                                  href={`/${brandSlug}/panel/${item.href}`}
+                                >
+                                  <span>{item.label}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </motion.li>
+                          ))}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
                   </React.Fragment>
                 );
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-7 bg-gradient-to-t from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
       </SidebarContent>
 
-      {/* ── User Profile Footer ── */}
+      {/* ── Footer Actions ── */}
       <SidebarFooter className="bg-sidebar p-2">
-        <SidebarMenu>
+        <SidebarMenu className="rounded-2xl bg-sidebar-accent/35 p-1.5 shadow-sm ring-1 ring-sidebar-border/50 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:shadow-none">
+          <SidebarMenuItem>
+            <ShiftCashWidget
+              brandSlug={brandSlug}
+              role={role as Role}
+              canAccessAllBranches={canAccessAllBranches}
+              grouped
+              onOpenShift={() => window.dispatchEvent(new CustomEvent("seervis:open-shift-modal"))}
+            />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
           </SidebarMenuItem>

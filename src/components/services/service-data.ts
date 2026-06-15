@@ -17,6 +17,32 @@ export interface SparepartItem {
   price: number;
   totalPrice: number;
   type: "sparepart";
+  // Snapshot data
+  itemNameSnapshot?: string | null;
+  variantSnapshot?: Record<string, any> | null;
+  skuSnapshot?: string | null;
+  barcodeSnapshot?: string | null;
+  serializedUnitId?: string | null;
+  imeiSnapshot?: string | null;
+  serialNumberSnapshot?: string | null;
+  batteryHealthSnapshot?: number | null;
+  conditionGradeSnapshot?: string | null;
+  conditionNotesSnapshot?: string | null;
+  unitSnapshot?: string | null;
+  unitCostSnapshot?: number | null;
+  sellingPriceSnapshot?: number | null;
+  totalCostSnapshot?: number | null;
+  totalPriceSnapshot?: number | null;
+  isReturned?: boolean;
+  serializedUnit?: {
+    id: string;
+    imei: string | null;
+    serialNumber: string | null;
+    batteryHealth: number | null;
+    conditionGrade: string | null;
+    conditionNotes: string | null;
+    status: string;
+  } | null;
 }
 
 export interface PaymentItem {
@@ -252,7 +278,7 @@ export function getPaymentTypeLabel(type: ServicePaymentRecordType): string {
 export function getPaymentStatusLabel(status: ServicePaymentStatus): { label: string; color: string; textColor: string } {
   switch (status) {
     case "UNPAID":
-      return { label: "Belum Dibayar", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400", textColor: "text-gray-600 dark:text-gray-400" };
+      return { label: "Belum Dibayar", color: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300", textColor: "text-gray-600 dark:text-gray-300" };
     case "PARTIAL":
       return { label: "DP / Sebagian", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", textColor: "text-amber-600 dark:text-amber-400" };
     case "PAID":

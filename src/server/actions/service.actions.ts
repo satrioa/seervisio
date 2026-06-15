@@ -371,15 +371,46 @@ export async function getServiceDetailAction(
       note: p.notes ?? undefined,
     }));
 
-    // 5. Map spareparts to UI SparepartItem[]
-    const mappedSpareparts: SparepartItem[] = spareparts.map((s: any) => ({
-      id: s.id,
-      name: s.item?.name ?? "Unknown",
-      qty: Number(s.quantity_used) || 1,
-      price: Number(s.selling_price) || 0,
-      totalPrice: (Number(s.quantity_used) || 1) * (Number(s.selling_price) || 0),
-      type: "sparepart",
-    }));
+    // 5. Map spareparts to UI SparepartItem[] with snapshots
+    const mappedSpareparts: SparepartItem[] = spareparts.map((s: any) => {
+      const qty = Number(s.quantity_used ?? s.quantity ?? 1);
+      const price = Number(s.selling_price_snapshot ?? s.selling_price ?? 0);
+      const su = s.serialized_unit;
+      return {
+        id: s.id,
+        name: s.item_name_snapshot ?? s.item?.name ?? "Unknown",
+        qty,
+        price,
+        totalPrice: qty * price,
+        type: "sparepart",
+        // Snapshot data
+        itemNameSnapshot: s.item_name_snapshot ?? null,
+        variantSnapshot: s.variant_snapshot ?? null,
+        skuSnapshot: s.sku_snapshot ?? null,
+        barcodeSnapshot: s.barcode_snapshot ?? null,
+        serializedUnitId: s.serialized_unit_id ?? null,
+        imeiSnapshot: s.imei_snapshot ?? null,
+        serialNumberSnapshot: s.serial_number_snapshot ?? null,
+        batteryHealthSnapshot: s.battery_health_snapshot != null ? Number(s.battery_health_snapshot) : null,
+        conditionGradeSnapshot: s.condition_grade_snapshot ?? null,
+        conditionNotesSnapshot: s.condition_notes_snapshot ?? null,
+        unitSnapshot: s.unit_snapshot ?? null,
+        unitCostSnapshot: s.unit_cost_snapshot != null ? Number(s.unit_cost_snapshot) : null,
+        sellingPriceSnapshot: s.selling_price_snapshot != null ? Number(s.selling_price_snapshot) : null,
+        totalCostSnapshot: s.total_cost_snapshot != null ? Number(s.total_cost_snapshot) : null,
+        totalPriceSnapshot: s.total_price_snapshot != null ? Number(s.total_price_snapshot) : null,
+        isReturned: s.is_returned ?? false,
+        serializedUnit: su ? {
+          id: su.id,
+          imei: su.imei ?? null,
+          serialNumber: su.serial_number ?? null,
+          batteryHealth: su.battery_health != null ? Number(su.battery_health) : null,
+          conditionGrade: su.condition_grade ?? null,
+          conditionNotes: [su.physical_condition_notes, su.functional_condition_notes].filter(Boolean).join("; ") || null,
+          status: su.status,
+        } : null,
+      };
+    });
     
     // 6. Map timeline to UI TimelineEntry[]
     const mappedTimeline: TimelineEntry[] = timeline.map((t: any) => ({

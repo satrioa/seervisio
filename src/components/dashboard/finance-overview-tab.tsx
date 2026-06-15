@@ -24,118 +24,85 @@ import {
   CartesianGrid,
   XAxis,
   YAxis,
-  RadarChart,
-  Radar,
-  PolarAngleAxis,
   PolarGrid,
+  PolarAngleAxis,
+  Radar,
+  RadarChart,
 } from "recharts";
-
-/* ── Mock data ── */
-
-const CASH_FLOW_DATA = [
-  { period: "1 Jun", cashIn: 1200000, cashOut: 350000 },
-  { period: "2 Jun", cashIn: 1450000, cashOut: 420000 },
-  { period: "3 Jun", cashIn: 980000, cashOut: 260000 },
-  { period: "4 Jun", cashIn: 1750000, cashOut: 510000 },
-  { period: "5 Jun", cashIn: 1320000, cashOut: 300000 },
-  { period: "6 Jun", cashIn: 2100000, cashOut: 620000 },
-  { period: "7 Jun", cashIn: 1850000, cashOut: 480000 },
-];
-
-const PAYMENT_METHOD_DATA = [
-  { method: "Cash", pusat: 600000, salatiga: 350000, sragen: 250000 },
-  { method: "QRIS", pusat: 950000, salatiga: 500000, sragen: 350000 },
-  { method: "Transfer", pusat: 500000, salatiga: 300000, sragen: 150000 },
-  { method: "Debit", pusat: 250000, salatiga: 100000, sragen: 70000 },
-];
-
-const CASH_OUT_CATEGORY_DATA = [
-  { category: "Stok", pusat: 600000, salatiga: 350000, sragen: 250000 },
-  { category: "Operasional", pusat: 400000, salatiga: 280000, sragen: 170000 },
-  { category: "Maintenance", pusat: 250000, salatiga: 120000, sragen: 80000 },
-  { category: "Gaji", pusat: 1200000, salatiga: 750000, sragen: 450000 },
-  { category: "Fee Bank", pusat: 80000, salatiga: 40000, sragen: 30000 },
-];
-
-/* ── Chart configs ── */
-
-const cashFlowChartConfig = {
-  cashIn: {
-    label: "Cash In",
-    color: "hsl(var(--chart-1))",
-  },
-  cashOut: {
-    label: "Cash Out",
-    color: "hsl(var(--chart-2))",
-  },
-} satisfies ChartConfig;
-
-const paymentMethodChartConfig = {
-  pusat: {
-    label: "Semarang Pusat",
-    color: "hsl(var(--chart-4))",
-  },
-  salatiga: {
-    label: "Salatiga",
-    color: "hsl(var(--chart-5))",
-  },
-  sragen: {
-    label: "Sragen",
-    color: "hsl(var(--chart-3))",
-  },
-} satisfies ChartConfig;
-
-const cashOutCategoryChartConfig = {
-  pusat: {
-    label: "Semarang Pusat",
-    color: "hsl(var(--chart-6))",
-  },
-  salatiga: {
-    label: "Salatiga",
-    color: "hsl(var(--chart-7))",
-  },
-  sragen: {
-    label: "Sragen",
-    color: "hsl(var(--chart-8))",
-  },
-} satisfies ChartConfig;
-
-/* ── Helpers ── */
+import type { DashboardFinance } from "@/server/actions/dashboard.actions";
 
 function formatRp(n: number) {
+  if (n >= 1000000) return `Rp ${(n / 1000000).toFixed(1)}jt`;
   return `Rp ${n.toLocaleString("id-ID")}`;
 }
 
-/* ══════════════════════════════════════════════
-   COMPONENT
-   ══════════════════════════════════════════════ */
+interface FinanceOverviewTabProps {
+  data: DashboardFinance | null;
+}
 
-export function FinanceOverviewTab() {
+const defaultChartConfig = {
+  cashIn: { label: "Cash In", color: "hsl(var(--chart-1))" },
+  cashOut: { label: "Cash Out", color: "hsl(var(--chart-2))" },
+} satisfies ChartConfig;
+
+const BRANCH_COLORS = [
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-1))",
+];
+
+export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
+  const cashFlowData = React.useMemo(() => {
+    const trend = data?.revenueTrend ?? [];
+    return trend.map((p) => ({
+      period: p.label,
+      cashIn: p.totalRevenue,
+      cashOut: 0,
+    }));
+  }, [data?.revenueTrend]);
+
+  const paymentMethodRadar = data?.paymentMethodRadar ?? [];
+  const expenseCategoryRadar = data?.expenseCategoryRadar ?? [];
+
+  const paymentChartConfig = React.useMemo(() => {
+    const config: ChartConfig = {};
+    const branchIds = data?.revenueTrend ? Array.from(new Set(data.revenueTrend.map(p => p.date))) : [];
+    branchIds.forEach((_, idx) => {
+      config[`br_${idx}`] = { label: "Revenue", color: BRANCH_COLORS[idx % BRANCH_COLORS.length] };
+    });
+    return config;
+  }, [data?.revenueTrend]);
+
+  const hasPaymentData = paymentMethodRadar.some(p => p.transactionCount > 0);
+  const hasExpenseData = expenseCategoryRadar.length > 0;
+
   return (
     <div className="space-y-6">
       {/* ── KPI Cards ── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Pendapatan"
-          value="Rp 4.250.000"
+          value={formatRp(data?.totalRevenue ?? 0)}
           helper="total revenue dari servis, POS, dan income lain"
           icon={TrendingUp}
         />
         <SummaryCard
           label="Cash In"
-          value="Rp 5.100.000"
+          value={formatRp(data?.cashIn ?? 0)}
           helper="uang masuk dari semua metode pembayaran"
           icon={Wallet}
         />
         <SummaryCard
           label="Cash Out"
-          value="Rp 850.000"
+          value={formatRp(data?.cashOut ?? 0)}
           helper="pengeluaran operasional dan stok"
           icon={Receipt}
         />
         <SummaryCard
           label="Net Cashflow"
-          value="Rp 4.250.000"
+          value={formatRp(data?.netCashflow ?? 0)}
           helper="cash in dikurangi cash out"
           icon={Activity}
         />
@@ -150,53 +117,44 @@ export function FinanceOverviewTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={cashFlowChartConfig} className="h-64 w-full">
-            <BarChart data={CASH_FLOW_DATA} barGap={4}>
-              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="period"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 10 }}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 10 }}
-                stroke="hsl(var(--muted-foreground))"
-                tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
-              />
-              <ChartTooltip
-                cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
-                content={
-                  <ChartTooltipContent
-                    formatter={(value: unknown) => formatRp(Number(value))}
-                    indicator="dot"
-                  />
-                }
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar
-                dataKey="cashIn"
-                fill="var(--color-cashIn)"
-                radius={[3, 3, 0, 0]}
-                barSize={20}
-              />
-              <Bar
-                dataKey="cashOut"
-                fill="var(--color-cashOut)"
-                radius={[3, 3, 0, 0]}
-                barSize={20}
-              />
-            </BarChart>
-          </ChartContainer>
+          {cashFlowData.length > 0 ? (
+            <ChartContainer config={defaultChartConfig} className="h-64 w-full">
+              <BarChart data={cashFlowData} barGap={4}>
+                <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="period"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tick={{ fontSize: 10 }}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tick={{ fontSize: 10 }}
+                  stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+                />
+                <ChartTooltip
+                  cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                  content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="dot" />}
+                />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="cashIn" fill="var(--color-cashIn)" radius={[3, 3, 0, 0]} barSize={20} />
+                <Bar dataKey="cashOut" fill="var(--color-cashOut)" radius={[3, 3, 0, 0]} barSize={20} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
+              Belum ada data arus kas pada periode ini.
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex flex-col items-start gap-0.5 border-t px-6 py-3">
           <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            Cashflow positif minggu ini
+            {data && data.netCashflow >= 0 ? "Cashflow positif" : "Belum ada data cashflow"}
           </p>
           <p className="text-[10px] text-muted-foreground">
             Menampilkan arus kas berdasarkan periode terpilih
@@ -215,59 +173,40 @@ export function FinanceOverviewTab() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={paymentMethodChartConfig}
-              className="mx-auto h-60 w-full max-w-[320px]"
-            >
-              <RadarChart data={PAYMENT_METHOD_DATA}>
-                <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
-                <PolarAngleAxis
-                  dataKey="method"
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  axisLine={false}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value: unknown) => formatRp(Number(value))}
-                      indicator="line"
-                    />
-                  }
-                />
-                <Radar
-                  dataKey="pusat"
-                  fill="var(--color-pusat)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-pusat)"
-                  strokeWidth={1.5}
-                />
-                <Radar
-                  dataKey="salatiga"
-                  fill="var(--color-salatiga)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-salatiga)"
-                  strokeWidth={1.5}
-                />
-                <Radar
-                  dataKey="sragen"
-                  fill="var(--color-sragen)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-sragen)"
-                  strokeWidth={1.5}
-                />
-                <ChartLegend
-                  content={<ChartLegendContent />}
-                  className="flex-wrap justify-center gap-3"
-                />
-              </RadarChart>
-            </ChartContainer>
+            {hasPaymentData ? (
+              <ChartContainer config={paymentChartConfig} className="mx-auto h-60 w-full max-w-[320px]">
+                <RadarChart data={paymentMethodRadar}>
+                  <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
+                  <PolarAngleAxis
+                    dataKey="method"
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={false}
+                  />
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="line" />}
+                  />
+                  <Radar
+                    dataKey="netAmount"
+                    fill={BRANCH_COLORS[0]}
+                    fillOpacity={0.15}
+                    stroke={BRANCH_COLORS[0]}
+                    strokeWidth={1.5}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </RadarChart>
+              </ChartContainer>
+            ) : (
+              <div className="flex h-60 items-center justify-center text-xs text-muted-foreground">
+                Belum ada transaksi pada periode ini.
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col items-start gap-0.5 border-t px-6 py-3">
             <p className="text-[11px] font-medium text-foreground">
-              QRIS mendominasi di semua cabang
+              {hasPaymentData ? "Data pembayaran berdasarkan transaksi riil" : "Belum ada data pembayaran"}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Data mock per cabang berdasarkan metode pembayaran
+              Data per metode pembayaran berdasarkan periode terpilih
             </p>
           </CardFooter>
         </Card>
@@ -281,59 +220,40 @@ export function FinanceOverviewTab() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={cashOutCategoryChartConfig}
-              className="mx-auto h-60 w-full max-w-[320px]"
-            >
-              <RadarChart data={CASH_OUT_CATEGORY_DATA}>
-                <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
-                <PolarAngleAxis
-                  dataKey="category"
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  axisLine={false}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value: unknown) => formatRp(Number(value))}
-                      indicator="line"
-                    />
-                  }
-                />
-                <Radar
-                  dataKey="pusat"
-                  fill="var(--color-pusat)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-pusat)"
-                  strokeWidth={1.5}
-                />
-                <Radar
-                  dataKey="salatiga"
-                  fill="var(--color-salatiga)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-salatiga)"
-                  strokeWidth={1.5}
-                />
-                <Radar
-                  dataKey="sragen"
-                  fill="var(--color-sragen)"
-                  fillOpacity={0.15}
-                  stroke="var(--color-sragen)"
-                  strokeWidth={1.5}
-                />
-                <ChartLegend
-                  content={<ChartLegendContent />}
-                  className="flex-wrap justify-center gap-3"
-                />
-              </RadarChart>
-            </ChartContainer>
+            {hasExpenseData ? (
+              <ChartContainer config={paymentChartConfig} className="mx-auto h-60 w-full max-w-[320px]">
+                <RadarChart data={expenseCategoryRadar}>
+                  <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
+                  <PolarAngleAxis
+                    dataKey="category"
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={false}
+                  />
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="line" />}
+                  />
+                  <Radar
+                    dataKey="amount"
+                    fill={BRANCH_COLORS[1]}
+                    fillOpacity={0.15}
+                    stroke={BRANCH_COLORS[1]}
+                    strokeWidth={1.5}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </RadarChart>
+              </ChartContainer>
+            ) : (
+              <div className="flex h-60 items-center justify-center text-xs text-muted-foreground">
+                Belum ada pengeluaran pada periode ini.
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col items-start gap-0.5 border-t px-6 py-3">
             <p className="text-[11px] font-medium text-foreground">
-              Gaji dan stok menjadi pengeluaran utama di semua cabang
+              {hasExpenseData ? "Pengeluaran berdasarkan data riil" : "Belum ada data pengeluaran"}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Data mock per cabang berdasarkan kategori cash out
+              Data per kategori pengeluaran berdasarkan periode terpilih
             </p>
           </CardFooter>
         </Card>

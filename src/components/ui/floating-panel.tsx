@@ -123,7 +123,7 @@ export function FloatingPanelTrigger({
       disabled={disabled}
       layoutId={`floating-panel-trigger-${uniqueId}`}
       className={cn(
-        "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950 dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50",
+        "flex h-9 items-center border bg-white px-3 text-zinc-950 dark:border-border dark:bg-muted dark:text-foreground",
         className
       )}
       style={{ borderRadius: 8 }}

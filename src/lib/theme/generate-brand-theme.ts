@@ -164,22 +164,22 @@ export function generateBrandTheme(
   const p = (hsl: HslTuple) => hslToCssVar(hsl);
 
   const bgL = isLight ? 100 : 4.9;
-  const fgL = isLight ? 4.9 : 98;
-  const cardL = isLight ? 100 : 4.9;
-  const mutedL = isLight ? 96.1 : 17.5;
-  const mutedFgL = isLight ? 46.9 : 65.1;
-  const borderL = isLight ? 91.4 : 17.5;
-  const secondaryL = isLight ? 96.1 : 17.5;
-  const secondaryFgL = isLight ? 11.2 : 98;
-  const accentL = isLight ? 96.1 : 17.5;
-  const accentFgL = isLight ? 47.4 : 98;
-  const popoverL = isLight ? 100 : 4.9;
-  const popoverFgL = isLight ? 4.9 : 98;
+  const fgL = isLight ? 4.9 : 96;
+  const cardL = isLight ? 100 : 7.5;
+  const mutedL = isLight ? 96.1 : 12;
+  const mutedFgL = isLight ? 46.9 : 72;
+  const borderL = isLight ? 91.4 : 15;
+  const secondaryL = isLight ? 96.1 : 12;
+  const secondaryFgL = isLight ? 11.2 : 96;
+  const accentL = isLight ? 96.1 : 12;
+  const accentFgL = isLight ? 47.4 : 96;
+  const popoverL = isLight ? 100 : 10;
+  const popoverFgL = isLight ? 4.9 : 96;
 
   const bgSat = 0;
-  const fgSat = isLight ? 84 : 0;
-  const lowSat = isLight ? 30 : 32;
-  const secondarySat = isLight ? 40 : 32;
+  const fgSat = isLight ? 84 : 8;
+  const lowSat = isLight ? 30 : 20;
+  const secondarySat = isLight ? 40 : 20;
 
   const chartColors = generateChartColors(primary, isLight);
 
@@ -195,23 +195,23 @@ export function generateBrandTheme(
       ? p(setLightness(primary, 98))
       : p(setLightness(primary, 11.2)),
     secondary: p({ h: primary.h, s: secondarySat, l: secondaryL }),
-    "secondary-foreground": p({ h: primary.h, s: 40, l: secondaryFgL }),
+    "secondary-foreground": p({ h: primary.h, s: 20, l: secondaryFgL }),
     muted: p({ h: primary.h, s: lowSat, l: mutedL }),
     "muted-foreground": p({ h: primary.h, s: 16, l: mutedFgL }),
     accent: p({ h: (primary.h + 30) % 360, s: 40, l: accentL }),
-    "accent-foreground": p({ h: (primary.h + 30) % 360, s: 40, l: accentFgL }),
-    destructive: p({ h: 0, s: isLight ? 84.2 : 62.8, l: isLight ? 60.2 : 30.6 }),
-    "destructive-foreground": p({ h: 210, s: 40, l: isLight ? 98 : 98 }),
+    "accent-foreground": p({ h: (primary.h + 30) % 360, s: 20, l: accentFgL }),
+    destructive: p({ h: 0, s: isLight ? 84.2 : 70, l: isLight ? 60.2 : 40 }),
+    "destructive-foreground": p({ h: 0, s: 0, l: isLight ? 98 : 100 }),
     border: p({ h: primary.h, s: lowSat, l: borderL }),
     input: p({ h: primary.h, s: lowSat, l: borderL }),
     ring: p(primary),
-    "sidebar-background": p({ h: primary.h, s: 11, l: isLight ? 94.7 : 10 }),
+    "sidebar-background": p({ h: primary.h, s: 11, l: isLight ? 94.7 : 6 }),
     "sidebar-foreground": p({ h: primary.h, s: 8, l: isLight ? 26.1 : 95.9 }),
     "sidebar-primary": p(setLightness(primary, isLight ? 10 : 48)),
     "sidebar-primary-foreground": p(setLightness(primary, isLight ? 98 : 100)),
-    "sidebar-accent": p({ h: primary.h, s: 9, l: isLight ? 84 : 15.9 }),
+    "sidebar-accent": p({ h: primary.h, s: 9, l: isLight ? 84 : 14 }),
     "sidebar-accent-foreground": p({ h: primary.h, s: 8, l: isLight ? 10 : 95.9 }),
-    "sidebar-border": p({ h: primary.h, s: 13, l: isLight ? 91 : 15.9 }),
+    "sidebar-border": p({ h: primary.h, s: 13, l: isLight ? 91 : 12 }),
     "sidebar-ring": p(primary),
     "chart-1": p(chartColors[0]),
     "chart-2": p(chartColors[1]),

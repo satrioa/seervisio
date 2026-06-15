@@ -142,7 +142,8 @@ export async function callAddServiceSparepartUsage(
   unitCost: number | null,
   sellingPrice: number | null,
   createdBy: string,
-  notes?: string | null
+  notes?: string | null,
+  serializedUnitId?: string | null,
 ): Promise<string> {
   const supabase = await createServerSupabase();
   const { data, error } = await (supabase as any).rpc("add_service_sparepart_usage", {
@@ -153,6 +154,7 @@ export async function callAddServiceSparepartUsage(
     p_selling_price: sellingPrice,
     p_notes: notes ?? null,
     p_created_by: createdBy,
+    p_serialized_unit_id: serializedUnitId ?? null,
   });
   if (error) throw error;
   return data as string;

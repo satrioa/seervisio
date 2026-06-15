@@ -1,14 +1,3 @@
-/**
- * operational-hour-heatmap.tsx
- * Day × hour heatmap showing service intake density by operating hour.
- *
- * Axes:
- *   X — operating hours (configurable, default 08:00–20:00)
- *   Y — day of week (Senin–Minggu)
- *
- * Mock data used — real DB query to be wired later.
- */
-
 "use client";
 
 import * as React from "react";
@@ -26,8 +15,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { DateRange } from "react-day-picker";
-
-/* ─── Constants ─── */
 
 const DAYS = [
   { key: "senin", label: "Senin" },
@@ -50,8 +37,6 @@ function nextHour(hour: string): string {
   return `${String(h + 1).padStart(2, "0")}:00`;
 }
 
-/* ─── Types ─── */
-
 interface HourSlot {
   dayKey: string;
   dayLabel: string;
@@ -65,48 +50,6 @@ interface Insights {
   peakDayLabel: string;
   peakSlotLabel: string;
 }
-
-/* ─── Mock Data Generator ─── */
-
-function generateMockData(hours: readonly string[]): HourSlot[] {
-  const slots: HourSlot[] = [];
-  const numHours = hours.length;
-
-  for (const [dayIdx, day] of DAYS.entries()) {
-    for (const [hourIdx, hour] of hours.entries()) {
-      let base: number;
-      if (dayIdx === 6) base = 2;        // Minggu
-      else if (dayIdx === 5) base = 9;   // Sabtu
-      else if (dayIdx === 4) base = 8;   // Jumat
-      else base = 4 + dayIdx;            // Senin–Kamis: 4–7
-
-      // Peak hours: ~30–50% and ~60–80% through the operating hours list
-      const mid = numHours / 2;
-      const morningPeak =
-        hourIdx >= Math.floor(mid * 0.4) && hourIdx <= Math.floor(mid * 0.6);
-      const afternoonPeak =
-        hourIdx >= Math.floor(mid * 0.7) && hourIdx <= Math.floor(mid * 0.9);
-      const peakBonus = (morningPeak || afternoonPeak) ? 5 : 0;
-
-      // Edge hours (first 2 and last 2 slots) get penalty
-      const edgePenalty = hourIdx <= 1 || hourIdx >= numHours - 2 ? -2 : 0;
-
-      const value = Math.max(0, base + peakBonus + edgePenalty);
-
-      slots.push({
-        dayKey: day.key,
-        dayLabel: day.label,
-        hour,
-        hourLabel: `${hour} – ${nextHour(hour)}`,
-        value,
-      });
-    }
-  }
-
-  return slots;
-}
-
-/* ─── Insights Computation ─── */
 
 function computeInsights(data: HourSlot[]): Insights {
   const hourTotals = new Map<string, number>();
@@ -123,24 +66,16 @@ function computeInsights(data: HourSlot[]): Insights {
       total: (prev?.total ?? 0) + slot.value,
     });
   }
-  const bestDay = [...dayTotals.entries()].sort(
-    (a, b) => b[1].total - a[1].total,
-  )[0];
+  const bestDay = [...dayTotals.entries()].sort((a, b) => b[1].total - a[1].total)[0];
 
   const bestSlot = [...data].sort((a, b) => b.value - a.value)[0];
 
   return {
-    peakHourLabel: bestHour
-      ? `${bestHour[0]} – ${nextHour(bestHour[0])}`
-      : "–",
+    peakHourLabel: bestHour ? `${bestHour[0]} – ${nextHour(bestHour[0])}` : "–",
     peakDayLabel: bestDay?.[1].label ?? "–",
-    peakSlotLabel: bestSlot
-      ? `${bestSlot.dayLabel}, ${bestSlot.hourLabel}`
-      : "–",
+    peakSlotLabel: bestSlot ? `${bestSlot.dayLabel}, ${bestSlot.hourLabel}` : "–",
   };
 }
-
-/* ─── Sub-components ─── */
 
 function InsightCard({ label, value }: { label: string; value: string }) {
   return (
@@ -186,37 +121,71 @@ function Cell({
   );
 }
 
-/* ─── Layout Constants ─── */
-
 const GAP = 4;
 const LABEL_W = 56;
 const MIN_CELL = 20;
 const MAX_CELL = 38;
 
-/* ─── Main Component ─── */
-
 interface OperationalHourHeatmapProps {
   dateRange?: DateRange;
-  /** Operating hours displayed on the X-axis, e.g. ["08:00","09:00",…].
-   *  Will be fetched from store settings in the future.
-   *  Defaults to 08:00–20:00 (13 slots). */
   operatingHours?: string[];
+  /** Real hourly counts from server, e.g. [{ hour: "08:00", count: 3 }, ...] */
+  hourlyData?: { hour: string; count: number }[];
 }
 
 export function OperationalHourHeatmap({
   dateRange,
   operatingHours,
+  hourlyData,
 }: OperationalHourHeatmapProps) {
   const hours = React.useMemo(
     () => operatingHours ?? [...DEFAULT_HOURS],
     [operatingHours],
   );
 
-  const data = React.useMemo(() => generateMockData(hours), [hours]);
+  const hasRealData = hourlyData && hourlyData.length > 0;
+
+  const data = React.useMemo(() => {
+    if (hasRealData) {
+      const slots: HourSlot[] = [];
+      const today = new Date();
+      const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ...
+      const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to 0=Monday..6=Sunday
+      const todayDay = DAYS[dayIndex];
+      for (const hour of hours) {
+        const match = hourlyData.find(h => h.hour === hour);
+        slots.push({
+          dayKey: todayDay.key,
+          dayLabel: todayDay.label,
+          hour,
+          hourLabel: `${hour} – ${nextHour(hour)}`,
+          value: match?.count ?? 0,
+        });
+      }
+      return slots;
+    }
+
+    // Fallback to zero data when no real data
+    const slots: HourSlot[] = [];
+    for (const day of DAYS) {
+      for (const hour of hours) {
+        slots.push({
+          dayKey: day.key,
+          dayLabel: day.label,
+          hour,
+          hourLabel: `${hour} – ${nextHour(hour)}`,
+          value: 0,
+        });
+      }
+    }
+    return slots;
+  }, [hasRealData, hours, hourlyData]);
+
   const maxValue = React.useMemo(
     () => Math.max(...data.map((d) => d.value), 1),
     [data],
   );
+
   const insights = React.useMemo(() => computeInsights(data), [data]);
 
   const dataMap = React.useMemo(() => {
@@ -227,19 +196,13 @@ export function OperationalHourHeatmap({
     return map;
   }, [data]);
 
-  /* ── Responsive cell sizing — fills container with no empty space ── */
-
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = React.useState<number>(0);
 
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
-    const measure = () => {
-      setMeasuredWidth(el.getBoundingClientRect().width);
-    };
-
+    const measure = () => setMeasuredWidth(el.getBoundingClientRect().width);
     measure();
     const observer = new ResizeObserver(() => measure());
     observer.observe(el);
@@ -247,13 +210,14 @@ export function OperationalHourHeatmap({
   }, []);
 
   const cellSize = React.useMemo(() => {
-    if (measuredWidth === 0) return 36; // fallback during SSR / first paint
-
-    const numGaps = hours.length; // gaps between grid tracks
+    if (measuredWidth === 0) return 36;
+    const numGaps = hours.length;
     const available = measuredWidth - LABEL_W - numGaps * GAP;
     const calculated = Math.floor(available / hours.length);
     return Math.max(MIN_CELL, Math.min(calculated, MAX_CELL));
   }, [measuredWidth, hours]);
+
+  const hasAnyValue = data.some(d => d.value > 0);
 
   return (
     <Card>
@@ -262,110 +226,91 @@ export function OperationalHourHeatmap({
           Jam Ramai Servis
         </CardTitle>
         <CardDescription>
-          Pola jumlah servis masuk berdasarkan hari dan jam operasional.
+          {hasRealData
+            ? "Pola servis masuk berdasarkan jam operasional hari ini."
+            : "Belum ada data servis pada periode ini."}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* ── Summary Insights ── */}
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <InsightCard
             label="Jam Tersibuk"
-            value={insights.peakHourLabel}
+            value={hasAnyValue ? insights.peakHourLabel : "–"}
           />
           <InsightCard
             label="Hari Tersibuk"
-            value={insights.peakDayLabel}
+            value={hasAnyValue ? insights.peakDayLabel : "–"}
           />
           <InsightCard
             label="Slot Tersibuk"
-            value={insights.peakSlotLabel}
+            value={hasAnyValue ? insights.peakSlotLabel : "–"}
           />
         </div>
 
-        {/* ── Heatmap Matrix ── */}
         <TooltipProvider>
           <div ref={containerRef} className="overflow-x-auto pb-2">
             <div className="min-w-max">
               <div
                 className="grid"
                 style={{
-                gridTemplateColumns: `${LABEL_W}px repeat(${hours.length}, ${cellSize}px)`,
-                gridTemplateRows: `auto repeat(${DAYS.length}, ${cellSize}px)`,
-                gap: GAP,
-              }}
-            >
-              {/* Corner cell (empty) */}
-              <div />
-
-              {/* Hour column headers */}
-              {hours.map((hour) => (
-                <div
-                  key={hour}
-                  className="flex items-center justify-center text-[11px] font-medium text-muted-foreground"
-                >
-                  {hour}
-                </div>
-              ))}
-
-              {/* Day rows */}
-              {DAYS.map((day) => (
-                <React.Fragment key={day.key}>
-                  {/* Day label */}
-                  <div className="flex items-center justify-end pr-2 text-[11px] font-medium text-muted-foreground">
-                    {day.label}
+                  gridTemplateColumns: `${LABEL_W}px repeat(${hours.length}, ${cellSize}px)`,
+                  gridTemplateRows: `auto repeat(${DAYS.length}, ${cellSize}px)`,
+                  gap: GAP,
+                }}
+              >
+                <div />
+                {hours.map((hour) => (
+                  <div
+                    key={hour}
+                    className="flex items-center justify-center text-[11px] font-medium text-muted-foreground"
+                  >
+                    {hour}
                   </div>
-
-                  {/* Hour cells */}
-                  {hours.map((hour) => {
-                    const slot = dataMap.get(`${day.key}:${hour}`);
-                    const val = slot?.value ?? 0;
-                    return (
-                      <Cell
-                        key={`${day.key}:${hour}`}
-                        value={val}
-                        maxValue={maxValue}
-                        size={cellSize}
-                        tooltipContent={
-                          <>
-                            <div className="font-medium">
-                              {day.label}, {slot?.hourLabel ?? hour}
-                            </div>
-                            <div className="mt-0.5">
-                              {val} servis masuk
-                            </div>
-                          </>
-                        }
-                      />
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
+                ))}
+                {DAYS.map((day) => (
+                  <React.Fragment key={day.key}>
+                    <div className="flex items-center justify-end pr-2 text-[11px] font-medium text-muted-foreground">
+                      {day.label}
+                    </div>
+                    {hours.map((hour) => {
+                      const slot = dataMap.get(`${day.key}:${hour}`);
+                      const val = slot?.value ?? 0;
+                      return (
+                        <Cell
+                          key={`${day.key}:${hour}`}
+                          value={val}
+                          maxValue={maxValue}
+                          size={cellSize}
+                          tooltipContent={
+                            <>
+                              <div className="font-medium">
+                                {day.label}, {slot?.hourLabel ?? hour}
+                              </div>
+                              <div className="mt-0.5">
+                                {val} servis masuk
+                              </div>
+                            </>
+                          }
+                        />
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
           </div>
         </TooltipProvider>
 
-        {/* ── Color Legend ── */}
         <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
           <span>Sepi</span>
           <div
             className="h-1.5 w-28 rounded-full"
             style={{
-              background:
-                "linear-gradient(to right, hsl(var(--muted)), hsl(var(--primary)))",
+              background: "linear-gradient(to right, hsl(var(--muted)), hsl(var(--primary)))",
             }}
           />
           <span>Ramai</span>
         </div>
-
-        {/* TODO(real-data): Replace mock with real query
-          Data source: service intake time (services.created_at or intake_at).
-          Aggregate: COUNT(*) grouped by weekday + hour.
-          Single-day range: show actual per-hour values for that day only.
-          Multi-day range: show average per slot across all days.
-          Branch filter: if "Semua Cabang" → all branches in brand; else specific branch.
-          Operating hours: pass via operatingHours prop (from store settings).
-        */}
       </CardContent>
     </Card>
   );

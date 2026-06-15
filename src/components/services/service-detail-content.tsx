@@ -457,18 +457,22 @@ export function ServiceDetailContent({
               <div className="flex flex-col gap-1.5">
                 {service.spareparts.map((sp, i) => (
                   <div
-                    key={i}
+                    key={sp.id ?? i}
                     className="flex items-center justify-between rounded-lg border bg-card px-3 py-2"
                   >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-medium text-foreground">
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                      <span className="text-xs font-medium text-foreground truncate">
                         {sp.name}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {sp.qty}x @ {formatCurrency(sp.price)}
+                        {sp.imeiSnapshot && <span className="ml-1">· IMEI: {sp.imeiSnapshot}</span>}
+                        {sp.batteryHealthSnapshot != null && <span className="ml-1">· BH: {sp.batteryHealthSnapshot}%</span>}
+                        {sp.conditionGradeSnapshot && <span className="ml-1">· {sp.conditionGradeSnapshot}</span>}
+                        {sp.isReturned && <span className="ml-1 text-amber-500">· Dikembalikan</span>}
                       </span>
                     </div>
-                    <span className="text-xs font-medium tabular-nums text-foreground">
+                    <span className="shrink-0 text-xs font-medium tabular-nums text-foreground ml-2">
                       {formatCurrency(sp.price * sp.qty)}
                     </span>
                   </div>

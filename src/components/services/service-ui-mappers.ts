@@ -61,18 +61,69 @@ export interface DbSparepartUsageRow {
   unit_cost: number | null;
   selling_price: number | null;
   created_at: string;
+  // Snapshot columns
+  item_name_snapshot?: string | null;
+  variant_snapshot?: Record<string, any> | null;
+  sku_snapshot?: string | null;
+  barcode_snapshot?: string | null;
+  serialized_unit_id?: string | null;
+  imei_snapshot?: string | null;
+  serial_number_snapshot?: string | null;
+  battery_health_snapshot?: number | null;
+  condition_grade_snapshot?: string | null;
+  condition_notes_snapshot?: string | null;
+  unit_snapshot?: string | null;
+  unit_cost_snapshot?: number | null;
+  selling_price_snapshot?: number | null;
+  total_cost_snapshot?: number | null;
+  total_price_snapshot?: number | null;
+  is_returned?: boolean;
+  serialized_unit?: {
+    id: string;
+    imei: string | null;
+    serial_number: string | null;
+    battery_health: number | null;
+    condition_grade: string | null;
+    status: string;
+  } | null;
 }
 
 export function mapDbSparepartToUI(sp: DbSparepartUsageRow): SparepartItem {
-  const qty = Number(sp.quantity_used) || 1;
-  const price = Number(sp.selling_price) || 0;
+  const qty = Number(sp.quantity_used ?? 1);
+  const price = Number(sp.selling_price_snapshot ?? sp.selling_price ?? 0);
+  const su = sp.serialized_unit;
   return {
     id: sp.id,
-    name: sp.item?.name ?? "Unknown",
+    name: sp.item_name_snapshot ?? sp.item?.name ?? "Unknown",
     qty,
     price,
     totalPrice: qty * price,
     type: "sparepart",
+    itemNameSnapshot: sp.item_name_snapshot ?? null,
+    variantSnapshot: sp.variant_snapshot ?? null,
+    skuSnapshot: sp.sku_snapshot ?? null,
+    barcodeSnapshot: sp.barcode_snapshot ?? null,
+    serializedUnitId: sp.serialized_unit_id ?? null,
+    imeiSnapshot: sp.imei_snapshot ?? null,
+    serialNumberSnapshot: sp.serial_number_snapshot ?? null,
+    batteryHealthSnapshot: sp.battery_health_snapshot != null ? Number(sp.battery_health_snapshot) : null,
+    conditionGradeSnapshot: sp.condition_grade_snapshot ?? null,
+    conditionNotesSnapshot: sp.condition_notes_snapshot ?? null,
+    unitSnapshot: sp.unit_snapshot ?? null,
+    unitCostSnapshot: sp.unit_cost_snapshot != null ? Number(sp.unit_cost_snapshot) : null,
+    sellingPriceSnapshot: sp.selling_price_snapshot != null ? Number(sp.selling_price_snapshot) : null,
+    totalCostSnapshot: sp.total_cost_snapshot != null ? Number(sp.total_cost_snapshot) : null,
+    totalPriceSnapshot: sp.total_price_snapshot != null ? Number(sp.total_price_snapshot) : null,
+    isReturned: sp.is_returned ?? false,
+    serializedUnit: su ? {
+      id: su.id,
+      imei: su.imei ?? null,
+      serialNumber: su.serial_number ?? null,
+      batteryHealth: su.battery_health != null ? Number(su.battery_health) : null,
+      conditionGrade: su.condition_grade ?? null,
+      conditionNotes: null,
+      status: su.status,
+    } : null,
   };
 }
 

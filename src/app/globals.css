@@ -59,22 +59,22 @@
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 222.2 84% 7.5%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 222.2 84% 10%;
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 222.2 84% 12%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 222.2 84% 12%;
+    --muted-foreground: 215 25% 72%;
+    --accent: 222.2 84% 12%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: var(--color-red-600);
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --destructive: 0 70% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217.2 32.6% 15%;
+    --input: 217.2 32.6% 15%;
     --ring: 224.3 76.3% 48%;
     --chart-1: 217.2 91.2% 59.8%;
     --chart-2: 161.4 80% 40%;
@@ -84,27 +84,27 @@
     --chart-6: 186 70% 50%;
     --chart-7: 0 70% 60%;
     --chart-8: 240 55% 65%;
-    --sidebar-background: 240 5.9% 10%;
+    --sidebar-background: 222.2 84% 6%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent: 222.2 84% 14%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-border: 222.2 84% 12%;
     --sidebar-ring: 217.2 91.2% 59.8%;
     --d-bg: 0 0% 10%;
     --d-muted: 0 0% 20%;
     --d-fg: 0 0% 100%;
     --d-border: 0 0% 20%;
     --d-sheet: 0 0% 12%;
-    --success: var(--color-emerald-500);
-    --success-foreground: var(--color-emerald-600);
-    --info: var(--color-violet-500);
-    --info-foreground: var(--color-violet-600);
-    --warning: var(--color-yellow-500);
-    --warning-foreground: var(--color-yellow-600);
-    --invert: var(--color-zinc-700);
-    --invert-foreground: var(--color-zinc-50);
+    --success: hsl(160, 60%, 45%);
+    --success-foreground: hsl(160, 60%, 85%);
+    --info: hsl(250, 60%, 55%);
+    --info-foreground: hsl(250, 60%, 90%);
+    --warning: hsl(38, 80%, 50%);
+    --warning-foreground: hsl(38, 80%, 90%);
+    --invert: var(--color-zinc-200);
+    --invert-foreground: var(--color-zinc-900);
     --heatmap-zero: rgb(51, 51, 51);
   }
 }
@@ -127,7 +127,17 @@
 
   html[data-scroll-locked],
   body[data-scroll-locked] {
+    --removed-body-scroll-bar-size: 0px !important;
     margin-right: 0 !important;
     padding-right: 0 !important;
+    overflow-y: scroll !important;
+  }
+
+  .right-scroll-bar-position {
+    right: 0 !important;
+  }
+
+  .width-before-scroll-bar {
+    margin-right: 0 !important;
   }
 }

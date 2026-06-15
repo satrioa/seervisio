@@ -1,0 +1,16 @@
+export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  OPENING_BALANCE: "Saldo Awal",
+  BALANCE_ADJUSTMENT: "Penyesuaian Saldo",
+  SERVICE_PAYMENT: "Pembayaran Servis",
+  POS_PAYMENT: "Penjualan POS",
+  OTHER_INCOME: "Pendapatan Lain",
+  OPERATING_EXPENSE: "Pengeluaran Operasional",
+  STOCK_PURCHASE: "Belanja Stok",
+  STOCK_PURCHASE_PAYMENT: "Pembayaran Stok",
+  TRANSFER_IN: "Transfer Masuk",
+  TRANSFER_OUT: "Transfer Keluar",
+  BANK_FEE: "Biaya Bank",
+  QRIS_SETTLEMENT: "Settlement QRIS",
+  SERVICE_REFUND: "Refund Servis",
+  POS_REFUND: "Refund POS",
+};

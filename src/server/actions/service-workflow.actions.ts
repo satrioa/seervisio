@@ -465,6 +465,7 @@ export interface AddSparepartInput {
     quantity: number;
     unitCost?: number;
     sellingPrice?: number;
+    serializedUnitId?: string | null;
   }[];
   note?: string;
 }
@@ -488,19 +489,38 @@ export async function addServiceSparepartAction(
     for (const item of input.items) {
       const { createServerSupabase } = await import("@/lib/supabase/server");
       const supabase = await createServerSupabase();
-      const { data: stockRow } = await (supabase as any)
-        .from("branch_inventory_stocks")
-        .select("current_stock, item:inventory_items(selling_price)")
-        .eq("branch_id", service.branch_id)
-        .eq("item_id", item.inventoryItemId)
-        .maybeSingle();
 
-      if (!stockRow) return errorResult("Stok sparepart tidak ditemukan.");
-      if (stockRow.current_stock < item.quantity) {
-        return errorResult(`Stok sparepart tidak mencukupi. Tersedia: ${stockRow.current_stock}`);
+      // Handle serialized unit validation
+      if (item.serializedUnitId) {
+        const { data: serializedUnit } = await (supabase as any)
+          .from("inventory_serialized_units")
+          .select("id, status, inventory_item_id, branch_id")
+          .eq("id", item.serializedUnitId)
+          .maybeSingle();
+
+        if (!serializedUnit) return errorResult("Unit serial tidak ditemukan.");
+        if (serializedUnit.status !== "READY_STOCK") {
+          return errorResult(`Unit serial tidak tersedia (status: ${serializedUnit.status}).`);
+        }
+        if (serializedUnit.branch_id !== service.branch_id) {
+          return errorResult("Unit serial berada di cabang berbeda.");
+        }
+      } else {
+        // Quantity item: validate stock
+        const { data: stockRow } = await (supabase as any)
+          .from("branch_inventory_stocks")
+          .select("current_stock, item:inventory_items(selling_price)")
+          .eq("branch_id", service.branch_id)
+          .eq("item_id", item.inventoryItemId)
+          .maybeSingle();
+
+        if (!stockRow) return errorResult("Stok sparepart tidak ditemukan.");
+        if (stockRow.current_stock < item.quantity) {
+          return errorResult(`Stok sparepart tidak mencukupi. Tersedia: ${stockRow.current_stock}`);
+        }
       }
 
-      const sellingPrice = item.sellingPrice ?? stockRow.item?.selling_price ?? 0;
+      const sellingPrice = item.sellingPrice ?? 0;
       try {
         const usageId = await callAddServiceSparepartUsage(
           service.id,
@@ -509,7 +529,8 @@ export async function addServiceSparepartAction(
           item.unitCost ?? null,
           sellingPrice,
           session.profileId,
-          input.note ?? null
+          input.note ?? null,
+          item.serializedUnitId ?? null
         );
         usageIds.push(usageId);
       } catch (rpcErr: any) {

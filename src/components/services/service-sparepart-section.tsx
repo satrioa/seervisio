@@ -1,9 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Plus, X, Search, Minus, AlertTriangle, Wrench } from "lucide-react";
+import { Plus, X, AlertTriangle, Wrench, Search, Smartphone, Package } from "lucide-react";
 
 import { addServiceSparepartAction } from "@/server/actions/service-workflow.actions";
+import {
+  listInventoryItemsAction,
+  findInventoryByBarcodeAction,
+  listSerializedUnitsAction,
+  type InventoryItemRow,
+  type SerializedUnitRow,
+} from "@/server/actions/inventory.actions";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,34 +18,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { BarcodeSearchInput } from "@/components/inventory/barcode-search-input";
 import { formatCurrency } from "@/components/services/service-data";
 import type { SparepartItem } from "@/components/services/service-data";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 import { type ServiceWorkflowStatus } from "@/domain/service/service-workflow";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
+import { can } from "@/lib/permissions/can";
+import { PERMISSIONS } from "@/lib/permissions/permissions";
+import {
+  CONDITION_GRADE_LABELS,
+  type SerializedUnitStatus,
+  type ConditionGrade,
+} from "@/types/app";
 
-/* ─── Mock inventory ─── */
-interface MockInventoryItem {
-  id: string;
-  name: string;
-  stock: number;
-  price: number;
-}
-
-const INITIAL_INVENTORY: MockInventoryItem[] = [
-  { id: "inv-1", name: "Battery iPhone 11", stock: 4, price: 350000 },
-  { id: "inv-2", name: "LCD Samsung Galaxy S22", stock: 2, price: 1250000 },
-  { id: "inv-3", name: "Flexible Charger iPhone 12", stock: 6, price: 180000 },
-  { id: "inv-4", name: "Speaker iPhone XR", stock: 3, price: 220000 },
-  { id: "inv-5", name: "Kamera Belakang iPhone 12", stock: 0, price: 780000 },
-  { id: "inv-6", name: "SSD NVMe 512GB", stock: 5, price: 650000 },
-  { id: "inv-7", name: "LCD iPhone 11 Pro", stock: 1, price: 980000 },
-  { id: "inv-8", name: "Battery Samsung S22", stock: 3, price: 295000 },
-];
-
-/* ─── Status gating ─── */
 const ALLOWED_SPAREPART_STATUSES: ServiceWorkflowStatus[] = ["PERBAIKAN", "QC"];
 
-/* ─── Props ─── */
 interface ServiceSparepartSectionProps {
   serviceId: string;
   serviceNumber: string;
@@ -49,16 +44,18 @@ interface ServiceSparepartSectionProps {
   brandSlug: string;
 }
 
-/* ─── Selected item tracked during editing ─── */
 interface SelectedSparepart {
-  inventoryId: string;
+  tempId: string;
+  inventoryItemId: string;
   name: string;
   qty: number;
   price: number;
   maxStock: number;
+  unitName: string;
+  serializedUnitId?: string | null;
+  serializedUnit?: SerializedUnitRow | null;
 }
 
-/* ─── Component ─── */
 export function ServiceSparepartSection({
   serviceId,
   serviceNumber,
@@ -68,114 +65,172 @@ export function ServiceSparepartSection({
   onSparepartRemoved,
   brandSlug,
 }: ServiceSparepartSectionProps) {
+  const { userRole } = useActiveBranch();
+  const canManage = can(userRole as any, PERMISSIONS.INVENTORY_MANAGE);
   const [expanded, setExpanded] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [searchResults, setSearchResults] = React.useState<InventoryItemRow[]>([]);
+  const [searching, setSearching] = React.useState(false);
   const [selected, setSelected] = React.useState<SelectedSparepart[]>([]);
   const [notes, setNotes] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  /* Mutable inventory — stock tracks adds/removes within session */
-  const [inventory, setInventory] = React.useState<MockInventoryItem[]>(INITIAL_INVENTORY);
+  // Serialized unit picker state
+  const [unitPickerItemId, setUnitPickerItemId] = React.useState<string | null>(null);
+  const [availableUnits, setAvailableUnits] = React.useState<SerializedUnitRow[]>([]);
+  const [unitsLoading, setUnitsLoading] = React.useState(false);
 
-  /* Derive allowed status */
   const workflowStatus = currentStatus.toUpperCase() as ServiceWorkflowStatus;
   const canAddSparepart = ALLOWED_SPAREPART_STATUSES.includes(workflowStatus);
 
-  /* Filtered suggestions from current inventory */
-  const suggestions = React.useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return q
-      ? inventory.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) &&
-            !selected.some((s) => s.inventoryId === item.id)
-        )
-      : [];
-  }, [search, selected, inventory]);
-
-  /* Total for selected items */
   const selectedTotal = React.useMemo(
     () => selected.reduce((sum, s) => sum + s.price * s.qty, 0),
-    [selected]
+    [selected],
   );
 
-  /* Reset form */
   const reset = React.useCallback(() => {
     setSearch("");
+    setSearchResults([]);
     setSelected([]);
     setNotes("");
     setError(null);
     setExpanded(false);
     setIsSubmitting(false);
+    setUnitPickerItemId(null);
+    setAvailableUnits([]);
   }, []);
 
-  /* Add item from inventory to selected */
-  const handleAddItem = (item: MockInventoryItem) => {
-    if (item.stock <= 0) return;
-    if (selected.some((s) => s.inventoryId === item.id)) return;
-    setSelected((prev) => [
-      ...prev,
-      {
-        inventoryId: item.id,
-        name: item.name,
-        qty: 1,
-        price: item.price,
-        maxStock: item.stock,
-      },
-    ]);
+  // Search inventory items (not mock data!)
+  const handleSearch = async (q: string) => {
+    setSearch(q);
+    if (q.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    const res = await listInventoryItemsAction(brandSlug, {
+      search: q.trim(),
+      pageSize: 10,
+    });
+    if (res.success) {
+      const addedIds = new Set(selected.map((s) => s.inventoryItemId));
+      setSearchResults(res.data.items.filter((i) => !addedIds.has(i.id)));
+    }
+    setSearching(false);
+  };
+
+  // Barcode / IMEI scan handler
+  const handleBarcodeScan = async (code: string) => {
+    if (!code || code.trim().length < 2) return;
+    setSearch(code);
+    setSearching(true);
+    const res = await findInventoryByBarcodeAction(brandSlug, { code: code.trim() });
+    setSearching(false);
+
+    if (res.success) {
+      const item = res.data.item;
+      const addedIds = new Set(selected.map((s) => s.inventoryItemId));
+      if (addedIds.has(item.id)) {
+        triggerDynamicIslandFeedback({
+          type: "info",
+          title: "Sudah ditambahkan",
+          description: `${item.name} sudah ada di daftar.`,
+          duration: 1500,
+        });
+        return;
+      }
+
+      if (res.data.type === "SERIALIZED_UNIT" && res.data.serializedUnit) {
+        // Found serialized unit directly — add it
+        const su = res.data.serializedUnit;
+        if (su.status !== "READY_STOCK") {
+          triggerDynamicIslandFeedback({
+            type: "error",
+            title: "Unit tidak tersedia",
+            description: `Status: ${su.status}. Hanya unit READY_STOCK yang bisa digunakan.`,
+            duration: 2400,
+          });
+          return;
+        }
+        addItem(item, su);
+      } else {
+        // Found inventory item — check if serialized and show unit picker
+        if (item.trackingType === "SERIALIZED" || item.itemType === "DEVICE_UNIT") {
+          setUnitPickerItemId(item.id);
+          setUnitsLoading(true);
+          const unitRes = await listSerializedUnitsAction(brandSlug, {
+            inventoryItemId: item.id,
+            status: "READY_STOCK",
+            pageSize: 50,
+          });
+          if (unitRes.success) {
+            setAvailableUnits(unitRes.data.items);
+            if (unitRes.data.items.length === 0) {
+              triggerDynamicIslandFeedback({
+                type: "info",
+                title: "Tidak ada unit tersedia",
+                description: `${item.name} — tidak ada unit READY_STOCK.`,
+                duration: 1500,
+              });
+            }
+          }
+          setUnitsLoading(false);
+        } else {
+          addItem(item, null);
+        }
+      }
+    } else {
+      triggerDynamicIslandFeedback({
+        type: "error",
+        title: "Tidak ditemukan",
+        description: res.error ?? "Item tidak ditemukan.",
+        duration: 1800,
+      });
+    }
+  };
+
+  const addItem = (item: InventoryItemRow, serializedUnit: SerializedUnitRow | null) => {
+    const newItem: SelectedSparepart = {
+      tempId: Math.random().toString(36).slice(2),
+      inventoryItemId: item.id,
+      name: item.name,
+      qty: 1,
+      price: serializedUnit?.sellingPrice ?? item.sellingPrice ?? 0,
+      maxStock: serializedUnit ? 1 : item.currentStock,
+      unitName: item.unitName,
+      serializedUnitId: serializedUnit?.id ?? null,
+      serializedUnit: serializedUnit ?? null,
+    };
+    setSelected((prev) => [...prev, newItem]);
     setSearch("");
+    setSearchResults([]);
+    setUnitPickerItemId(null);
+    setAvailableUnits([]);
     setError(null);
   };
 
-  /* Update qty */
-  const handleQtyChange = (id: string, delta: number) => {
+  // Add serialized unit from picker
+  const addSerializedUnit = (unit: SerializedUnitRow, item: InventoryItemRow) => {
+    addItem(item, unit);
+  };
+
+  // Quantity change (only for non-serialized items)
+  const handleQtyChange = (tempId: string, delta: number) => {
     setSelected((prev) =>
       prev.map((s) => {
-        if (s.inventoryId !== id) return s;
+        if (s.tempId !== tempId) return s;
         const next = s.qty + delta;
         if (next < 1 || next > s.maxStock) return s;
         return { ...s, qty: next };
-      })
+      }),
     );
   };
 
-  /* Remove item from selection list (within the add panel) */
-  const handleRemoveSelected = (id: string) => {
-    setSelected((prev) => prev.filter((s) => s.inventoryId !== id));
+  const handleRemoveSelected = (tempId: string) => {
+    setSelected((prev) => prev.filter((s) => s.tempId !== tempId));
   };
 
-  /* ─── Remove sparepart from the active list & return to stock ─── */
-  const handleRemoveSparepart = (part: SparepartItem, index: number) => {
-    /* Try to match by name to return stock */
-    const match = inventory.find(
-      (inv) => inv.name.toLowerCase() === part.name.toLowerCase()
-    );
-
-    if (match) {
-      setInventory((prev) =>
-        prev.map((inv) =>
-          inv.id === match.id
-            ? { ...inv, stock: inv.stock + part.qty }
-            : inv
-        )
-      );
-    }
-
-    /* Remove from parent state */
-    onSparepartRemoved?.();
-
-    triggerDynamicIslandFeedback({
-      type: "info",
-      title: "Sparepart dihapus",
-      description: match
-        ? part.name + " (" + part.qty + "x) dikembalikan ke stok."
-        : part.name + " dihapus dari daftar.",
-      duration: 1800,
-    });
-  };
-
-  /* Submit */
   const handleSubmit = async () => {
     if (selected.length === 0) {
       setError("Pilih minimal satu sparepart.");
@@ -194,9 +249,10 @@ export function ServiceSparepartSection({
         brandSlug,
         serviceId,
         items: selected.map((s) => ({
-          inventoryItemId: s.inventoryId,
+          inventoryItemId: s.inventoryItemId,
           quantity: s.qty,
           sellingPrice: s.price,
+          serializedUnitId: s.serializedUnitId ?? null,
         })),
         note: notes || undefined,
       };
@@ -204,24 +260,12 @@ export function ServiceSparepartSection({
       const result = await addServiceSparepartAction(input);
 
       if (result.success) {
-        /* Decrement stock in local inventory */
-        setInventory((prev) =>
-          prev.map((inv) => {
-            const sel = selected.find((s) => s.inventoryId === inv.id);
-            if (sel) {
-              return { ...inv, stock: Math.max(0, inv.stock - sel.qty) };
-            }
-            return inv;
-          })
-        );
-
         triggerDynamicIslandFeedback({
           type: "success",
           title: "Sparepart berhasil ditambahkan",
           description: "Stok dan rincian servis diperbarui.",
           duration: 1800,
         });
-
         reset();
         onSparepartAdded?.();
       } else {
@@ -254,35 +298,26 @@ export function ServiceSparepartSection({
         Sparepart Digunakan
       </h3>
 
-      {/* ─── Current sparepart list ─── */}
       {spareparts.length > 0 ? (
         <div className="space-y-2">
           {spareparts.map((part, index) => (
             <div
-              key={part.name + "-" + index}
+              key={part.id ?? `${part.name}-${index}`}
               className="flex items-center justify-between rounded-xl border bg-card px-3 py-2"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-foreground">
-                  {part.name}
-                </p>
+                <p className="truncate text-xs font-medium text-foreground">{part.name}</p>
                 <p className="text-[10px] text-muted-foreground">
                   {part.qty}x @ {formatCurrency(part.price)}
+                  {part.imeiSnapshot && ` · IMEI: ${part.imeiSnapshot}`}
+                  {part.batteryHealthSnapshot != null && ` · BH: ${part.batteryHealthSnapshot}%`}
+                  {part.conditionGradeSnapshot && ` · ${CONDITION_GRADE_LABELS[part.conditionGradeSnapshot] ?? part.conditionGradeSnapshot}`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <p className="shrink-0 text-xs font-medium tabular-nums text-foreground">
                   {formatCurrency(part.price * part.qty)}
                 </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleRemoveSparepart(part, index)}
-                >
-                  <X className="size-3" />
-                </Button>
               </div>
             </div>
           ))}
@@ -291,7 +326,6 @@ export function ServiceSparepartSection({
         <p className="text-xs text-muted-foreground">Belum ada sparepart digunakan.</p>
       )}
 
-      {/* ─── Tambah Sparepart button ─── */}
       <Button
         variant="outline"
         size="sm"
@@ -309,53 +343,119 @@ export function ServiceSparepartSection({
         </p>
       )}
 
-      {/* ─── Inline expandable panel ─── */}
       {expanded && (
         <div className="rounded-xl border bg-muted/30 p-3 space-y-3">
           <h4 className="text-xs font-semibold text-foreground">Tambah Sparepart</h4>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Cari sparepart..."
+          {/* Barcode / IMEI Search */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] text-muted-foreground">Scan / Cari Sparepart</Label>
+            <BarcodeSearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-8 text-xs"
+              onChange={handleSearch}
+              onLookup={handleBarcodeScan}
+              placeholder="Cari sparepart atau scan barcode/IMEI..."
             />
           </div>
 
-          {/* Suggestions */}
-          {suggestions.length > 0 && (
-            <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-lg border bg-background p-1.5">
-              {suggestions.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground">{item.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Stok: {item.stock} &middot; {formatCurrency(item.price)}
-                    </p>
-                  </div>
-                  {item.stock > 0 ? (
+          {/* Serialized unit picker */}
+          {unitPickerItemId && availableUnits.length > 0 && (
+            <div className="rounded-lg border bg-background p-2 space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground">Pilih unit serial tersedia:</p>
+              {availableUnits.map((unit) => {
+                const item = searchResults.find((i) => i.id === unit.inventoryItemId);
+                return (
+                  <div key={unit.id} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground">
+                        {unit.imei ?? unit.serialNumber ?? unit.barcode ?? unit.id.slice(0, 8)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        BH: {unit.batteryHealth != null ? `${unit.batteryHealth}%` : "—"}
+                        {unit.conditionGrade && ` · ${CONDITION_GRADE_LABELS[unit.conditionGrade] ?? unit.conditionGrade}`}
+                        {canManage && unit.sellingPrice != null && ` · ${formatCurrency(unit.sellingPrice)}`}
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() => handleAddItem(item)}
+                      onClick={() => addSerializedUnit(unit, item ?? { id: unit.inventoryItemId, name: unit.itemName ?? "", currentStock: 1, unitName: "pcs", sellingPrice: unit.sellingPrice ?? 0 } as InventoryItemRow)}
                     >
-                      Tambah
+                      Pilih
                     </Button>
-                  ) : (
-                    <Badge variant="secondary" className="text-[9px]">
-                      Habis
-                    </Badge>
-                  )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Search results */}
+          {search.trim().length >= 2 && !unitPickerItemId && (
+            <div className="max-h-40 overflow-y-auto rounded-lg border bg-background p-1.5">
+              {searching ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
                 </div>
-              ))}
+              ) : searchResults.length === 0 ? (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  Item tidak ditemukan.
+                </div>
+              ) : (
+                searchResults.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground">{item.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Stok: {item.currentStock} {item.unitName}
+                        {canManage && item.sellingPrice > 0 && ` · ${formatCurrency(item.sellingPrice)}`}
+                        {item.trackingType === "SERIALIZED" && " · Serial"}
+                      </p>
+                    </div>
+                    {item.currentStock > 0 || item.trackingType === "SERIALIZED" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={async () => {
+                          if (item.trackingType === "SERIALIZED" || item.itemType === "DEVICE_UNIT") {
+                            setUnitPickerItemId(item.id);
+                            setUnitsLoading(true);
+                            const unitRes = await listSerializedUnitsAction(brandSlug, {
+                              inventoryItemId: item.id,
+                              status: "READY_STOCK",
+                              pageSize: 50,
+                            });
+                            if (unitRes.success) {
+                              setAvailableUnits(unitRes.data.items);
+                              if (unitRes.data.items.length === 0) {
+                                triggerDynamicIslandFeedback({
+                                  type: "info",
+                                  title: "Tidak ada unit tersedia",
+                                  description: `${item.name} — tidak ada unit READY_STOCK.`,
+                                  duration: 1500,
+                                });
+                              }
+                            }
+                            setUnitsLoading(false);
+                          } else {
+                            addItem(item, null);
+                          }
+                        }}
+                      >
+                        Tambah
+                      </Button>
+                    ) : (
+                      <Badge variant="secondary" className="text-[9px]">Habis</Badge>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           )}
 
@@ -366,64 +466,82 @@ export function ServiceSparepartSection({
               <p className="text-[10px] font-medium text-muted-foreground">Sparepart dipilih:</p>
               {selected.map((s) => (
                 <div
-                  key={s.inventoryId}
+                  key={s.tempId}
                   className="rounded-lg border bg-background px-3 py-2"
                 >
                   <div className="flex items-start justify-between">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-foreground">{s.name}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        Stok tersedia: {s.maxStock}
+                        {s.serializedUnit ? (
+                          <>
+                            Unit serial: {s.serializedUnit.imei ?? s.serializedUnit.serialNumber ?? s.serializedUnit.barcode ?? "—"}
+                            {s.serializedUnit.batteryHealth != null && ` · BH: ${s.serializedUnit.batteryHealth}%`}
+                          </>
+                        ) : (
+                          `Stok tersedia: ${s.maxStock} ${s.unitName}`
+                        )}
                       </p>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleRemoveSelected(s.inventoryId)}
+                      className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRemoveSelected(s.tempId)}
                     >
                       <X className="size-3" />
                     </Button>
                   </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        disabled={s.qty <= 1}
-                        onClick={() => handleQtyChange(s.inventoryId, -1)}
-                      >
-                        <Minus className="size-3" />
-                      </Button>
-                      <span className="w-6 text-center text-xs font-medium tabular-nums">
-                        {s.qty}
+                  {!s.serializedUnit && (
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          disabled={s.qty <= 1}
+                          onClick={() => handleQtyChange(s.tempId, -1)}
+                        >
+                          <Plus className="size-3 rotate-45" />
+                        </Button>
+                        <span className="w-6 text-center text-xs font-medium tabular-nums">
+                          {s.qty}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          disabled={s.qty >= s.maxStock}
+                          onClick={() => handleQtyChange(s.tempId, 1)}
+                        >
+                          <Plus className="size-3" />
+                        </Button>
+                      </div>
+                      <span className="text-xs font-medium tabular-nums">
+                        {formatCurrency(s.price * s.qty)}
                       </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        disabled={s.qty >= s.maxStock}
-                        onClick={() => handleQtyChange(s.inventoryId, 1)}
-                      >
-                        <Plus className="size-3" />
-                      </Button>
                     </div>
-                    <span className="text-xs font-medium tabular-nums">
-                      {formatCurrency(s.price * s.qty)}
-                    </span>
-                  </div>
+                  )}
+                  {s.serializedUnit && (
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">
+                        {canManage && s.price > 0 && formatCurrency(s.price)}
+                      </span>
+                      {canManage && (
+                        <span className="text-xs font-medium tabular-nums">
+                          {s.price > 0 ? formatCurrency(s.price) : "—"}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 
-              {/* Total */}
               <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
-                <span className="text-xs font-medium text-foreground">
-                  Total sparepart:
-                </span>
+                <span className="text-xs font-medium text-foreground">Total:</span>
                 <span className="text-xs font-semibold tabular-nums">
                   {formatCurrency(selectedTotal)}
                 </span>
@@ -431,7 +549,6 @@ export function ServiceSparepartSection({
             </div>
           )}
 
-          {/* Notes */}
           <div>
             <Label htmlFor="sparepart-notes" className="text-[10px] text-muted-foreground">
               Catatan
@@ -445,7 +562,6 @@ export function ServiceSparepartSection({
             />
           </div>
 
-          {/* Error */}
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -453,7 +569,6 @@ export function ServiceSparepartSection({
             </div>
           )}
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button
               type="button"

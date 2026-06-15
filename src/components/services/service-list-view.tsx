@@ -462,7 +462,7 @@ export function ServiceListView({
                   }}
                   className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/30`}
                 >
-                  <div className="flex items-center">
+                  <div className="flex min-w-max items-center whitespace-nowrap">
                     <DeviceIcon record={service} />
                   </div>
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -512,7 +512,7 @@ export function ServiceListView({
                       (() => {
                         const ps = getPickupStatus(service);
                         return (
-                          <span className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-medium ${getPickupColor(ps)}`}>
+                          <span className={`ml-1 inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-1.5 py-0.5 text-[8px] font-medium leading-none ${getPickupColor(ps)}`}>
                             {getPickupLabel(ps)}
                           </span>
                         );
@@ -772,7 +772,7 @@ export function ServiceListView({
                   </span>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_CONFIG[service.status].color}`}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_CONFIG[service.status].color}`}
                 >
                   {STATUS_CONFIG[service.status].label}
                 </span>
@@ -780,7 +780,7 @@ export function ServiceListView({
                   (() => {
                     const ps = getPickupStatus(service);
                     return (
-                      <span className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-medium ${getPickupColor(ps)}`}>
+                      <span className={`ml-1 inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-1.5 py-0.5 text-[8px] font-medium leading-none ${getPickupColor(ps)}`}>
                         {getPickupLabel(ps)}
                       </span>
                     );

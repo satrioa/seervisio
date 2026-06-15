@@ -40,8 +40,35 @@ export const PERMISSIONS = {
   // Finance
   FINANCE_VIEW: "finance.view",
 
+  // Finance Report
+  FINANCE_REPORT_VIEW: "finance_report.view",
+  FINANCE_REPORT_EXPORT: "finance_report.export",
+
+  // Cashflow
+  CASHFLOW_VIEW: "cashflow.view",
+  CASHFLOW_EXPORT: "cashflow.export",
+
   // Payment Accounts
   PAYMENT_ACCOUNT_VIEW: "payment_account.view",
+  PAYMENT_ACCOUNT_CREATE: "payment_account.create",
+  PAYMENT_ACCOUNT_CREATE_GLOBAL: "payment_account.create_global",
+  PAYMENT_ACCOUNT_UPDATE: "payment_account.update",
+  PAYMENT_ACCOUNT_ADJUST_BALANCE: "payment_account.adjust_balance",
+  PAYMENT_ACCOUNT_ARCHIVE: "payment_account.archive",
+
+  // Payment Methods
+  PAYMENT_METHOD_VIEW: "payment_method.view",
+  PAYMENT_METHOD_LINK_ACCOUNT: "payment_method.link_account",
+  PAYMENT_METHOD_TOGGLE_ACTIVE: "payment_method.toggle_active",
+  PAYMENT_METHOD_REPAIR: "payment_method.repair",
+  PAYMENT_METHOD_MANAGE_MDR: "payment_method.manage_mdr",
+
+  // Finance Transactions
+  FINANCE_TRANSACTION_VIEW: "finance_transaction.view",
+  FINANCE_TRANSACTION_CREATE_INCOME: "finance_transaction.create_income",
+  FINANCE_TRANSACTION_CREATE_EXPENSE: "finance_transaction.create_expense",
+  FINANCE_TRANSACTION_VOID: "finance_transaction.void",
+  FINANCE_TRANSACTION_EXPORT: "finance_transaction.export",
 
   // Store Shifts
   STORE_SHIFT_OPEN: "store_shift.open",

@@ -6,7 +6,6 @@ import { Smartphone, Wrench, CheckCircle2, ClipboardList, Plus } from "lucide-re
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { getServiceOverviewAction } from "@/server/actions/service.actions";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import {
@@ -73,13 +72,13 @@ export function ServiceSidebarOverview() {
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex h-full items-center justify-center py-12">
             <div className="size-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
           </div>
         ) : (
-          <div className="flex flex-col gap-4 p-4">
+          <div className="flex min-h-full flex-col gap-4 p-4">
             {/* Stat Cards */}
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col gap-1 rounded-lg border bg-card p-3">
@@ -120,62 +119,8 @@ export function ServiceSidebarOverview() {
               </div>
             </div>
 
-            {stats.trend14Days.length > 0 && (
-              <>
-                <Separator />
-
-                {/* Line Chart */}
-                <div className="flex flex-col gap-2">
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Trend Servis (14 Hari)
-                  </h4>
-                  <div className="rounded-lg border bg-card p-3">
-                    <ChartContainer config={chartConfig} className="h-[200px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={stats.trend14Days} margin={{ top: 5, right: 8, bottom: 5, left: -20 }}>
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                          <XAxis
-                            dataKey="date"
-                            tick={{ fontSize: 10 }}
-                            tickLine={false}
-                            axisLine={false}
-                            tickFormatter={(val: string) => val.slice(3)}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 10 }}
-                            tickLine={false}
-                            axisLine={false}
-                            allowDecimals={false}
-                          />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Line
-                            type="monotone"
-                            dataKey="masuk"
-                            stroke="hsl(var(--chart-1))"
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 4 }}
-                            name="inProgress"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="selesai"
-                            stroke="hsl(var(--chart-2))"
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 4 }}
-                            name="completed"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartContainer>
-                  </div>
-                </div>
-              </>
-            )}
-
             {/* Tip */}
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
+            <div className="shrink-0 rounded-lg bg-muted/50 px-3 py-2">
               <p className="text-[10px] leading-relaxed text-muted-foreground">
                 Klik salah satu servis di daftar untuk melihat detail lengkapnya.
               </p>
@@ -183,6 +128,57 @@ export function ServiceSidebarOverview() {
           </div>
         )}
       </div>
+
+      {!loading && stats.trend14Days.length > 0 && (
+        <div className="shrink-0 border-t px-4 py-3">
+          <div className="flex w-full flex-col gap-2">
+            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Trend Servis (14 Hari)
+            </h4>
+            <div className="w-full">
+              <ChartContainer config={chartConfig} className="h-[180px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={stats.trend14Days} margin={{ top: 5, right: 8, bottom: 5, left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val: string) => val.slice(3)}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line
+                      type="monotone"
+                      dataKey="masuk"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      name="inProgress"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="selesai"
+                      stroke="hsl(var(--chart-2))"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      name="completed"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

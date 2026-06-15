@@ -84,7 +84,8 @@ export async function getServiceSparepartUsages(
     .from("service_sparepart_usages")
     .select(`
       *,
-      item:inventory_items(id, name, type)
+      item:inventory_items(id, name, type),
+      serialized_unit:inventory_serialized_units(*)
     `)
     .eq("service_id", serviceId)
     .order("created_at", { ascending: true });

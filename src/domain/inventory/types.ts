@@ -1,8 +1,6 @@
-/**
- * Inventory domain types.
- */
+export type ItemType = "PRODUCT" | "SPAREPART" | "ACCESSORY" | "CONSUMABLE" | "SUPPLY" | "DEVICE_UNIT" | "OTHER";
 
-import type { ItemType } from "@/types/app";
+export type TrackingType = "QUANTITY" | "SERIALIZED";
 
 export interface InventoryItemInput {
   brandId: number;
@@ -10,10 +8,17 @@ export interface InventoryItemInput {
   itemType: ItemType;
   name: string;
   sku?: string;
+  barcode?: string;
+  variantName?: string;
+  variantAttributes?: Record<string, any>;
+  trackingType?: TrackingType;
+  description?: string;
+  unitName?: string;
   costPrice: number;
   sellingPrice: number;
   minStock?: number;
   trackStock?: boolean;
+  isActive?: boolean;
 }
 
 export interface InventoryMovementInput {
