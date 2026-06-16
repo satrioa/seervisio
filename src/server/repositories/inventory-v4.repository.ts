@@ -1316,128 +1316,184 @@ export async function listPosProductsV4(
   categoryId?: string | null,
   search?: string,
 ): Promise<PosProductV4Row[]> {
-  let query = (supabase as any)
+  console.log("[pos-v4/repo] query input", { brandId, branchId, categoryId, search });
+
+  // ── Step 1: Query inv_products directly (no joins) ──────────────────────
+  let productQuery = (supabase as any)
     .from("inv_products")
-    .select(`
-      id, name, image_url, product_kind, condition_type, category_id, unit, appears_in_pos,
-      inv_variants!inner(
-        id, name, attributes, sku, barcode, image_url,
-        cost_price, selling_price, min_stock, unit, is_active
-      )
-    `)
+    .select("id, name, image_url, product_kind, condition_type, category_id, unit, appears_in_pos")
     .eq("brand_id", brandId)
+    .eq("branch_id", branchId)
+    .eq("is_active", true)
     .eq("appears_in_pos", true)
     .not("product_kind", "eq", "SPAREPART")
-    .eq("inv_variants.is_active", true)
     .order("name", { ascending: true });
 
-  if (categoryId) {
-    query = query.eq("category_id", categoryId);
+  // category filter: ignore "ALL" sentinel or empty string
+  if (categoryId && categoryId !== "ALL") {
+    productQuery = productQuery.eq("category_id", categoryId);
   }
   if (search && search.trim()) {
-    const term = search.trim();
-    query = query.or(
-      `name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
-    );
+    productQuery = productQuery.ilike("name", `%${search.trim()}%`);
   }
 
-  const { data, error } = await query;
-  if (error) throw new Error(parsePgErr(error));
+  const { data: productsData, error: productsError } = await productQuery;
+  if (productsError) throw new Error(parsePgErr(productsError));
 
-  // Group by product and collect variants with stock
-  const productMap = new Map<string, PosProductV4Row>();
-  for (const raw of (data as any[]) ?? []) {
-    const pid = raw.id;
-    if (!productMap.has(pid)) {
-      productMap.set(pid, {
-        productId: pid,
-        name: raw.name,
-        productKind: raw.product_kind,
-        conditionType: raw.condition_type ?? null,
-        categoryId: raw.category_id ?? null,
-        categoryName: null,
-        imageUrl: raw.image_url ?? null,
-        unit: raw.unit,
-        appearsInPos: raw.appears_in_pos,
-        variants: [],
-      });
+  console.log("[pos-v4/repo] products count", productsData?.length ?? 0);
+
+  if (!productsData || productsData.length === 0) return [];
+
+  const productIds = (productsData as any[]).map((p) => p.id);
+
+  // ── Step 2: Query inv_variants for those products ────────────────────────
+  const { data: variantsData, error: variantsError } = await (supabase as any)
+    .from("inv_variants")
+    .select("id, product_id, name, attributes, sku, barcode, image_url, cost_price, selling_price, min_stock, unit")
+    .in("product_id", productIds)
+    .eq("is_active", true);
+  if (variantsError) throw new Error(parsePgErr(variantsError));
+
+  console.log("[pos-v4/repo] variants count", variantsData?.length ?? 0);
+
+  const variantIds = (variantsData as any[] ?? []).map((v) => v.id);
+
+  // ── Step 3: Query inv_variant_stocks for those variants at this branch ───
+  let stocksData: any[] = [];
+  if (variantIds.length > 0) {
+    const { data: sd, error: stocksError } = await (supabase as any)
+      .from("inv_variant_stocks")
+      .select("variant_id, current_stock")
+      .in("variant_id", variantIds)
+      .eq("branch_id", branchId);
+    if (stocksError) throw new Error(parsePgErr(stocksError));
+    stocksData = sd ?? [];
+  }
+
+  console.log("[pos-v4/repo] stocks count", stocksData.length);
+
+  // Build stock lookup: variantId → currentStock
+  const stockMap = new Map<string, number>();
+  for (const s of stocksData) {
+    stockMap.set(s.variant_id, Number(s.current_stock ?? 0));
+  }
+
+  // ── Step 4: Query READY_STOCK units for Unit SECOND products ─────────────
+  const unitSecondProductIds = (productsData as any[])
+    .filter((p) => p.product_kind === "UNIT" && p.condition_type === "SECOND")
+    .map((p) => p.id);
+
+  // unitReadyMap: productId → count
+  const unitReadyMap = new Map<string, number>();
+  if (unitSecondProductIds.length > 0) {
+    const { data: unitsData, error: unitsError } = await (supabase as any)
+      .from("inv_units")
+      .select("product_id")
+      .in("product_id", unitSecondProductIds)
+      .eq("branch_id", branchId)
+      .eq("status", "READY_STOCK");
+    if (unitsError) throw new Error(parsePgErr(unitsError));
+    console.log("[pos-v4/repo] units (READY_STOCK) count", unitsData?.length ?? 0);
+    for (const u of (unitsData ?? []) as any[]) {
+      unitReadyMap.set(u.product_id, (unitReadyMap.get(u.product_id) ?? 0) + 1);
     }
   }
 
-  // Fetch variant stocks per branch
-  const productIds = [...productMap.keys()];
-  for (const pid of productIds) {
-    const product = productMap.get(pid)!;
-    const { data: variants } = await (supabase as any)
-      .from("inv_variants")
-      .select(`
-        id, name, attributes, sku, barcode, image_url,
-        cost_price, selling_price, min_stock, unit, is_active,
-        inv_variant_stocks!inner(current_stock)
-      `)
-      .eq("product_id", pid)
-      .eq("is_active", true)
-      .eq("inv_variant_stocks.branch_id", branchId);
-
-    if (variants) {
-      for (const v of variants as any[]) {
-        const stock = Number(v.inv_variant_stocks?.current_stock ?? 0);
-        if (product.productKind === "UNIT" && product.conditionType === "SECOND") {
-          // Unit Second: stock is count of READY_STOCK units
-          product.variants.push({
-            variantId: v.id,
-            variantName: v.name,
-            attributes: v.attributes ?? {},
-            sku: v.sku,
-            barcode: v.barcode,
-            imageUrl: v.image_url ?? product.imageUrl ?? null,
-            costPrice: Number(v.cost_price),
-            sellingPrice: Number(v.selling_price),
-            minStock: Number(v.min_stock ?? 0),
-            currentStock: stock,
-            unit: v.unit,
-          });
-        } else {
-          // Quantity items: only show if stock > 0
-          if (stock > 0) {
-            product.variants.push({
-              variantId: v.id,
-              variantName: v.name,
-              attributes: v.attributes ?? {},
-              sku: v.sku,
-              barcode: v.barcode,
-              imageUrl: v.image_url ?? product.imageUrl ?? null,
-              costPrice: Number(v.cost_price),
-              sellingPrice: Number(v.selling_price),
-              minStock: Number(v.min_stock ?? 0),
-              currentStock: stock,
-              unit: v.unit,
-            });
-          }
-        }
-      }
-    }
+  // ── Step 5: Assemble ─────────────────────────────────────────────────────
+  // Build variant list per product
+  const variantsByProduct = new Map<string, any[]>();
+  for (const v of (variantsData as any[] ?? [])) {
+    const arr = variantsByProduct.get(v.product_id) ?? [];
+    arr.push(v);
+    variantsByProduct.set(v.product_id, arr);
   }
 
-  // Fetch category names
-  const catIds = [...new Set([...productMap.values()].map((p) => p.categoryId).filter(Boolean))];
+  // Fetch category names once
+  const catIds = [...new Set((productsData as any[]).map((p) => p.category_id).filter(Boolean))];
+  const categoryNameMap = new Map<string, string>();
   if (catIds.length > 0) {
     const { data: cats } = await (supabase as any)
       .from("inventory_categories")
       .select("id, name")
       .in("id", catIds);
-    for (const c of cats ?? []) {
-      for (const product of productMap.values()) {
-        if (product.categoryId === c.id) product.categoryName = c.name;
-      }
+    for (const c of (cats ?? []) as any[]) {
+      categoryNameMap.set(c.id, c.name);
     }
   }
 
-  return [...productMap.values()].filter((p) => {
-    if (p.variants.length === 0) return false;
-    return true;
-  });
+  const result: PosProductV4Row[] = [];
+
+  for (const p of (productsData as any[])) {
+    const pid = p.id;
+    const isUnitSecond = p.product_kind === "UNIT" && p.condition_type === "SECOND";
+    const pvariants = variantsByProduct.get(pid) ?? [];
+
+    const assembledVariants: PosVariantV4Row[] = [];
+
+    if (isUnitSecond) {
+      // Unit SECOND: show if there are READY_STOCK units; stock = count of those units
+      const readyCount = unitReadyMap.get(pid) ?? 0;
+      if (readyCount > 0) {
+        // Use first variant as representative (Unit Second has one variant)
+        const v = pvariants[0];
+        if (v) {
+          assembledVariants.push({
+            variantId: v.id,
+            variantName: v.name,
+            attributes: v.attributes ?? {},
+            sku: v.sku ?? null,
+            barcode: v.barcode ?? null,
+            imageUrl: v.image_url ?? p.image_url ?? null,
+            costPrice: Number(v.cost_price ?? 0),
+            sellingPrice: Number(v.selling_price ?? 0),
+            minStock: Number(v.min_stock ?? 0),
+            currentStock: readyCount,
+            unit: v.unit ?? p.unit ?? "pcs",
+          });
+        }
+      }
+    } else {
+      // PRODUCT or UNIT NEW: show variants with stock > 0
+      for (const v of pvariants) {
+        const currentStock = stockMap.get(v.id) ?? 0;
+        if (currentStock > 0) {
+          assembledVariants.push({
+            variantId: v.id,
+            variantName: v.name,
+            attributes: v.attributes ?? {},
+            sku: v.sku ?? null,
+            barcode: v.barcode ?? null,
+            imageUrl: v.image_url ?? p.image_url ?? null,
+            costPrice: Number(v.cost_price ?? 0),
+            sellingPrice: Number(v.selling_price ?? 0),
+            minStock: Number(v.min_stock ?? 0),
+            currentStock,
+            unit: v.unit ?? p.unit ?? "pcs",
+          });
+        }
+      }
+    }
+
+    if (assembledVariants.length === 0) continue; // skip products with no sellable variants
+
+    result.push({
+      productId: pid,
+      name: p.name,
+      productKind: p.product_kind,
+      conditionType: p.condition_type ?? null,
+      categoryId: p.category_id ?? null,
+      categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
+      imageUrl: p.image_url ?? null,
+      unit: p.unit ?? "pcs",
+      appearsInPos: p.appears_in_pos,
+      variants: assembledVariants,
+    });
+  }
+
+  console.log("[pos-v4/repo] final assembled products count", result.length);
+  return result;
 }
+
 
 /* ─── List Unit Second options for a product V4 ─── */
 

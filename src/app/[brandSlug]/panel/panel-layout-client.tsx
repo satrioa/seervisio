@@ -299,7 +299,7 @@ function PanelLayoutShell({
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden border border-border/60 bg-card shadow-sm outline-none ring-0 ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}>
+            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden outline-none ring-0 ${isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
               <main
                 ref={mainScrollRef}
                 className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : "p-6 [&>*]:space-y-3"}`}

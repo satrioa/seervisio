@@ -953,7 +953,9 @@ export async function listPosProductsV4Action(
     }
 
     const supabase = await createServerSupabase();
+    console.log("[pos-v4/action] list input", { brandSlug, branchId, search, categoryId, brandId: session.brandId });
     const result = await repoListPosProducts(supabase as any, session.brandId, branchId, categoryId, search);
+    console.log("[pos-v4/action] result count", result.length);
     return successResult(result);
   } catch (err: any) {
     console.error("[listPosProductsV4Action]", err);

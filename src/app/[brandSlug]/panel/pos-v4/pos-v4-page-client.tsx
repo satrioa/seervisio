@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import {
   Search, Plus, Minus, X, Loader2, ShoppingCart, CreditCard,
   Smartphone, Package, ChevronDown, ChevronUp, Wifi, Banknote,
-  QrCode, Receipt, Eye, AlertTriangle,
+  QrCode, Receipt, Eye, AlertTriangle, History, ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,18 +14,23 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
   MinimalCard,
   MinimalCardDescription,
-  MinimalCardImage,
   MinimalCardTitle,
 } from "@/components/ui/minimal-card";
+import {
+  FamilyDrawerRoot,
+  FamilyDrawerTrigger,
+  FamilyDrawerPortal,
+  FamilyDrawerOverlay,
+  FamilyDrawerContent,
+  FamilyDrawerAnimatedWrapper,
+  FamilyDrawerClose,
+} from "@/components/ui/family-drawer";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { can } from "@/lib/permissions/can";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
@@ -72,35 +77,161 @@ function stockBadge(variant: PosVariantV4Row, isUnitSecond: boolean) {
   return { label: "Ready", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
 }
 
-function ProductImageFrame({
-  src,
-  name,
-  isUnit,
-}: {
-  src: string | null;
-  name: string;
-  isUnit: boolean;
-}) {
-  if (src) {
-    return <MinimalCardImage src={src} alt={name} className="mb-3 h-28 sm:h-32" />;
-  }
+function getPaymentMethodIcon(type?: string | null, name?: string | null) {
+  const value = `${type ?? ""} ${name ?? ""}`.toLowerCase();
 
-  const initials = name
+  if (value.includes("cash") || value.includes("tunai")) return Banknote;
+  if (value.includes("qris") || value.includes("qr")) return QrCode;
+  if (value.includes("transfer")) return Wifi;
+  if (value.includes("debit") || value.includes("card") || value.includes("kartu")) return CreditCard;
+
+  return CreditCard;
+}
+
+function getPaymentMethodLabel(pm: PaymentMethodOption) {
+  return pm.paymentMethodName ?? pm.methodType ?? pm.paymentMethodType ?? "Metode";
+}
+
+function isCashPaymentMethod(pm?: PaymentMethodOption | null) {
+  if (!pm) return false;
+
+  const value = `${pm.paymentMethodType ?? ""} ${pm.methodType ?? ""} ${pm.paymentMethodName ?? ""}`.toLowerCase();
+  return value.includes("cash") || value.includes("tunai");
+}
+
+/* ─── Shared product card ─── */
+
+function PosProductCard({
+  product,
+  onClick,
+  disabled,
+}: {
+  product: PosProductV4Row;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  const isUnitSecond = product.productKind === "UNIT" && product.conditionType === "SECOND";
+  const firstVariant = product.variants[0]!;
+  const isSingleVariant = product.variants.length === 1;
+
+  const displayImage =
+    product.variants.find((v) => v.imageUrl)?.imageUrl ??
+    firstVariant?.imageUrl ??
+    product.imageUrl ??
+    null;
+
+  const badge = isSingleVariant ? stockBadge(firstVariant, isUnitSecond) : null;
+
+  const minPrice = Math.min(...product.variants.map((v) => v.sellingPrice));
+  const hasPriceRange = product.variants.some((v) => v.sellingPrice !== minPrice);
+
+  const initials = product.name
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
+    .map((p) => p[0]?.toUpperCase())
     .join("");
 
   return (
-    <div className="mb-3 flex h-28 w-full items-center justify-center rounded-[20px] border bg-gradient-to-br from-slate-50 via-white to-slate-100 shadow-inner sm:h-32">
-      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-        {isUnit ? <Smartphone className="size-7" /> : <Package className="size-7" />}
-        <span className="text-sm font-semibold tracking-wide text-slate-500">{initials || "IV"}</span>
+    <button
+      id={`pos-product-${product.productId}`}
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="group w-[220px] text-left disabled:opacity-40"
+    >
+      <div className="flex h-[280px] w-full flex-col overflow-hidden rounded-[14px] border border-border/70 bg-white p-3 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
+        <div className="mb-3 flex h-[104px] w-full shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-muted/25">
+          {displayImage ? (
+            <img
+              src={displayImage}
+              alt={product.name}
+              className="h-full w-full object-contain p-2"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground/70">
+              {product.productKind === "UNIT" ? (
+                <Smartphone className="size-8" />
+              ) : (
+                <Package className="size-8" />
+              )}
+              <span className="text-xs font-semibold tracking-wide">
+                {initials || "—"}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-[44px] items-start justify-between gap-2">
+            <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+              {product.name}
+            </h3>
+
+            {isSingleVariant && badge && (
+              <Badge
+                variant="outline"
+                className={`h-5 shrink-0 rounded-full px-2 text-[10px] font-medium ${badge.className}`}
+              >
+                {badge.label}
+              </Badge>
+            )}
+
+            {!isSingleVariant && isUnitSecond && (
+              <Badge
+                variant="outline"
+                className="h-5 shrink-0 rounded-full border-blue-200 bg-blue-50 px-2 text-[10px] font-medium text-blue-700"
+              >
+                {product.variants.reduce((s, v) => s + v.currentStock, 0)} ready
+              </Badge>
+            )}
+          </div>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            {product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk")}
+          </p>
+
+          <div className="mt-2 flex min-h-[28px] shrink-0 flex-wrap gap-1.5 overflow-hidden">
+            {!isSingleVariant &&
+              product.variants.slice(0, 2).map((v) => (
+                <span
+                  key={v.variantId}
+                  className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground"
+                >
+                  {v.variantName}
+                </span>
+              ))}
+
+            {!isSingleVariant && product.variants.length > 2 && (
+              <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                +{product.variants.length - 2}
+              </span>
+            )}
+            {isSingleVariant && shouldShowVariant(product.name, firstVariant.variantName) && (
+              <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                {firstVariant.variantName}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-auto flex shrink-0 items-center justify-between pt-2">
+            <span className="text-sm font-bold tabular-nums text-foreground">
+              {formatPrice(minPrice)}
+              {hasPriceRange ? "+" : ""}
+            </span>
+
+            {isSingleVariant && !isUnitSecond && (
+              <span className="text-xs text-muted-foreground">
+                Stok {firstVariant.currentStock}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </button>
   );
 }
+
 
 function shouldShowVariant(name: string, variant?: string | null) {
   if (!variant) return false;
@@ -159,6 +290,10 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const [unitPickerOpen, setUnitPickerOpen] = React.useState(false);
   const [unitPickerProductName, setUnitPickerProductName] = React.useState("");
 
+  /* ── Variant Picker ── */
+  const [variantPickerOpen, setVariantPickerOpen] = React.useState(false);
+  const [variantPickerProduct, setVariantPickerProduct] = React.useState<PosProductV4Row | null>(null);
+
   /* ── Cart ── */
   const [cart, setCart] = React.useState<PosCartItemV4[]>([]);
   const [customerId, setCustomerId] = React.useState("");
@@ -175,6 +310,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   /* ── History ── */
   const [transactions, setTransactions] = React.useState<PosTransactionV4Row[]>([]);
   const [txLoading, setTxLoading] = React.useState(false);
+  const [txDrawerOpen, setTxDrawerOpen] = React.useState(false);
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailItems, setDetailItems] = React.useState<PosTransactionItemV4Row[]>([]);
   const [detailTx, setDetailTx] = React.useState<PosTransactionV4Row | null>(null);
@@ -193,7 +329,9 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const fetchProducts = React.useCallback(async (categoryId?: string | null, search?: string) => {
     if (!activeBranchId) return;
     setProductsLoading(true);
+    console.log("[pos-v4/client] activeBranchId", activeBranchId);
     const res = await listPosProductsV4Action(brandSlug, activeBranchId, categoryId, search || undefined);
+    console.log("[pos-v4/client] products result", res);
     if (res.success) setProducts(res.data ?? []);
     setProductsLoading(false);
   }, [brandSlug, activeBranchId]);
@@ -326,6 +464,37 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
     setCart((prev) => [...prev, newItem]);
   }, [cart, openUnitPicker]);
 
+  const handleProductClick = React.useCallback((product: PosProductV4Row) => {
+    const variants = product.variants ?? [];
+    console.log("[pos-v4] product clicked", {
+      productId: product.productId,
+      name: product.name,
+      productKind: product.productKind,
+      conditionType: product.conditionType,
+      variantsCount: variants.length,
+    });
+
+    // Unit SECOND → open IMEI picker
+    if (product.productKind === "UNIT" && product.conditionType === "SECOND") {
+      openUnitPicker(product.productId, product.name);
+      return;
+    }
+
+    if (variants.length === 0) {
+      triggerDynamicIslandFeedback({ title: "Varian belum tersedia atau stok kosong.", type: "error" });
+      return;
+    }
+
+    if (variants.length === 1) {
+      addVariantToCart(product, variants[0]!);
+      return;
+    }
+
+    // Multi-variant → open picker dialog
+    setVariantPickerProduct(product);
+    setVariantPickerOpen(true);
+  }, [openUnitPicker, addVariantToCart]);
+
   const updateCartQty = React.useCallback((tempId: string, delta: number) => {
     setCart((prev) =>
       prev.map((c) => {
@@ -359,7 +528,17 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   );
   const total = subtotal - discountAmount + serviceFeeAmount;
   const change = paidAmount - total;
-  const isCash = paymentMethods.find((pm) => pm.branchPaymentMethodId === selectedMethod)?.paymentMethodType === "CASH";
+  const selectedPaymentMethod = paymentMethods.find(
+    (pm) => pm.branchPaymentMethodId === selectedMethod,
+  );
+  const isCash = isCashPaymentMethod(selectedPaymentMethod);
+
+  React.useEffect(() => {
+    if (selectedMethod || paymentMethods.length === 0) return;
+
+    const cashMethod = paymentMethods.find((pm) => isCashPaymentMethod(pm));
+    setSelectedMethod((cashMethod ?? paymentMethods[0])!.branchPaymentMethodId);
+  }, [paymentMethods, selectedMethod]);
 
   /* ── Checkout ── */
 
@@ -467,10 +646,9 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-sm lg:flex-row">
+    <div className="flex h-full min-h-0 w-full flex-col lg:flex-row gap-3 bg-transparent text-sidebar-foreground">
         {/* ═══════════════ LEFT PANEL — Products ═══════════════ */}
-        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-sidebar">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -535,104 +713,51 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             )}
 
             {!productsLoading && products.length === 0 && (
-              <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
-                Tidak ada produk tersedia.
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                <Package className="size-10 text-muted-foreground/40" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Belum ada produk di POS</p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground/70">
+                    Pastikan produk aktif, muncul di POS, berada di cabang aktif, dan memiliki stok ready.
+                  </p>
+                </div>
+                {canManage && (
+                  <p className="text-[10px] text-muted-foreground/50">
+                    Branch: {activeBranchId} · Kategori: {activeCategory ?? "semua"} · Cari: {searchTerm || "—"}
+                  </p>
+                )}
               </div>
             )}
 
             {!productsLoading && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {products.map((product) => (
-                  <React.Fragment key={product.productId}>
-                    {product.variants.length === 1 && product.variants[0]!.variantName === product.name ? (
-                      /* Single variant - show as card */
-                      <button
-                        type="button"
-                        className="text-left transition-transform hover:-translate-y-0.5 disabled:opacity-40"
-                        onClick={() => addVariantToCart(product, product.variants[0]!)}
-                        disabled={
-                          product.conditionType !== "SECOND" && product.variants[0]!.currentStock <= 0
-                        }
-                      >
-                        <MinimalCard className="h-full rounded-[18px] p-2">
-                          <ProductImageFrame
-                            src={getDisplayImage(product, product.variants[0]!)}
-                            name={product.name}
-                            isUnit={product.productKind === "UNIT"}
-                          />
-                          <div className="space-y-2 px-1 pb-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <MinimalCardTitle className="mt-0 line-clamp-2 px-0 text-xs">{product.name}</MinimalCardTitle>
-                              <Badge variant="outline" className={`h-5 shrink-0 rounded-full px-2 text-[9px] font-normal ${stockBadge(product.variants[0]!, product.conditionType === "SECOND").className}`}>
-                                {stockBadge(product.variants[0]!, product.conditionType === "SECOND").label}
-                              </Badge>
-                            </div>
-                            <MinimalCardDescription className="px-0 pb-0 text-[10px]">
-                              {product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk")}
-                            </MinimalCardDescription>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold tabular-nums">{formatPrice(product.variants[0]!.sellingPrice)}</span>
-                              {product.conditionType !== "SECOND" && (
-                                <span className="text-[10px] text-muted-foreground">Stok {product.variants[0]!.currentStock}</span>
-                              )}
-                            </div>
-                          </div>
-                        </MinimalCard>
-                      </button>
-                    ) : (
-                      /* Multi-variant - show product card with variant chips */
-                      <MinimalCard className="h-full rounded-[18px] p-2">
-                        <ProductImageFrame
-                          src={getDisplayImage(product, product.variants.find((v) => v.imageUrl) ?? product.variants[0])}
-                          name={product.name}
-                          isUnit={product.productKind === "UNIT"}
-                        />
-                        <div className="space-y-2 px-1 pb-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <MinimalCardTitle className="mt-0 line-clamp-2 px-0 text-xs">{product.name}</MinimalCardTitle>
-                            {product.conditionType === "SECOND" && (
-                              <Badge variant="outline" className="h-5 shrink-0 rounded-full border-blue-200 bg-blue-50 px-2 text-[9px] font-normal text-blue-700">
-                                {product.variants.reduce((sum, v) => sum + v.currentStock, 0)} ready
-                              </Badge>
-                            )}
-                          </div>
-                          <MinimalCardDescription className="px-0 pb-0 text-[10px]">
-                            {product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk")}
-                          </MinimalCardDescription>
-                          <div className="flex flex-wrap gap-1">
-                          {product.variants.map((variant) => (
-                            <button
-                              key={variant.variantId}
-                              type="button"
-                              className="rounded-full border border-sidebar-border bg-background/85 px-2 py-1 text-[10px] transition-colors hover:bg-accent disabled:opacity-40 dark:bg-background/70"
-                              onClick={() => addVariantToCart(product, variant)}
-                              disabled={
-                                product.conditionType !== "SECOND" && variant.currentStock <= 0
-                              }
-                            >
-                              {variant.variantName}
-                              {product.conditionType !== "SECOND" && (
-                                <span className="ml-1 text-muted-foreground">({variant.currentStock})</span>
-                              )}
-                            </button>
-                          ))}
-                          </div>
-                          <div className="text-xs font-semibold tabular-nums">
-                          {formatPrice(Math.min(...product.variants.map((v) => v.sellingPrice)))}
-                          {product.variants.some((v) => v.sellingPrice !== product.variants[0]!.sellingPrice) ? "+" : ""}
-                          </div>
-                        </div>
-                      </MinimalCard>
-                    )}
-                  </React.Fragment>
-                ))}
+              <div className="grid justify-start gap-3 p-1 [grid-template-columns:repeat(auto-fill,220px)]">
+                {products.map((product) => {
+                  const isUnitSecond = product.productKind === "UNIT" && product.conditionType === "SECOND";
+                  const firstVariant = product.variants[0]!;
+
+                  // Determine disabled state:
+                  // single non-SECOND with no stock → disabled
+                  const disabled =
+                    !isUnitSecond &&
+                    product.variants.length === 1 &&
+                    firstVariant.currentStock <= 0;
+
+                  return (
+                    <PosProductCard
+                      key={product.productId}
+                      product={product}
+                      onClick={() => handleProductClick(product)}
+                      disabled={disabled}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
 
         {/* ═══════════════ RIGHT PANEL — Cart + Payment ═══════════════ */}
-        <aside className="flex min-h-[320px] w-full shrink-0 flex-col border-t border-sidebar-border bg-sidebar lg:min-h-0 lg:w-[380px] lg:border-l lg:border-t-0">
+        <aside className="flex min-h-[320px] w-full shrink-0 flex-col rounded-2xl border border-border/60 bg-card shadow-sm lg:min-h-0 lg:w-[380px]">
           {/* Cart */}
           <div className="flex-1 overflow-y-auto border-b p-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mb-2 flex items-center justify-between">
@@ -798,19 +923,68 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
           {/* Payment method & checkout */}
           <div className="space-y-2.5 p-3">
             <div>
-              <Label className="text-[10px]">Metode Pembayaran</Label>
-              <Select value={selectedMethod} onValueChange={setSelectedMethod}>
-                <SelectTrigger className="mt-1 h-8 text-xs">
-                  <SelectValue placeholder="Pilih metode" />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentMethods.map((pm) => (
-                    <SelectItem key={pm.branchPaymentMethodId} value={pm.branchPaymentMethodId} className="text-xs">
-                      {pm.paymentMethodName ?? pm.methodType}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="mb-1.5 flex items-center justify-between">
+                <Label className="text-[10px]">Metode Pembayaran</Label>
+                {paymentMethods.length > 0 && (
+                  <span className="text-[9px] text-muted-foreground">
+                    {paymentMethods.length} aktif
+                  </span>
+                )}
+              </div>
+
+              {paymentMethods.length === 0 ? (
+                <div className="rounded-[14px] border border-dashed border-border/70 bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+                  <div className="font-medium text-foreground">Belum ada metode pembayaran aktif</div>
+                  <p className="mt-1 text-[10px] leading-relaxed">
+                    Aktifkan Cash, QRIS, Transfer, atau Debit di pengaturan metode pembayaran cabang ini.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {paymentMethods.map((pm) => {
+                    const Icon = getPaymentMethodIcon(pm.paymentMethodType, pm.paymentMethodName);
+                    const selected = selectedMethod === pm.branchPaymentMethodId;
+                    const label = getPaymentMethodLabel(pm);
+                    const cashMethod = isCashPaymentMethod(pm);
+
+                    return (
+                      <button
+                        key={pm.branchPaymentMethodId}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMethod(pm.branchPaymentMethodId);
+
+                          if (!cashMethod) {
+                            setPaidAmount(total);
+                          }
+                        }}
+                        className={`flex min-h-[54px] items-center gap-2 rounded-[14px] border px-3 py-2 text-left text-xs transition-all ${
+                          selected
+                            ? "border-primary bg-primary/10 text-primary shadow-sm"
+                            : "border-border/70 bg-white hover:border-primary/40 hover:bg-muted/30"
+                        }`}
+                      >
+                        <span
+                          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+                            selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          <Icon className="size-4" />
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">
+                            {label}
+                          </span>
+                          <span className="block truncate text-[9px] text-muted-foreground">
+                            {pm.paymentMethodType ?? pm.methodType}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {isCash && (
@@ -854,47 +1028,157 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
               )}
               {submitting ? "Memproses..." : `Bayar ${formatPrice(total)}`}
             </Button>
-          </div>
 
-          {/* Transaction History */}
-          <div className="border-t p-3">
-            <h3 className="mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Riwayat Transaksi
-            </h3>
-            {txLoading ? (
-              <div className="flex justify-center py-3">
-                <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-              </div>
-            ) : transactions.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">Belum ada transaksi.</p>
-            ) : (
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {transactions.slice(0, 10).map((tx) => (
-                  <button
-                    key={tx.id}
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-md px-2 py-1 text-[10px] transition-colors hover:bg-accent"
-                    onClick={() => openDetail(tx)}
-                  >
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="font-medium truncate">{tx.transactionNumber}</div>
-                      <div className="text-muted-foreground">{formatPrice(tx.totalAmount)}</div>
+            {/* Trigger riwayat transaksi */}
+            <FamilyDrawerRoot open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
+              <FamilyDrawerTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <History className="size-3.5" />
+                    Riwayat Transaksi
+                    {transactions.length > 0 && (
+                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {transactions.length}
+                      </span>
+                    )}
+                  </span>
+                  <ChevronRight className="size-3.5" />
+                </button>
+              </FamilyDrawerTrigger>
+
+              <FamilyDrawerPortal>
+                <FamilyDrawerOverlay />
+                <FamilyDrawerContent
+                  className="inset-x-0 bottom-0 max-w-none rounded-b-none rounded-t-[20px] !rounded-[20px] w-full max-h-[92vh]"
+                >
+                  <FamilyDrawerAnimatedWrapper className="h-[85vh] overflow-hidden px-0 pb-0 pt-0">
+                    <div className="flex h-full flex-col">
+                      {/* Handle */}
+                      <div className="flex shrink-0 justify-center pt-3 pb-2">
+                        <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+                      </div>
+
+                      {/* Header */}
+                      <div className="flex shrink-0 items-center justify-between border-b px-4 pb-3">
+                        <div>
+                          <h2 className="text-sm font-semibold">Riwayat Transaksi</h2>
+                          <p className="text-[11px] text-muted-foreground">Transaksi hari ini</p>
+                        </div>
+                        <FamilyDrawerClose>
+                          <X className="size-3.5" />
+                        </FamilyDrawerClose>
+                      </div>
+
+                      {/* Body */}
+                      <div className="flex-1 overflow-y-auto px-4 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {txLoading ? (
+                          <div className="flex items-center justify-center py-16">
+                            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : transactions.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                            <Receipt className="size-10 text-muted-foreground/30" />
+                            <p className="text-sm text-muted-foreground">Belum ada transaksi hari ini.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {transactions.map((tx) => (
+                              <button
+                                key={tx.id}
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-xl border border-sidebar-border bg-background/75 px-3.5 py-3 text-left transition-colors hover:bg-accent"
+                                onClick={() => {
+                                  setTxDrawerOpen(false);
+                                  setTimeout(() => openDetail(tx), 200);
+                                }}
+                              >
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <div className="text-xs font-medium">{tx.transactionNumber}</div>
+                                  <div className="text-[10px] text-muted-foreground">{formatPrice(tx.totalAmount)}</div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {tx.status === "VOIDED" ? (
+                                    <Badge variant="destructive" className="text-[9px] px-1.5 py-0">VOID</Badge>
+                                  ) : tx.status === "REFUNDED" ? (
+                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0">REFUND</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[9px] px-1.5 py-0 text-emerald-700">LUNAS</Badge>
+                                  )}
+                                  <Eye className="size-3.5 text-muted-foreground" />
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {tx.status === "VOIDED" ? (
-                        <Badge variant="destructive" className="text-[9px] px-1 py-0">VOIDED</Badge>
-                      ) : tx.status === "REFUNDED" ? (
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0">REFUND</Badge>
-                      ) : null}
-                      <Eye className="size-3 shrink-0 text-muted-foreground" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                  </FamilyDrawerAnimatedWrapper>
+                </FamilyDrawerContent>
+              </FamilyDrawerPortal>
+            </FamilyDrawerRoot>
           </div>
         </aside>
-      </div>
+
+      {/* ═══════════════ Variant Picker Dialog ═══════════════ */}
+      <Dialog open={variantPickerOpen} onOpenChange={(open) => { setVariantPickerOpen(open); if (!open) setVariantPickerProduct(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Pilih Varian</DialogTitle>
+            <DialogDescription className="text-xs">
+              {variantPickerProduct?.name ?? "Pilih varian untuk ditambahkan ke keranjang."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {variantPickerProduct && (
+            <div className="space-y-2 py-1">
+              {variantPickerProduct.variants.map((variant) => {
+                const outOfStock = variantPickerProduct.conditionType !== "SECOND" && variant.currentStock <= 0;
+                return (
+                  <button
+                    key={variant.variantId}
+                    id={`variant-option-${variant.variantId}`}
+                    type="button"
+                    disabled={outOfStock}
+                    onClick={() => {
+                      addVariantToCart(variantPickerProduct, variant);
+                      setVariantPickerOpen(false);
+                      setVariantPickerProduct(null);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-sidebar-border bg-background/75 p-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="text-xs font-medium">{variant.variantName}</div>
+                      {variant.sku && (
+                        <div className="text-[10px] text-muted-foreground">SKU: {variant.sku}</div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`h-4 rounded-full px-1.5 text-[9px] font-normal ${
+                            outOfStock
+                              ? "border-red-200 bg-red-50 text-red-700"
+                              : variant.minStock > 0 && variant.currentStock <= variant.minStock
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          {outOfStock ? "Habis" : `Stok ${variant.currentStock}`}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-sm font-semibold tabular-nums">{formatPrice(variant.sellingPrice)}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ═══════════════ Unit Second Picker Dialog ═══════════════ */}
       <Dialog open={unitPickerOpen} onOpenChange={setUnitPickerOpen}>
