@@ -118,10 +118,10 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string | undefined>();
   const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { activeBranchId, activeBranchName } = useActiveBranch();
+  const { activeBranchId, activeBranchName, userRole } = useActiveBranch();
   const setCartProps = useSetPosCart();
 
-  const loadProducts = React.useCallback(async (query?: string, itemType?: string) => {
+  const loadProducts = React.useCallback(async (query?: string, stockType?: string) => {
     if (!activeBranchId) {
       dispatch({ type: "SET_PRODUCTS", products: [], total: 0 });
       dispatch({ type: "SET_ERROR", error: "Pilih cabang POS terlebih dahulu." });
@@ -129,7 +129,7 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
     }
 
     dispatch({ type: "SET_LOADING", loading: true });
-    const result = await searchPosProductsAction(brandSlug, { branchId: activeBranchId, query, itemType, pageSize: 100 });
+    const result = await searchPosProductsAction(brandSlug, { branchId: activeBranchId, query, stockType, pageSize: 100 });
     if (result.success) {
       dispatch({ type: "SET_PRODUCTS", products: result.data.products, total: result.data.total });
       dispatch({ type: "SET_ERROR", error: undefined });
@@ -314,6 +314,17 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
   return (
     <div className="flex h-full min-h-0 w-full">
       <section className="min-w-0 flex-1 w-full overflow-y-auto overflow-x-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {(userRole === "MASTER_ADMIN" || userRole === "PLATFORM_OWNER") ? (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p className="font-medium">Mode Legacy — Hanya Admin</p>
+            <p className="mt-0.5">Anda sedang membuka versi legacy. Data di halaman ini tidak bercampur dengan POS V4. Gunakan halaman POS dari sidebar untuk versi terbaru.</p>
+          </div>
+        ) : (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p className="font-medium">Anda sedang membuka versi legacy.</p>
+            <p className="mt-0.5">Data di halaman ini tidak bercampur dengan POS V4. Gunakan halaman POS dari sidebar untuk versi terbaru.</p>
+          </div>
+        )}
         {activeBranchName && (
           <div className="mb-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             Cabang POS aktif: <span className="font-medium text-foreground">{activeBranchName}</span>

@@ -86,6 +86,38 @@ export function InventoryItemDialog({
   const isUnitSecond = userType === "UNIT" && unitCondition === "SECOND";
   const isSerialized = trackingType === "SERIALIZED";
 
+  // Map user-facing type to category item_type filter values
+  const categoryItemTypes = React.useMemo(() => {
+    switch (userType) {
+      case "SPAREPART": return ["SPAREPART"];
+      case "PRODUCT": return ["PRODUCT", "ACCESSORY", "CONSUMABLE"];
+      case "UNIT": return ["DEVICE_UNIT"];
+      default: return [];
+    }
+  }, [userType]);
+
+  const filteredCategories = React.useMemo(
+    () => categories.filter((c) => {
+      if (!(c as any).itemType) return true; // legacy: no itemType on category
+      return categoryItemTypes.includes((c as any).itemType);
+    }),
+    [categories, categoryItemTypes],
+  );
+
+  // Reset category when userType changes and current category is invalid
+  const prevUserType = React.useRef(userType);
+  React.useEffect(() => {
+    if (prevUserType.current !== userType) {
+      prevUserType.current = userType;
+      if (categoryId) {
+        const cat = categories.find((c) => c.id === categoryId);
+        if (cat && (cat as any).itemType && !categoryItemTypes.includes((cat as any).itemType)) {
+          setCategoryId("");
+        }
+      }
+    }
+  }, [userType, categoryItemTypes, categories, categoryId]);
+
   // Reset form on open
   React.useEffect(() => {
     if (!open) return;
@@ -158,6 +190,9 @@ export function InventoryItemDialog({
           sellingPrice: Number(sellingPrice) || 0,
           minStock: Number(minStock) || 0,
           isActive,
+          appearsInPos: userType !== "SPAREPART",
+          serviceUsageEnabled: userType === "SPAREPART",
+          stockType: userType === "SPAREPART" ? "SPAREPART" : userType === "UNIT" ? "UNIT" : "PRODUCT",
         });
 
         if (!res.success) {
@@ -178,8 +213,11 @@ export function InventoryItemDialog({
         categoryId: categoryId === NO_CATEGORY ? null : categoryId,
         name: name.trim(),
         userFacingType: userType,
+        stockType: userType === "SPAREPART" ? "SPAREPART" : userType === "UNIT" ? "UNIT" : "PRODUCT",
         itemType,
         unitCondition,
+        appearsInPos: userType !== "SPAREPART",
+        serviceUsageEnabled: userType === "SPAREPART",
         sku: sku.trim() || null,
         barcode: barcode.trim() || null,
         unitName: unit,
@@ -333,7 +371,7 @@ export function InventoryItemDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_CATEGORY} className="text-xs">Tidak ada</SelectItem>
-                {categories.map((c) => (
+                {filteredCategories.map((c) => (
                   <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                 ))}
               </SelectContent>

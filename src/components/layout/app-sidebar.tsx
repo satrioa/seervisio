@@ -72,8 +72,10 @@ function itemPermission(href: string): string | null {
   if (href === "dashboard") return null; // always visible
   if (href === "services") return "service.view";
   if (href === "customers") return "customer.view";
+  if (href === "pos-v4") return "pos.view";
   if (href === "pos") return "pos.view";
   if (href === "store-shift") return "store_shift.view";
+  if (href === "inventory-v4") return "inventory.view";
   if (href === "inventory") return "inventory.view";
   if (href === "stock-reports") return "inventory.view";
   if (href === "finance") return "finance.view";
@@ -89,8 +91,11 @@ function itemPermission(href: string): string | null {
   return null;
 }
 
-function filterItemsByRole(items: { href: string; label: string }[], role: Role): { href: string; label: string }[] {
+function filterItemsByRole(items: { href: string; label: string; adminOnly?: boolean }[], role: Role): { href: string; label: string; adminOnly?: boolean }[] {
   return items.filter((item) => {
+    if (item.adminOnly) {
+      return role === "MASTER_ADMIN" || role === "PLATFORM_OWNER";
+    }
     const perm = itemPermission(item.href);
     if (!perm) return true;
     return hasPermission(role, perm as any);
@@ -158,6 +163,7 @@ const submenuItemVariants: Variants = {
 interface SubNavItem {
   href: string;
   label: string;
+  adminOnly?: boolean;
 }
 
 interface CollapsibleGroup {
@@ -173,7 +179,8 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     items: [
       { href: "services", label: "Service" },
       { href: "customers", label: "Customers" },
-      { href: "pos", label: "POS" },
+      { href: "pos-v4", label: "POS" },
+      { href: "pos", label: "POS (Legacy)", adminOnly: true },
       { href: "store-shift", label: "Store Shift" },
     ],
   },
@@ -181,7 +188,8 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     label: "Stok Manajemen",
     icon: Package,
     items: [
-      { href: "inventory", label: "Inventory" },
+      { href: "inventory-v4", label: "Inventory" },
+      { href: "inventory", label: "Inventory (Legacy)", adminOnly: true },
       { href: "stock-reports", label: "Laporan Stok" },
     ],
   },
@@ -432,99 +440,101 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
       </SidebarHeader>
 
       {/* ── Navigation ── */}
-      <SidebarContent className="relative bg-sidebar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {/* Dashboard */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={isActive("dashboard")}
-                  tooltip="Dashboard"
-                  className={
-                    isActive("dashboard")
-                      ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
-                      : ""
-                  }
-                  asChild
-                >
-                  <Link href={`/${brandSlug}/panel/dashboard`}>
-                    <LayoutDashboard />
-                    <span>Dashboard</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+      <div className="relative min-h-0 flex-1 bg-sidebar">
+        <SidebarContent className="h-full bg-sidebar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {/* Dashboard */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("dashboard")}
+                    tooltip="Dashboard"
+                    className={
+                      isActive("dashboard")
+                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                        : ""
+                    }
+                    asChild
+                  >
+                    <Link href={`/${brandSlug}/panel/dashboard`}>
+                      <LayoutDashboard />
+                      <span>Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-              {/* Collapsible nav groups */}
-              {visibleGroups.map((group) => {
-                const isOpen = openGroups[group.label] ?? false;
-                const hasActiveChild = group.items.some((item) => isActive(item.href));
-                const Icon = group.icon;
+                {/* Collapsible nav groups */}
+                {visibleGroups.map((group) => {
+                  const isOpen = openGroups[group.label] ?? false;
+                  const hasActiveChild = group.items.some((item) => isActive(item.href));
+                  const Icon = group.icon;
 
-                return (
-                  <React.Fragment key={group.label}>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        tooltip={group.label}
-                        onClick={() => toggleGroup(group.label)}
-                        className={`cursor-pointer ${
-                          hasActiveChild
-                            ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
-                            : ""
-                        }`}
-                      >
-                        <Icon />
-                        <span>{group.label}</span>
-                        <ChevronRight
-                          className={`ml-auto size-4 shrink-0 transition-transform duration-200 ${
-                            hasActiveChild ? "text-foreground" : "text-muted-foreground"
-                          } ${
-                            isOpen ? "rotate-90" : ""
+                  return (
+                    <React.Fragment key={group.label}>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          tooltip={group.label}
+                          onClick={() => toggleGroup(group.label)}
+                          className={`cursor-pointer ${
+                            hasActiveChild
+                              ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                              : ""
                           }`}
-                        />
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.ul
-                          key={`${group.label}-submenu`}
-                          data-sidebar="menu-sub"
-                          variants={submenuContainerVariants}
-                          initial="closed"
-                          animate="open"
-                          exit="closed"
-                          className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
                         >
-                          {group.items.map((item) => (
-                            <motion.li
-                              key={item.href}
-                              variants={submenuItemVariants}
-                            >
-                              <SidebarMenuSubButton
-                                isActive={isActive(item.href)}
-                                asChild
+                          <Icon />
+                          <span>{group.label}</span>
+                          <ChevronRight
+                            className={`ml-auto size-4 shrink-0 transition-transform duration-200 ${
+                              hasActiveChild ? "text-foreground" : "text-muted-foreground"
+                            } ${
+                              isOpen ? "rotate-90" : ""
+                            }`}
+                          />
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+
+                      <AnimatePresence initial={false}>
+                        {isOpen && (
+                          <motion.ul
+                            key={`${group.label}-submenu`}
+                            data-sidebar="menu-sub"
+                            variants={submenuContainerVariants}
+                            initial="closed"
+                            animate="open"
+                            exit="closed"
+                            className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
+                          >
+                            {group.items.map((item) => (
+                              <motion.li
+                                key={item.href}
+                                variants={submenuItemVariants}
                               >
-                                <Link
-                                  href={`/${brandSlug}/panel/${item.href}`}
+                                <SidebarMenuSubButton
+                                  isActive={isActive(item.href)}
+                                  asChild
                                 >
-                                  <span>{item.label}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </motion.li>
-                          ))}
-                        </motion.ul>
-                      )}
-                    </AnimatePresence>
-                  </React.Fragment>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                                  <Link
+                                    href={`/${brandSlug}/panel/${item.href}`}
+                                  >
+                                    <span>{item.label}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </motion.li>
+                            ))}
+                          </motion.ul>
+                        )}
+                      </AnimatePresence>
+                    </React.Fragment>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-7 bg-gradient-to-t from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
-      </SidebarContent>
+      </div>
 
       {/* ── Footer Actions ── */}
       <SidebarFooter className="bg-sidebar p-2">

@@ -168,6 +168,13 @@ export type Database = {
             foreignKeyName: "branch_inventory_stocks_item_id_fkey"
             columns: ["item_id"]
             isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_inventory_stocks_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
             referencedRelation: "inventory_stock_summary"
             referencedColumns: ["item_id"]
           },
@@ -366,6 +373,10 @@ export type Database = {
           owner_phone: string | null
           slug: string
           status: string
+          theme_accent_color: string
+          theme_mode: string
+          theme_primary_color: string
+          theme_tokens: Json | null
           timezone: string
           updated_at: string
         }
@@ -381,6 +392,10 @@ export type Database = {
           owner_phone?: string | null
           slug: string
           status?: string
+          theme_accent_color?: string
+          theme_mode?: string
+          theme_primary_color?: string
+          theme_tokens?: Json | null
           timezone?: string
           updated_at?: string
         }
@@ -396,6 +411,10 @@ export type Database = {
           owner_phone?: string | null
           slug?: string
           status?: string
+          theme_accent_color?: string
+          theme_mode?: string
+          theme_primary_color?: string
+          theme_tokens?: Json | null
           timezone?: string
           updated_at?: string
         }
@@ -450,6 +469,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      device_tac_catalog: {
+        Row: {
+          brand: string | null
+          created_at: string
+          device_type: string | null
+          marketing_name: string | null
+          model: string | null
+          tac: string
+          updated_at: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          device_type?: string | null
+          marketing_name?: string | null
+          model?: string | null
+          tac: string
+          updated_at?: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          device_type?: string | null
+          marketing_name?: string | null
+          model?: string | null
+          tac?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       finance_ledger: {
         Row: {
@@ -539,6 +588,783 @@ export type Database = {
           },
         ]
       }
+      inv_products: {
+        Row: {
+          appears_in_pos: boolean
+          branch_id: string
+          brand_id: number
+          category_id: string | null
+          condition_type: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name: string
+          product_kind: string
+          service_usage_enabled: boolean
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          appears_in_pos?: boolean
+          branch_id: string
+          brand_id: number
+          category_id?: string | null
+          condition_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name: string
+          product_kind: string
+          service_usage_enabled?: boolean
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          appears_in_pos?: boolean
+          branch_id?: string
+          brand_id?: number
+          category_id?: string | null
+          condition_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name?: string
+          product_kind?: string
+          service_usage_enabled?: boolean
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_products_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_sparepart_usage: {
+        Row: {
+          attributes_snapshot: Json
+          branch_id: string
+          brand_id: number
+          cost_price_snapshot: number
+          created_at: string
+          created_by: string | null
+          id: string
+          item_name_snapshot: string
+          movement_id: string | null
+          product_id: string
+          quantity: number
+          selling_price_snapshot: number
+          service_id: string
+          variant_id: string
+          variant_name_snapshot: string | null
+        }
+        Insert: {
+          attributes_snapshot?: Json
+          branch_id: string
+          brand_id: number
+          cost_price_snapshot?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_name_snapshot: string
+          movement_id?: string | null
+          product_id: string
+          quantity: number
+          selling_price_snapshot?: number
+          service_id: string
+          variant_id: string
+          variant_name_snapshot?: string | null
+        }
+        Update: {
+          attributes_snapshot?: Json
+          branch_id?: string
+          brand_id?: number
+          cost_price_snapshot?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_name_snapshot?: string
+          movement_id?: string | null
+          product_id?: string
+          quantity?: number
+          selling_price_snapshot?: number
+          service_id?: string
+          variant_id?: string
+          variant_name_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_sparepart_usage_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "inv_stock_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_stock_movements: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          movement_type: string
+          notes: string | null
+          product_id: string | null
+          quantity: number
+          reference_id: string | null
+          reference_label: string | null
+          reference_type: string | null
+          stock_after: number | null
+          stock_before: number | null
+          unit_id: string | null
+          unit_status_after: string | null
+          unit_status_before: string | null
+          variant_id: string | null
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          movement_type: string
+          notes?: string | null
+          product_id?: string | null
+          quantity: number
+          reference_id?: string | null
+          reference_label?: string | null
+          reference_type?: string | null
+          stock_after?: number | null
+          stock_before?: number | null
+          unit_id?: string | null
+          unit_status_after?: string | null
+          unit_status_before?: string | null
+          variant_id?: string | null
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          movement_type?: string
+          notes?: string | null
+          product_id?: string | null
+          quantity?: number
+          reference_id?: string | null
+          reference_label?: string | null
+          reference_type?: string | null
+          stock_after?: number | null
+          stock_before?: number | null
+          unit_id?: string | null
+          unit_status_after?: string | null
+          unit_status_before?: string | null
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_movements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "inv_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_stock_purchase_items: {
+        Row: {
+          attributes_snapshot: Json
+          barcode_snapshot: string | null
+          branch_id: string
+          brand_id: number
+          created_at: string
+          id: string
+          movement_id: string | null
+          product_id: string
+          product_name_snapshot: string
+          purchase_id: string
+          quantity: number
+          sku_snapshot: string | null
+          subtotal_amount: number
+          unit_cost: number
+          unit_selling_price_snapshot: number
+          unit_snapshot: string
+          variant_id: string
+          variant_name_snapshot: string | null
+        }
+        Insert: {
+          attributes_snapshot?: Json
+          barcode_snapshot?: string | null
+          branch_id: string
+          brand_id: number
+          created_at?: string
+          id?: string
+          movement_id?: string | null
+          product_id: string
+          product_name_snapshot: string
+          purchase_id: string
+          quantity: number
+          sku_snapshot?: string | null
+          subtotal_amount?: number
+          unit_cost?: number
+          unit_selling_price_snapshot?: number
+          unit_snapshot?: string
+          variant_id: string
+          variant_name_snapshot?: string | null
+        }
+        Update: {
+          attributes_snapshot?: Json
+          barcode_snapshot?: string | null
+          branch_id?: string
+          brand_id?: number
+          created_at?: string
+          id?: string
+          movement_id?: string | null
+          product_id?: string
+          product_name_snapshot?: string
+          purchase_id?: string
+          quantity?: number
+          sku_snapshot?: string | null
+          subtotal_amount?: number
+          unit_cost?: number
+          unit_selling_price_snapshot?: number
+          unit_snapshot?: string
+          variant_id?: string
+          variant_name_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_purchase_items_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "inv_stock_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "inv_stock_purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_stock_purchase_number_counters: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          last_number: number
+          month: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          last_number?: number
+          month: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          last_number?: number
+          month?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_purchase_number_counters_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_number_counters_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_stock_purchases: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          created_at: string
+          created_by: string | null
+          id: string
+          invoice_number: string | null
+          notes: string | null
+          payment_account_id: string
+          purchase_date: string
+          purchase_number: string
+          status: string
+          subtotal_amount: number
+          supplier_name: string | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          payment_account_id: string
+          purchase_date?: string
+          purchase_number: string
+          status?: string
+          subtotal_amount?: number
+          supplier_name?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          payment_account_id?: string
+          purchase_date?: string
+          purchase_number?: string
+          status?: string
+          subtotal_amount?: number
+          supplier_name?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_purchases_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_units: {
+        Row: {
+          accessories_included: string | null
+          barcode: string | null
+          battery_health: number | null
+          branch_id: string
+          brand_id: number
+          condition_grade: string | null
+          created_at: string
+          created_by: string | null
+          functional_condition_notes: string | null
+          id: string
+          image_url: string | null
+          imei: string | null
+          physical_condition_notes: string | null
+          product_id: string
+          purchase_cost: number
+          selling_price: number
+          serial_number: string | null
+          source_reference_id: string | null
+          source_type: string | null
+          status: string
+          unit_attributes: Json
+          updated_at: string
+          variant_id: string | null
+          warranty_notes: string | null
+          warranty_until: string | null
+        }
+        Insert: {
+          accessories_included?: string | null
+          barcode?: string | null
+          battery_health?: number | null
+          branch_id: string
+          brand_id: number
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          functional_condition_notes?: string | null
+          id?: string
+          image_url?: string | null
+          imei?: string | null
+          physical_condition_notes?: string | null
+          product_id: string
+          purchase_cost?: number
+          selling_price?: number
+          serial_number?: string | null
+          source_reference_id?: string | null
+          source_type?: string | null
+          status?: string
+          unit_attributes?: Json
+          updated_at?: string
+          variant_id?: string | null
+          warranty_notes?: string | null
+          warranty_until?: string | null
+        }
+        Update: {
+          accessories_included?: string | null
+          barcode?: string | null
+          battery_health?: number | null
+          branch_id?: string
+          brand_id?: number
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          functional_condition_notes?: string | null
+          id?: string
+          image_url?: string | null
+          imei?: string | null
+          physical_condition_notes?: string | null
+          product_id?: string
+          purchase_cost?: number
+          selling_price?: number
+          serial_number?: string | null
+          source_reference_id?: string | null
+          source_type?: string | null
+          status?: string
+          unit_attributes?: Json
+          updated_at?: string
+          variant_id?: string | null
+          warranty_notes?: string | null
+          warranty_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_units_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_variant_stocks: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          current_stock: number
+          id: string
+          reserved_stock: number
+          updated_at: string
+          variant_id: string
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          current_stock?: number
+          id?: string
+          reserved_stock?: number
+          updated_at?: string
+          variant_id: string
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          current_stock?: number
+          id?: string
+          reserved_stock?: number
+          updated_at?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_variant_stocks_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inv_variants: {
+        Row: {
+          attributes: Json
+          average_cost: number
+          barcode: string | null
+          branch_id: string
+          brand_id: number
+          cost_price: number
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          min_stock: number
+          name: string
+          product_id: string
+          selling_price: number
+          sku: string | null
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          attributes?: Json
+          average_cost?: number
+          barcode?: string | null
+          branch_id: string
+          brand_id: number
+          cost_price?: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          min_stock?: number
+          name: string
+          product_id: string
+          selling_price?: number
+          sku?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          attributes?: Json
+          average_cost?: number
+          barcode?: string | null
+          branch_id?: string
+          brand_id?: number
+          cost_price?: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          min_stock?: number
+          name?: string
+          product_id?: string
+          selling_price?: number
+          sku?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_variants_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variants_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_categories: {
         Row: {
           brand_id: number
@@ -547,8 +1373,10 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          item_type: string
           name: string
           sort_order: number
+          stock_type: string | null
           updated_at: string
         }
         Insert: {
@@ -558,8 +1386,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          item_type: string
           name: string
           sort_order?: number
+          stock_type?: string | null
           updated_at?: string
         }
         Update: {
@@ -569,8 +1399,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          item_type?: string
           name?: string
           sort_order?: number
+          stock_type?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -583,86 +1415,251 @@ export type Database = {
           },
         ]
       }
+      inventory_item_units: {
+        Row: {
+          battery_health: string | null
+          branch_id: string
+          brand_id: number
+          color: string | null
+          condition_grade: string | null
+          created_at: string
+          created_by: string | null
+          device_brand: string | null
+          device_model: string | null
+          id: string
+          imei: string | null
+          inventory_item_id: string
+          note: string | null
+          purchase_price: number | null
+          selling_price: number | null
+          serial_number: string | null
+          source: string
+          status: string
+          storage: string | null
+          updated_at: string
+          warranty_until: string | null
+        }
+        Insert: {
+          battery_health?: string | null
+          branch_id: string
+          brand_id: number
+          color?: string | null
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          device_brand?: string | null
+          device_model?: string | null
+          id?: string
+          imei?: string | null
+          inventory_item_id: string
+          note?: string | null
+          purchase_price?: number | null
+          selling_price?: number | null
+          serial_number?: string | null
+          source?: string
+          status?: string
+          storage?: string | null
+          updated_at?: string
+          warranty_until?: string | null
+        }
+        Update: {
+          battery_health?: string | null
+          branch_id?: string
+          brand_id?: number
+          color?: string | null
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          device_brand?: string | null
+          device_model?: string | null
+          id?: string
+          imei?: string | null
+          inventory_item_id?: string
+          note?: string | null
+          purchase_price?: number | null
+          selling_price?: number | null
+          serial_number?: string | null
+          source?: string
+          status?: string
+          storage?: string | null
+          updated_at?: string
+          warranty_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_units_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "inventory_item_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           allow_negative_stock: boolean
+          appears_in_pos: boolean
+          average_cost: number
           barcode: string | null
+          branch_id: string | null
           brand_id: number
           category_id: string | null
           cost_price: number
           created_at: string
+          current_stock: number
           deleted_at: string | null
           description: string | null
+          has_variants: boolean
           id: string
           is_active: boolean
+          is_variant_parent: boolean
           item_type: string
           metadata: Json
           min_stock: number
           name: string
-          selling_price: number
-          sku: string | null
-          track_stock: boolean
-          unit_name: string
-          tracking_type: string
-          variant_name: string | null
-          variant_attributes: Json
-          average_cost: number
+          parent_item_id: string | null
           product_id: string | null
+          selling_price: number
+          service_usage_enabled: boolean
+          sku: string | null
+          stock_type: string
+          track_stock: boolean
+          tracking_type: string
+          unit_attributes: Json
+          unit_condition: string | null
+          unit_name: string
           updated_at: string
+          variant_attributes: Json
+          variant_display_name: string | null
+          variant_name: string | null
+          variant_option_values: Json
         }
         Insert: {
           allow_negative_stock?: boolean
+          appears_in_pos?: boolean
+          average_cost?: number
           barcode?: string | null
+          branch_id?: string | null
           brand_id: number
           category_id?: string | null
           cost_price?: number
           created_at?: string
+          current_stock?: number
           deleted_at?: string | null
           description?: string | null
+          has_variants?: boolean
           id?: string
           is_active?: boolean
+          is_variant_parent?: boolean
           item_type: string
           metadata?: Json
           min_stock?: number
           name: string
-          selling_price?: number
-          sku?: string | null
-          track_stock?: boolean
-          unit_name?: string
-          tracking_type?: string
-          variant_name?: string | null
-          variant_attributes?: Json
-          average_cost?: number
+          parent_item_id?: string | null
           product_id?: string | null
+          selling_price?: number
+          service_usage_enabled?: boolean
+          sku?: string | null
+          stock_type: string
+          track_stock?: boolean
+          tracking_type?: string
+          unit_attributes?: Json
+          unit_condition?: string | null
+          unit_name?: string
           updated_at?: string
+          variant_attributes?: Json
+          variant_display_name?: string | null
+          variant_name?: string | null
+          variant_option_values?: Json
         }
         Update: {
           allow_negative_stock?: boolean
+          appears_in_pos?: boolean
+          average_cost?: number
           barcode?: string | null
+          branch_id?: string | null
           brand_id?: number
           category_id?: string | null
           cost_price?: number
           created_at?: string
+          current_stock?: number
           deleted_at?: string | null
           description?: string | null
+          has_variants?: boolean
           id?: string
           is_active?: boolean
+          is_variant_parent?: boolean
           item_type?: string
           metadata?: Json
           min_stock?: number
           name?: string
-          selling_price?: number
-          sku?: string | null
-          track_stock?: boolean
-          unit_name?: string
-          tracking_type?: string
-          variant_name?: string | null
-          variant_attributes?: Json
-          average_cost?: number
+          parent_item_id?: string | null
           product_id?: string | null
+          selling_price?: number
+          service_usage_enabled?: boolean
+          sku?: string | null
+          stock_type?: string
+          track_stock?: boolean
+          tracking_type?: string
+          unit_attributes?: Json
+          unit_condition?: string | null
+          unit_name?: string
           updated_at?: string
+          variant_attributes?: Json
+          variant_display_name?: string | null
+          variant_name?: string | null
+          variant_option_values?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_items_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_items_brand_id_fkey"
             columns: ["brand_id"]
@@ -676,6 +1673,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inventory_categories"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
           },
         ]
       }
@@ -694,17 +1719,18 @@ export type Database = {
           item_id: string
           metadata: Json
           movement_type: string
+          notes: string | null
           quantity: number
-            notes: string | null
-            reference_label: string | null
-            serialized_unit_id: string | null
-            total_cost_snapshot: number
-            total_price_snapshot: number
           reference_id: string | null
+          reference_label: string | null
           reference_type: string | null
+          selling_price_snapshot: number | null
+          serialized_unit_id: string | null
+          total_cost_snapshot: number | null
+          total_price_snapshot: number | null
           unit_cost: number | null
-            unit_snapshot: string | null
-            selling_price_snapshot: number
+          unit_cost_snapshot: number | null
+          unit_snapshot: string | null
         }
         Insert: {
           after_quantity: number
@@ -720,17 +1746,18 @@ export type Database = {
           item_id: string
           metadata?: Json
           movement_type: string
+          notes?: string | null
           quantity: number
-            notes?: string | null
-            reference_label?: string | null
-            serialized_unit_id?: string | null
-            total_cost_snapshot?: number
-            total_price_snapshot?: number
           reference_id?: string | null
+          reference_label?: string | null
           reference_type?: string | null
+          selling_price_snapshot?: number | null
+          serialized_unit_id?: string | null
+          total_cost_snapshot?: number | null
+          total_price_snapshot?: number | null
           unit_cost?: number | null
-            unit_snapshot?: string | null
-            selling_price_snapshot?: number
+          unit_cost_snapshot?: number | null
+          unit_snapshot?: string | null
         }
         Update: {
           after_quantity?: number
@@ -746,17 +1773,18 @@ export type Database = {
           item_id?: string
           metadata?: Json
           movement_type?: string
+          notes?: string | null
           quantity?: number
-            notes?: string | null
-            reference_label?: string | null
-            serialized_unit_id?: string | null
-            total_cost_snapshot?: number
-            total_price_snapshot?: number
           reference_id?: string | null
+          reference_label?: string | null
           reference_type?: string | null
+          selling_price_snapshot?: number | null
+          serialized_unit_id?: string | null
+          total_cost_snapshot?: number | null
+          total_price_snapshot?: number | null
           unit_cost?: number | null
-            unit_snapshot?: string | null
-            selling_price_snapshot?: number
+          unit_cost_snapshot?: number | null
+          unit_snapshot?: string | null
         }
         Relationships: [
           {
@@ -791,12 +1819,144 @@ export type Database = {
             foreignKeyName: "inventory_movements_item_id_fkey"
             columns: ["item_id"]
             isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
             referencedRelation: "inventory_stock_summary"
             referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "inventory_movements_item_id_fkey"
             columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+        ]
+      }
+      inventory_serialized_units: {
+        Row: {
+          accessories_included: string | null
+          barcode: string | null
+          battery_health: number | null
+          branch_id: string
+          brand_id: number
+          condition_grade: string | null
+          created_at: string
+          created_by: string | null
+          functional_condition_notes: string | null
+          id: string
+          imei: string | null
+          inventory_item_id: string
+          physical_condition_notes: string | null
+          purchase_cost: number | null
+          selling_price: number | null
+          serial_number: string | null
+          source_reference_id: string | null
+          source_type: string | null
+          status: string
+          unit_attributes: Json
+          updated_at: string
+          warranty_until: string | null
+        }
+        Insert: {
+          accessories_included?: string | null
+          barcode?: string | null
+          battery_health?: number | null
+          branch_id: string
+          brand_id: number
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          functional_condition_notes?: string | null
+          id?: string
+          imei?: string | null
+          inventory_item_id: string
+          physical_condition_notes?: string | null
+          purchase_cost?: number | null
+          selling_price?: number | null
+          serial_number?: string | null
+          source_reference_id?: string | null
+          source_type?: string | null
+          status?: string
+          unit_attributes?: Json
+          updated_at?: string
+          warranty_until?: string | null
+        }
+        Update: {
+          accessories_included?: string | null
+          barcode?: string | null
+          battery_health?: number | null
+          branch_id?: string
+          brand_id?: number
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          functional_condition_notes?: string | null
+          id?: string
+          imei?: string | null
+          inventory_item_id?: string
+          physical_condition_notes?: string | null
+          purchase_cost?: number | null
+          selling_price?: number | null
+          serial_number?: string | null
+          source_reference_id?: string | null
+          source_type?: string | null
+          status?: string
+          unit_attributes?: Json
+          updated_at?: string
+          warranty_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_serialized_units_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "inventory_serialized_units_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "reporting_inventory_stock_summary"
             referencedColumns: ["item_id"]
@@ -1064,11 +2224,15 @@ export type Database = {
           discount_amount: number
           id: string
           inventory_item_id: string
+          inventory_item_unit_id: string | null
           inventory_movement_id: string | null
+          item_type: string | null
           line_total: number
           metadata: Json
+          name_snapshot: string | null
           pos_sale_id: string
           quantity: number
+          sku_snapshot: string | null
           unit_cost: number
           unit_price: number
         }
@@ -1079,11 +2243,15 @@ export type Database = {
           discount_amount?: number
           id?: string
           inventory_item_id: string
+          inventory_item_unit_id?: string | null
           inventory_movement_id?: string | null
+          item_type?: string | null
           line_total: number
           metadata?: Json
+          name_snapshot?: string | null
           pos_sale_id: string
           quantity: number
+          sku_snapshot?: string | null
           unit_cost?: number
           unit_price: number
         }
@@ -1094,11 +2262,15 @@ export type Database = {
           discount_amount?: number
           id?: string
           inventory_item_id?: string
+          inventory_item_unit_id?: string | null
           inventory_movement_id?: string | null
+          item_type?: string | null
           line_total?: number
           metadata?: Json
+          name_snapshot?: string | null
           pos_sale_id?: string
           quantity?: number
+          sku_snapshot?: string | null
           unit_cost?: number
           unit_price?: number
         }
@@ -1128,6 +2300,13 @@ export type Database = {
             foreignKeyName: "pos_sale_items_inventory_item_id_fkey"
             columns: ["inventory_item_id"]
             isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_sale_items_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
             referencedRelation: "inventory_stock_summary"
             referencedColumns: ["item_id"]
           },
@@ -1137,6 +2316,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "reporting_inventory_stock_summary"
             referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "pos_sale_items_inventory_item_unit_id_fkey"
+            columns: ["inventory_item_unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_item_units"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "pos_sale_items_inventory_movement_id_fkey"
@@ -1190,6 +2376,7 @@ export type Database = {
         Row: {
           branch_id: string
           brand_id: number
+          change_amount: number
           created_at: string
           created_by: string | null
           customer_id: string | null
@@ -1201,16 +2388,19 @@ export type Database = {
           metadata: Json
           net_amount: number
           notes: string | null
+          paid_amount: number
           payment_account_id: string
           payment_account_movement_id: string | null
           payment_method_id: string
           sale_number: string
           sale_status: string
           sold_at: string
+          trade_in_amount: number
         }
         Insert: {
           branch_id: string
           brand_id: number
+          change_amount?: number
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
@@ -1222,16 +2412,19 @@ export type Database = {
           metadata?: Json
           net_amount: number
           notes?: string | null
+          paid_amount?: number
           payment_account_id: string
           payment_account_movement_id?: string | null
           payment_method_id: string
           sale_number: string
           sale_status?: string
           sold_at?: string
+          trade_in_amount?: number
         }
         Update: {
           branch_id?: string
           brand_id?: number
+          change_amount?: number
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
@@ -1243,12 +2436,14 @@ export type Database = {
           metadata?: Json
           net_amount?: number
           notes?: string | null
+          paid_amount?: number
           payment_account_id?: string
           payment_account_movement_id?: string | null
           payment_method_id?: string
           sale_number?: string
           sale_status?: string
           sold_at?: string
+          trade_in_amount?: number
         }
         Relationships: [
           {
@@ -1302,6 +2497,262 @@ export type Database = {
           },
         ]
       }
+      pos_transaction_items: {
+        Row: {
+          attributes_snapshot: Json
+          battery_health_snapshot: number | null
+          branch_id: string
+          brand_id: number
+          condition_snapshot: string | null
+          cost_price_snapshot: number
+          created_at: string
+          id: string
+          imei_snapshot: string | null
+          item_name_snapshot: string
+          item_type: string
+          movement_id: string | null
+          product_id: string
+          quantity: number
+          selling_price_snapshot: number
+          serial_number_snapshot: string | null
+          subtotal_amount: number
+          transaction_id: string
+          unit_id: string | null
+          variant_id: string | null
+          variant_name_snapshot: string | null
+        }
+        Insert: {
+          attributes_snapshot?: Json
+          battery_health_snapshot?: number | null
+          branch_id: string
+          brand_id: number
+          condition_snapshot?: string | null
+          cost_price_snapshot?: number
+          created_at?: string
+          id?: string
+          imei_snapshot?: string | null
+          item_name_snapshot: string
+          item_type: string
+          movement_id?: string | null
+          product_id: string
+          quantity?: number
+          selling_price_snapshot?: number
+          serial_number_snapshot?: string | null
+          subtotal_amount?: number
+          transaction_id: string
+          unit_id?: string | null
+          variant_id?: string | null
+          variant_name_snapshot?: string | null
+        }
+        Update: {
+          attributes_snapshot?: Json
+          battery_health_snapshot?: number | null
+          branch_id?: string
+          brand_id?: number
+          condition_snapshot?: string | null
+          cost_price_snapshot?: number
+          created_at?: string
+          id?: string
+          imei_snapshot?: string | null
+          item_name_snapshot?: string
+          item_type?: string
+          movement_id?: string | null
+          product_id?: string
+          quantity?: number
+          selling_price_snapshot?: number
+          serial_number_snapshot?: string | null
+          subtotal_amount?: number
+          transaction_id?: string
+          unit_id?: string | null
+          variant_id?: string | null
+          variant_name_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transaction_items_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "inv_stock_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "pos_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "inv_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_transaction_number_counters: {
+        Row: {
+          brand_id: number
+          last_number: number
+          month: number
+          prefix: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          brand_id: number
+          last_number?: number
+          month: number
+          prefix: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          brand_id?: number
+          last_number?: number
+          month?: number
+          prefix?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transaction_number_counters_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_transactions: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          change_amount: number
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          discount_amount: number
+          id: string
+          notes: string | null
+          paid_amount: number
+          payment_account_id: string | null
+          payment_method_id: string | null
+          service_fee_amount: number
+          status: string
+          subtotal_amount: number
+          total_amount: number
+          transaction_number: string
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          change_amount?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          discount_amount?: number
+          id?: string
+          notes?: string | null
+          paid_amount?: number
+          payment_account_id?: string | null
+          payment_method_id?: string | null
+          service_fee_amount?: number
+          status?: string
+          subtotal_amount?: number
+          total_amount?: number
+          transaction_number: string
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          change_amount?: number
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          discount_amount?: number
+          id?: string
+          notes?: string | null
+          paid_amount?: number
+          payment_account_id?: string | null
+          payment_method_id?: string | null
+          service_fee_amount?: number
+          status?: string
+          subtotal_amount?: number
+          total_amount?: number
+          transaction_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           auth_user_id: string | null
@@ -1311,8 +2762,11 @@ export type Database = {
           id: string
           is_active: boolean
           last_login_at: string | null
+          last_pin_changed_at: string | null
           name: string
           phone: string | null
+          pin_enabled: boolean
+          pin_hash: string | null
           preferred_brand_id: number | null
           updated_at: string
         }
@@ -1324,8 +2778,11 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_login_at?: string | null
+          last_pin_changed_at?: string | null
           name: string
           phone?: string | null
+          pin_enabled?: boolean
+          pin_hash?: string | null
           preferred_brand_id?: number | null
           updated_at?: string
         }
@@ -1337,8 +2794,11 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_login_at?: string | null
+          last_pin_changed_at?: string | null
           name?: string
           phone?: string | null
+          pin_enabled?: boolean
+          pin_hash?: string | null
           preferred_brand_id?: number | null
           updated_at?: string
         }
@@ -1348,6 +2808,215 @@ export type Database = {
             columns: ["preferred_brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_items: {
+        Row: {
+          barcode_snapshot: string | null
+          created_at: string
+          id: string
+          item_id: string
+          item_name_snapshot: string
+          purchase_id: string
+          quantity: number
+          serialized_unit_id: string | null
+          sku_snapshot: string | null
+          subtotal: number
+          unit_cost_snapshot: number
+          unit_snapshot: string
+          variant_display_name_snapshot: string | null
+          variant_option_values_snapshot: Json
+        }
+        Insert: {
+          barcode_snapshot?: string | null
+          created_at?: string
+          id?: string
+          item_id: string
+          item_name_snapshot: string
+          purchase_id: string
+          quantity: number
+          serialized_unit_id?: string | null
+          sku_snapshot?: string | null
+          subtotal?: number
+          unit_cost_snapshot?: number
+          unit_snapshot?: string
+          variant_display_name_snapshot?: string | null
+          variant_option_values_snapshot?: Json
+        }
+        Update: {
+          barcode_snapshot?: string | null
+          created_at?: string
+          id?: string
+          item_id?: string
+          item_name_snapshot?: string
+          purchase_id?: string
+          quantity?: number
+          serialized_unit_id?: string | null
+          sku_snapshot?: string | null
+          subtotal?: number
+          unit_cost_snapshot?: number
+          unit_snapshot?: string
+          variant_display_name_snapshot?: string | null
+          variant_option_values_snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "purchase_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "purchase_items_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_items_serialized_unit_id_fkey"
+            columns: ["serialized_unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_serialized_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_number_counters: {
+        Row: {
+          brand_id: number
+          created_at: string
+          id: string
+          last_number: number
+          month: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          brand_id: number
+          created_at?: string
+          id?: string
+          last_number?: number
+          month: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          brand_id?: number
+          created_at?: string
+          id?: string
+          last_number?: number
+          month?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_number_counters_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchases: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          payment_account_id: string | null
+          purchase_date: string
+          purchase_number: string
+          status: string
+          supplier_name: string | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_account_id?: string | null
+          purchase_date?: string
+          purchase_number: string
+          status?: string
+          supplier_name?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_account_id?: string | null
+          purchase_date?: string
+          purchase_number?: string
+          status?: string
+          supplier_name?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1635,55 +3304,100 @@ export type Database = {
       }
       service_sparepart_usages: {
         Row: {
+          barcode_snapshot: string | null
+          battery_health_snapshot: number | null
           branch_id: string
           brand_id: number
+          condition_grade_snapshot: string | null
+          condition_notes_snapshot: string | null
           created_at: string
           created_by: string | null
           id: string
+          imei_snapshot: string | null
           inventory_item_id: string
           inventory_movement_id: string | null
           is_returned: boolean
+          item_name_snapshot: string | null
           metadata: Json
           notes: string | null
           quantity: number
           returned_inventory_movement_id: string | null
           selling_price: number | null
+          selling_price_snapshot: number | null
+          serial_number_snapshot: string | null
+          serialized_unit_id: string | null
           service_id: string
+          sku_snapshot: string | null
+          total_cost_snapshot: number | null
+          total_price_snapshot: number | null
           unit_cost: number | null
+          unit_cost_snapshot: number | null
+          unit_snapshot: string | null
+          variant_snapshot: Json | null
         }
         Insert: {
+          barcode_snapshot?: string | null
+          battery_health_snapshot?: number | null
           branch_id: string
           brand_id: number
+          condition_grade_snapshot?: string | null
+          condition_notes_snapshot?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          imei_snapshot?: string | null
           inventory_item_id: string
           inventory_movement_id?: string | null
           is_returned?: boolean
+          item_name_snapshot?: string | null
           metadata?: Json
           notes?: string | null
           quantity: number
           returned_inventory_movement_id?: string | null
           selling_price?: number | null
+          selling_price_snapshot?: number | null
+          serial_number_snapshot?: string | null
+          serialized_unit_id?: string | null
           service_id: string
+          sku_snapshot?: string | null
+          total_cost_snapshot?: number | null
+          total_price_snapshot?: number | null
           unit_cost?: number | null
+          unit_cost_snapshot?: number | null
+          unit_snapshot?: string | null
+          variant_snapshot?: Json | null
         }
         Update: {
+          barcode_snapshot?: string | null
+          battery_health_snapshot?: number | null
           branch_id?: string
           brand_id?: number
+          condition_grade_snapshot?: string | null
+          condition_notes_snapshot?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          imei_snapshot?: string | null
           inventory_item_id?: string
           inventory_movement_id?: string | null
           is_returned?: boolean
+          item_name_snapshot?: string | null
           metadata?: Json
           notes?: string | null
           quantity?: number
           returned_inventory_movement_id?: string | null
           selling_price?: number | null
+          selling_price_snapshot?: number | null
+          serial_number_snapshot?: string | null
+          serialized_unit_id?: string | null
           service_id?: string
+          sku_snapshot?: string | null
+          total_cost_snapshot?: number | null
+          total_price_snapshot?: number | null
           unit_cost?: number | null
+          unit_cost_snapshot?: number | null
+          unit_snapshot?: string | null
+          variant_snapshot?: Json | null
         }
         Relationships: [
           {
@@ -1718,6 +3432,13 @@ export type Database = {
             foreignKeyName: "service_sparepart_usages_inventory_item_id_fkey"
             columns: ["inventory_item_id"]
             isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_sparepart_usages_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
             referencedRelation: "inventory_stock_summary"
             referencedColumns: ["item_id"]
           },
@@ -1740,6 +3461,13 @@ export type Database = {
             columns: ["returned_inventory_movement_id"]
             isOneToOne: false
             referencedRelation: "inventory_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_sparepart_usages_serialized_unit_id_fkey"
+            columns: ["serialized_unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_serialized_units"
             referencedColumns: ["id"]
           },
           {
@@ -1845,6 +3573,12 @@ export type Database = {
           id: string
           intake_at: string
           metadata: Json
+          picked_up_at: string | null
+          picked_up_by_profile_id: string | null
+          pickup_name: string | null
+          pickup_note: string | null
+          pickup_phone: string | null
+          pickup_relation: string | null
           previous_status: string | null
           qc_at: string | null
           repairing_at: string | null
@@ -1881,6 +3615,12 @@ export type Database = {
           id?: string
           intake_at?: string
           metadata?: Json
+          picked_up_at?: string | null
+          picked_up_by_profile_id?: string | null
+          pickup_name?: string | null
+          pickup_note?: string | null
+          pickup_phone?: string | null
+          pickup_relation?: string | null
           previous_status?: string | null
           qc_at?: string | null
           repairing_at?: string | null
@@ -1917,6 +3657,12 @@ export type Database = {
           id?: string
           intake_at?: string
           metadata?: Json
+          picked_up_at?: string | null
+          picked_up_by_profile_id?: string | null
+          pickup_name?: string | null
+          pickup_note?: string | null
+          pickup_phone?: string | null
+          pickup_relation?: string | null
           previous_status?: string | null
           qc_at?: string | null
           repairing_at?: string | null
@@ -2228,6 +3974,159 @@ export type Database = {
           },
         ]
       }
+      trade_ins: {
+        Row: {
+          appraisal_value: number
+          appraised_by: string | null
+          battery_health: string | null
+          branch_id: string
+          brand_id: number
+          color: string | null
+          condition_grade: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          device_brand: string
+          device_model: string
+          id: string
+          imei: string | null
+          inventory_item_id: string | null
+          inventory_item_unit_id: string | null
+          note: string | null
+          pos_sale_id: string
+          serial_number: string | null
+          status: string
+          storage: string | null
+          updated_at: string
+        }
+        Insert: {
+          appraisal_value: number
+          appraised_by?: string | null
+          battery_health?: string | null
+          branch_id: string
+          brand_id: number
+          color?: string | null
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          device_brand: string
+          device_model: string
+          id?: string
+          imei?: string | null
+          inventory_item_id?: string | null
+          inventory_item_unit_id?: string | null
+          note?: string | null
+          pos_sale_id: string
+          serial_number?: string | null
+          status?: string
+          storage?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appraisal_value?: number
+          appraised_by?: string | null
+          battery_health?: string | null
+          branch_id?: string
+          brand_id?: number
+          color?: string | null
+          condition_grade?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          device_brand?: string
+          device_model?: string
+          id?: string
+          imei?: string | null
+          inventory_item_id?: string | null
+          inventory_item_unit_id?: string | null
+          note?: string | null
+          pos_sale_id?: string
+          serial_number?: string | null
+          status?: string
+          storage?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_ins_appraised_by_fkey"
+            columns: ["appraised_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "trade_ins_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "trade_ins_inventory_item_unit_id_fkey"
+            columns: ["inventory_item_unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_item_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_ins_pos_sale_id_fkey"
+            columns: ["pos_sale_id"]
+            isOneToOne: false
+            referencedRelation: "pos_sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transaction_reversals: {
         Row: {
           branch_id: string | null
@@ -2348,6 +4247,13 @@ export type Database = {
             foreignKeyName: "user_branch_access_membership_id_fkey"
             columns: ["membership_id"]
             isOneToOne: false
+            referencedRelation: "brand_memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_branch_access_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
             referencedRelation: "user_brand_memberships"
             referencedColumns: ["id"]
           },
@@ -2357,6 +4263,7 @@ export type Database = {
         Row: {
           brand_id: number | null
           created_at: string
+          deleted_at: string | null
           id: string
           is_active: boolean
           profile_id: string
@@ -2366,6 +4273,7 @@ export type Database = {
         Insert: {
           brand_id?: number | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_active?: boolean
           profile_id: string
@@ -2375,6 +4283,7 @@ export type Database = {
         Update: {
           brand_id?: number | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_active?: boolean
           profile_id?: string
@@ -2431,6 +4340,54 @@ export type Database = {
           },
         ]
       }
+      brand_memberships: {
+        Row: {
+          brand_id: number | null
+          created_at: string | null
+          deleted_at: string | null
+          id: string | null
+          is_active: boolean | null
+          profile_id: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          brand_id?: number | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          profile_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          brand_id?: number | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          profile_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_brand_memberships_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_brand_memberships_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_finance_summary: {
         Row: {
           branch_id: string | null
@@ -2460,6 +4417,97 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_listing: {
+        Row: {
+          appears_in_pos: boolean | null
+          available_stock: number | null
+          average_cost: number | null
+          barcode: string | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          category_id: string | null
+          category_name: string | null
+          cost_price: number | null
+          created_at: string | null
+          current_stock: number | null
+          description: string | null
+          has_variants: boolean | null
+          id: string | null
+          is_active: boolean | null
+          is_variant_parent: boolean | null
+          item_type: string | null
+          metadata: Json | null
+          min_stock: number | null
+          name: string | null
+          parent_item_id: string | null
+          reserved_stock: number | null
+          selling_price: number | null
+          service_usage_enabled: boolean | null
+          sku: string | null
+          stock_type: string | null
+          tracking_type: string | null
+          unit_attributes: Json | null
+          unit_condition: string | null
+          unit_name: string | null
+          updated_at: string | null
+          variant_attributes: Json | null
+          variant_display_name: string | null
+          variant_name: string | null
+          variant_option_values: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_inventory_stocks_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_listing"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_stock_summary"
+            referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "inventory_items_parent_item_id_fkey"
+            columns: ["parent_item_id"]
+            isOneToOne: false
+            referencedRelation: "reporting_inventory_stock_summary"
+            referencedColumns: ["item_id"]
           },
         ]
       }
@@ -2890,6 +4938,28 @@ export type Database = {
             }
             Returns: string
           }
+        | {
+            Args: {
+              p_branch_id: string
+              p_brand_id: number
+              p_created_by?: string
+              p_description?: string
+              p_direction: string
+              p_idempotency_key?: string
+              p_item_id: string
+              p_metadata?: Json
+              p_movement_type: string
+              p_notes?: string
+              p_quantity: number
+              p_reference_id?: string
+              p_reference_label?: string
+              p_reference_type?: string
+              p_serialized_unit_id?: string
+              p_unit_cost?: number
+              p_unit_snapshot?: string
+            }
+            Returns: string
+          }
       add_payment_account_movement: {
         Args: {
           p_amount: number
@@ -2907,19 +4977,34 @@ export type Database = {
         }
         Returns: string
       }
-      add_service_sparepart_usage: {
-        Args: {
-          p_created_by?: string
-          p_idempotency_key?: string
-          p_inventory_item_id: string
-          p_notes?: string
-          p_quantity: number
-          p_selling_price?: number
-          p_service_id: string
-          p_unit_cost?: number
-        }
-        Returns: string
-      }
+      add_service_sparepart_usage:
+        | {
+            Args: {
+              p_created_by?: string
+              p_idempotency_key?: string
+              p_inventory_item_id: string
+              p_notes?: string
+              p_quantity: number
+              p_selling_price?: number
+              p_service_id: string
+              p_unit_cost?: number
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_created_by?: string
+              p_idempotency_key?: string
+              p_inventory_item_id: string
+              p_notes?: string
+              p_quantity: number
+              p_selling_price?: number
+              p_serialized_unit_id?: string
+              p_service_id: string
+              p_unit_cost?: number
+            }
+            Returns: string
+          }
       add_shift_cash_movement: {
         Args: {
           p_amount: number
@@ -2981,7 +5066,64 @@ export type Database = {
         Args: { p_branch_id: string; p_branch_name: string; p_brand_id: number }
         Returns: string
       }
+      create_inv_stock_purchase: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by: string
+          p_items: Json
+          p_notes: string
+          p_payment_account_id: string
+          p_purchase_date: string
+          p_supplier_name: string
+        }
+        Returns: Json
+      }
+      create_purchase_with_movements: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by: string
+          p_items: Json
+          p_notes: string
+          p_payment_account_id: string
+          p_purchase_date: string
+          p_purchase_number: string
+          p_supplier_name: string
+        }
+        Returns: Json
+      }
+      create_trade_in_inventory_unit: {
+        Args: {
+          p_appraisal_value?: number
+          p_battery_health?: string
+          p_branch_id: string
+          p_brand_id: number
+          p_color?: string
+          p_condition_grade?: string
+          p_created_by?: string
+          p_device_brand: string
+          p_device_model: string
+          p_imei?: string
+          p_note?: string
+          p_serial_number?: string
+          p_storage?: string
+        }
+        Returns: Json
+      }
+      generate_inv_stock_purchase_number: {
+        Args: { p_branch_id: string; p_brand_id: number }
+        Returns: string
+      }
       generate_pos_sale_number: {
+        Args: { p_brand_id: number }
+        Returns: string
+      }
+      generate_pos_transaction_number: {
+        Args: { p_brand_id: number; p_prefix?: string }
+        Returns: string
+      }
+      generate_purchase_number: {
         Args: { p_brand_id: number }
         Returns: string
       }
@@ -2999,6 +5141,10 @@ export type Database = {
       get_user_brand_ids: { Args: never; Returns: number[] }
       get_user_profile_id: { Args: never; Returns: string }
       get_user_roles: { Args: never; Returns: string[] }
+      mark_device_unit_sold: {
+        Args: { p_unit_id: string; p_updated_by?: string }
+        Returns: Json
+      }
       open_store_shift: {
         Args: {
           p_branch_id: string
@@ -3009,6 +5155,10 @@ export type Database = {
           p_opening_notes?: string
         }
         Returns: string
+      }
+      recalculate_serialized_item_stock: {
+        Args: { p_item_id: string }
+        Returns: number
       }
       record_pos_sale: {
         Args: {
@@ -3023,6 +5173,24 @@ export type Database = {
           p_notes?: string
           p_payment_method_id: string
           p_sold_at?: string
+        }
+        Returns: Json
+      }
+      record_pos_sale_v2: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by?: string
+          p_customer_id?: string
+          p_discount_amount?: number
+          p_idempotency_key?: string
+          p_items: Json
+          p_metadata?: Json
+          p_notes?: string
+          p_payment_amount: number
+          p_payment_method_id: string
+          p_sold_at?: string
+          p_trade_in?: Json
         }
         Returns: Json
       }
@@ -3123,14 +5291,11 @@ export type Database = {
       }
     }
     Enums: {
-      inventory_item_type: "PRODUCT" | "SPAREPART" | "ACCESSORY" | "CONSUMABLE" | "SUPPLY" | "DEVICE_UNIT" | "OTHER"
+      inventory_item_type: "PRODUCT" | "SPAREPART" | "SUPPLY" | "OTHER"
       inventory_movement_direction: "IN" | "OUT"
       inventory_movement_type:
         | "OPENING_STOCK"
         | "PURCHASE"
-          | "PURCHASE_IN"
-          | "STOCK_OPNAME_ADJUSTMENT"
-          | "DAMAGE_OUT"
         | "SERVICE_USAGE"
         | "SERVICE_RETURN"
         | "POS_SALE"
@@ -3306,7 +5471,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      inventory_item_type: ["PRODUCT", "SPAREPART", "ACCESSORY", "CONSUMABLE", "SUPPLY", "DEVICE_UNIT", "OTHER"],
+      inventory_item_type: ["PRODUCT", "SPAREPART", "SUPPLY", "OTHER"],
       inventory_movement_direction: ["IN", "OUT"],
       inventory_movement_type: [
         "OPENING_STOCK",
@@ -3364,8 +5529,3 @@ export const Constants = {
     },
   },
 } as const
-
-
-
-
-

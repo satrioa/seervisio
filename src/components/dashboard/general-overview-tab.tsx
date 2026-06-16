@@ -206,30 +206,35 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
   const qcCount = data?.needActions?.find((a) => a.label.includes("QC"))?.count ?? 0;
   const todayActivityTotal = data?.todayActivityCounts?.reduce((s, a) => s + a.count, 0) ?? 0;
 
-  const healthInput: OperationalHealthInput = {
+  const calculatedTarget = React.useMemo(() => {
+    if (!data) return 0;
+    return data.netProfit > 0 ? data.revenue * 1.3 : data.revenue * 2;
+  }, [data]);
+
+  const healthInput = React.useMemo<OperationalHealthInput>(() => ({
     shift: {
       totalBranches: totalBranchCount || 1,
       openBranches: activeShiftCount,
-      unclosedShifts: 0,
+      unclosedShifts: data?.unclosedShiftsCount ?? 0,
     },
     service: {
       totalActive: (data?.todayActivityCounts?.find((a) => a.label.includes("Servis"))?.count ?? 0),
       completedToday: data?.serviceCompletedToday ?? 0,
       needAttention: needActionsCount,
       overdueQc: qcCount,
-      unpickedUnits: 0,
+      unpickedUnits: data?.unpickedUnitsCount ?? 0,
     },
     finance: {
       revenue: data?.revenue ?? 0,
-      target: 0,
+      target: calculatedTarget,
       cashIn: data?.revenue ?? 0,
-      cashOut: 0,
-      unpaidInvoices: 0,
+      cashOut: (data?.revenue ?? 0) - (data?.netProfit ?? 0),
+      unpaidInvoices: data?.unpaidInvoicesCount ?? 0,
       cashDifference: 0,
     },
     inventory: {
-      lowStockItems: 0,
-      outOfStockItems: 0,
+      lowStockItems: data?.lowStockItemsCount ?? 0,
+      outOfStockItems: data?.outOfStockItemsCount ?? 0,
       criticalFastMovingItems: 0,
     },
     branchActivity: {
@@ -237,7 +242,23 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
       totalBranches: totalBranchCount || 1,
       totalActivities: todayActivityTotal,
     },
-  };
+  }), [
+    totalBranchCount,
+    activeShiftCount,
+    data?.unclosedShiftsCount,
+    data?.todayActivityCounts,
+    data?.serviceCompletedToday,
+    needActionsCount,
+    qcCount,
+    data?.unpickedUnitsCount,
+    data?.revenue,
+    calculatedTarget,
+    data?.netProfit,
+    data?.unpaidInvoicesCount,
+    data?.lowStockItemsCount,
+    data?.outOfStockItemsCount,
+    todayActivityTotal,
+  ]);
 
   const healthResult = React.useMemo(
     () => calculateOperationalHealth(healthInput),
@@ -495,7 +516,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
             </CardHeader>
             <CardContent className="space-y-4">
               {data && data.revenue > 0 ? (() => {
-                const target = data.netProfit > 0 ? data.revenue * 1.3 : data.revenue * 2;
+                const target = calculatedTarget;
                 const pct = target > 0 ? Math.min(Math.round((data.revenue / target) * 100), 100) : 0;
                 const remaining = Math.max(target - data.revenue, 0);
                 const daysInPeriod = dateRange?.from && dateRange?.to

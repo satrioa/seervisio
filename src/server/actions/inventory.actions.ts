@@ -21,6 +21,7 @@ export interface InventoryListInput {
   branchId?: string | null;
   categoryId?: string | null;
   itemType?: string | null;
+  stockType?: string | null;
   trackingType?: string | null;
   stockStatus?: string | null;
   search?: string | null;
@@ -62,6 +63,10 @@ export interface InventoryItemRow {
   categoryId: string | null;
   categoryName: string | null;
   itemType: string;
+  stockType: string;
+  appearsInPos: boolean;
+  serviceUsageEnabled: boolean;
+  unitAttributes: Record<string, any>;
   name: string;
   sku: string | null;
   barcode: string | null;
@@ -103,6 +108,9 @@ export interface InventoryCategoryRow {
   name: string;
   description: string | null;
   isActive: boolean;
+  stockType?: string;
+  /** @deprecated Use stockType instead */
+  itemType?: string;
 }
 
 export interface VariationGroup {
@@ -131,6 +139,7 @@ export interface CreateInventoryInput {
   categoryId?: string | null;
   name: string;
   userFacingType: UserFacingItemType;
+  stockType: string;
   itemType: string;
   unitCondition?: string | null;
   sku?: string | null;
@@ -143,6 +152,9 @@ export interface CreateInventoryInput {
   isActive?: boolean;
   description?: string | null;
   hasVariants: boolean;
+  appearsInPos: boolean;
+  serviceUsageEnabled: boolean;
+  unitAttributes?: Record<string, any>;
   variationGroups?: VariationGroup[];
   variants?: Record<string, VariantInput>;
   parentId?: string | null;
@@ -159,6 +171,9 @@ export interface UpdateInventoryInput {
   sellingPrice?: number;
   minStock?: number;
   isActive?: boolean;
+  appearsInPos?: boolean;
+  serviceUsageEnabled?: boolean;
+  stockType?: string;
 }
 
 export interface FindByBarcodeInput {
@@ -249,6 +264,10 @@ function mapRow(item: any, stock?: any): InventoryItemRow {
     categoryId: item.category_id,
     categoryName: item.category_name ?? null,
     itemType: item.item_type,
+    stockType: item.stock_type ?? (item.item_type === "SPAREPART" ? "SPAREPART" : item.item_type === "DEVICE_UNIT" ? "UNIT" : "PRODUCT"),
+    appearsInPos: item.appears_in_pos ?? false,
+    serviceUsageEnabled: item.service_usage_enabled ?? false,
+    unitAttributes: (item.unit_attributes ?? {}) as Record<string, any>,
     name: item.name,
     sku: item.sku ?? null,
     barcode: item.barcode ?? null,
@@ -327,6 +346,10 @@ export async function listInventoryItemsAction(
 
     if (input.trackingType && input.trackingType !== "ALL_TRACKING_TYPES") {
       query = query.eq("tracking_type", input.trackingType);
+    }
+
+    if (input.stockType && input.stockType !== "ALL_TYPES") {
+      query = query.eq("stock_type", input.stockType);
     }
 
     if (input.stockStatus && input.stockStatus !== "ALL_STATUS") {
@@ -463,11 +486,14 @@ export async function createInventoryItemAction(
         branch_id: targetBranchId,
         category_id: input.categoryId || null,
         item_type: input.itemType,
+        stock_type: input.stockType,
         name: input.name.trim(),
         sku: input.sku?.trim() || null,
         barcode: input.barcode?.trim() || null,
         tracking_type: trackingType,
         unit_condition: input.unitCondition ?? null,
+        appears_in_pos: input.appearsInPos,
+        service_usage_enabled: input.serviceUsageEnabled,
         description: input.description?.trim() || null,
         unit_name: input.unitName || "pcs",
         cost_price: input.costPrice ?? 0,
@@ -482,6 +508,7 @@ export async function createInventoryItemAction(
         variant_option_values: {},
         current_stock: trackingType === "QUANTITY" ? (input.initialStock ?? 0) : 0,
         metadata: {},
+        unit_attributes: input.unitAttributes ?? {},
       };
 
       const { data: newItem, error: insertError } = await (supabase as any)
@@ -532,11 +559,14 @@ export async function createInventoryItemAction(
       branch_id: targetBranchId,
       category_id: input.categoryId || null,
       item_type: input.itemType,
+      stock_type: input.stockType,
       name: input.name.trim(),
       sku: input.sku?.trim() || null,
       barcode: input.barcode?.trim() || null,
       tracking_type: trackingType,
       unit_condition: input.unitCondition ?? null,
+      appears_in_pos: input.appearsInPos,
+      service_usage_enabled: input.serviceUsageEnabled,
       description: input.description?.trim() || null,
       unit_name: input.unitName || "pcs",
       min_stock: input.minStock ?? 0,
@@ -683,6 +713,9 @@ export async function updateInventoryItemAction(
     if (input.sellingPrice !== undefined) updateData.selling_price = input.sellingPrice;
     if (input.minStock !== undefined) updateData.min_stock = input.minStock;
     if (input.isActive !== undefined) updateData.is_active = input.isActive;
+    if (input.appearsInPos !== undefined) updateData.appears_in_pos = input.appearsInPos;
+    if (input.serviceUsageEnabled !== undefined) updateData.service_usage_enabled = input.serviceUsageEnabled;
+    if (input.stockType !== undefined) updateData.stock_type = input.stockType;
 
     const { data: updated, error: updateError } = await (supabase as any)
       .from("inventory_items")
@@ -755,6 +788,10 @@ export async function findInventoryByBarcodeAction(
         categoryId: invItem.category_id ?? null,
         categoryName: null,
         itemType: invItem.item_type,
+        stockType: invItem.stock_type ?? (invItem.item_type === "SPAREPART" ? "SPAREPART" : invItem.item_type === "DEVICE_UNIT" ? "UNIT" : "PRODUCT"),
+        appearsInPos: invItem.appears_in_pos ?? false,
+        serviceUsageEnabled: invItem.service_usage_enabled ?? false,
+        unitAttributes: (invItem.unit_attributes ?? {}) as Record<string, any>,
         name: invItem.name,
         sku: invItem.sku ?? null,
         barcode: invItem.barcode ?? null,
@@ -863,6 +900,8 @@ export async function findInventoryByBarcodeAction(
 
 export async function getInventoryCategoriesAction(
   brandSlug: string,
+  stockType?: string | null,
+  includeInactive?: boolean,
 ): Promise<ActionResult<InventoryCategoryRow[]>> {
   try {
     const session = await getSessionData(brandSlug);
@@ -870,12 +909,21 @@ export async function getInventoryCategoriesAction(
 
     const supabase = await createServerSupabase();
 
-    const { data, error } = await (supabase as any)
+    let query = (supabase as any)
       .from("inventory_categories")
-      .select("id, name, description, is_active")
+      .select("id, name, description, is_active, stock_type")
       .eq("brand_id", session.brandId)
-      .eq("is_active", true)
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true });
+
+    if (!includeInactive) {
+      query = query.eq("is_active", true);
+    }
+    if (stockType) {
+      query = query.eq("stock_type", stockType);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return errorResult(error.message);
@@ -887,10 +935,221 @@ export async function getInventoryCategoriesAction(
         name: c.name,
         description: c.description ?? null,
         isActive: c.is_active,
+        stockType: c.stock_type,
       })),
     );
   } catch (e: any) {
     return errorResult(e.message ?? "Gagal memuat kategori");
+  }
+}
+
+/* ── Manage category (create/update/deactivate) ── */
+
+export interface ManageCategoryInput {
+  id?: string;
+  name: string;
+  stockType: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
+export async function manageInventoryCategoryAction(
+  brandSlug: string,
+  input: ManageCategoryInput,
+): Promise<ActionResult<InventoryCategoryRow>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "inventory.manage");
+
+    const supabase = await createServerSupabase();
+
+    if (!input.name?.trim()) {
+      return errorResult("Nama kategori wajib diisi.");
+    }
+    if (!["SPAREPART", "PRODUCT", "UNIT"].includes(input.stockType)) {
+      return errorResult("Tipe barang tidak valid.");
+    }
+
+    const name = input.name.trim();
+    const stockType = input.stockType;
+
+    // Check duplicate active name within same brand + stock_type
+    let dupQuery = (supabase as any)
+      .from("inventory_categories")
+      .select("id, name, deleted_at")
+      .eq("brand_id", session.brandId)
+      .eq("stock_type", stockType)
+      .is("deleted_at", null)
+      .ilike("name", name);
+
+    if (input.id) {
+      dupQuery = dupQuery.neq("id", input.id);
+    }
+    const { data: dupes } = await dupQuery;
+    if (dupes && dupes.length > 0) {
+      return errorResult(`Kategori "${name}" sudah ada untuk tipe barang ini.`);
+    }
+
+    if (input.id) {
+      // Update
+      const updateData: Record<string, any> = {
+        name,
+        stock_type: stockType,
+        updated_at: new Date().toISOString(),
+      };
+      if (input.description !== undefined) {
+        updateData.description = input.description ?? null;
+      }
+      if (input.isActive !== undefined) {
+        updateData.is_active = input.isActive;
+      }
+
+      const { data, error } = await (supabase as any)
+        .from("inventory_categories")
+        .update(updateData)
+        .eq("id", input.id)
+        .eq("brand_id", session.brandId)
+        .select("id, name, description, is_active, stock_type")
+        .single();
+
+      if (error) return errorResult(error.message);
+
+      return successResult({
+        id: data.id,
+        name: data.name,
+        description: data.description ?? null,
+        isActive: data.is_active,
+        stockType: data.stock_type,
+      });
+    } else {
+      // Insert
+      // Check if soft-deleted record exists — re-activate it instead
+      const { data: softDeleted } = await (supabase as any)
+        .from("inventory_categories")
+        .select("id, name, deleted_at")
+        .eq("brand_id", session.brandId)
+        .eq("stock_type", stockType)
+        .ilike("name", name)
+        .not("deleted_at", "is", null)
+        .maybeSingle();
+
+      if (softDeleted) {
+        const { data, error } = await (supabase as any)
+          .from("inventory_categories")
+          .update({
+            deleted_at: null,
+            is_active: true,
+            description: input.description ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", softDeleted.id)
+          .select("id, name, description, is_active, stock_type")
+          .single();
+
+        if (error) return errorResult(error.message);
+        return successResult({
+          id: data.id,
+          name: data.name,
+          description: data.description ?? null,
+          isActive: data.is_active,
+          stockType: data.stock_type,
+        });
+      }
+
+      const { data, error } = await (supabase as any)
+        .from("inventory_categories")
+        .insert({
+          brand_id: session.brandId,
+          name,
+          stock_type: stockType,
+          description: input.description ?? null,
+          is_active: true,
+        })
+        .select("id, name, description, is_active, stock_type")
+        .single();
+
+      if (error) return errorResult(error.message);
+
+      return successResult({
+        id: data.id,
+        name: data.name,
+        description: data.description ?? null,
+        isActive: data.is_active,
+        stockType: data.stock_type,
+      });
+    }
+  } catch (e: any) {
+    return errorResult(e.message ?? "Gagal mengelola kategori.");
+  }
+}
+
+/* ── Toggle category active status ── */
+
+export async function toggleInventoryCategoryAction(
+  brandSlug: string,
+  categoryId: string,
+  active: boolean,
+): Promise<ActionResult<void>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "inventory.manage");
+
+    const supabase = await createServerSupabase();
+
+    const { error } = await (supabase as any)
+      .from("inventory_categories")
+      .update({ is_active: active, updated_at: new Date().toISOString() })
+      .eq("id", categoryId)
+      .eq("brand_id", session.brandId);
+
+    if (error) return errorResult(error.message);
+    return successResult(undefined);
+  } catch (e: any) {
+    return errorResult(e.message ?? "Gagal mengubah status kategori.");
+  }
+}
+
+/* ── Delete category (soft delete only; hard delete if no items) ── */
+
+export async function deleteInventoryCategoryAction(
+  brandSlug: string,
+  categoryId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "inventory.manage");
+
+    const supabase = await createServerSupabase();
+
+    const { data: items } = await (supabase as any)
+      .from("inventory_items")
+      .select("id")
+      .eq("category_id", categoryId)
+      .is("deleted_at", null)
+      .limit(1);
+
+    if (items && items.length > 0) {
+      // Soft delete
+      const { error } = await (supabase as any)
+        .from("inventory_categories")
+        .update({ is_active: false, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", categoryId)
+        .eq("brand_id", session.brandId);
+      if (error) return errorResult(error.message);
+      return successResult(undefined);
+    }
+
+    // Hard delete
+    const { error } = await (supabase as any)
+      .from("inventory_categories")
+      .delete()
+      .eq("id", categoryId)
+      .eq("brand_id", session.brandId);
+
+    if (error) return errorResult(error.message);
+    return successResult(undefined);
+  } catch (e: any) {
+    return errorResult(e.message ?? "Gagal menghapus kategori.");
   }
 }
 

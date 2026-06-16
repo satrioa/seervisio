@@ -20,10 +20,7 @@ function ScrollArea({ className, children }: { className?: string; children: Rea
 const TYPE_TABS = [
   { label: "Semua", value: undefined },
   { label: "Produk", value: "PRODUCT" },
-  { label: "Sparepart", value: "SPAREPART" },
-  { label: "Supply", value: "SUPPLY" },
-  { label: "Unit", value: "DEVICE_UNIT" },
-  { label: "Lainnya", value: "OTHER" },
+  { label: "Unit", value: "UNIT" },
 ] as const;
 
 /* ─── Product Card ─── */

@@ -103,6 +103,7 @@ function PanelLayoutShell({
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
   const isPosPage = pathname?.includes("/panel/pos");
+  const isPosV4Page = pathname?.includes("/panel/pos-v4");
   const isPaymentAccountsPage = pathname?.includes("/panel/payment-accounts");
   const isFinanceTransactionsPage = pathname?.includes("/panel/finance/transactions");
   const hasFlushRightEdge = isPosPage || isPaymentAccountsPage || isFinanceTransactionsPage;
@@ -227,7 +228,7 @@ function PanelLayoutShell({
 
   return (
     <StoreShiftProvider>
-      <div className="flex h-screen overflow-hidden bg-[#f3f2f0]">
+      <div className="flex h-screen overflow-hidden bg-[#f7f5f1]">
         <SidebarProvider>
           <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
 
@@ -298,10 +299,10 @@ function PanelLayoutShell({
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden outline-none ring-0 ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl shadow-sm"} ${isPosPage ? "bg-card" : ""} ${isFinanceTransactionsPage ? "bg-transparent shadow-none" : ""}`}>
+            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden border border-border/60 bg-card shadow-sm outline-none ring-0 ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}>
               <main
                 ref={mainScrollRef}
-                className={`relative z-0 h-full overflow-y-auto overflow-x-hidden p-6 [-ms-overflow-style:none] [scrollbar-width:none] [&>*]:space-y-3 [&::-webkit-scrollbar]:hidden ${isPaymentAccountsPage ? "rounded-xl" : ""} ${isPosPage ? "bg-card" : ""} ${isFinanceTransactionsPage ? "bg-transparent" : ""}`}
+                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : "p-6 [&>*]:space-y-3"}`}
               >
                 {children}
               </main>

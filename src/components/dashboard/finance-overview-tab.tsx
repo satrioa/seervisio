@@ -59,7 +59,7 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
     return trend.map((p) => ({
       period: p.label,
       cashIn: p.totalRevenue,
-      cashOut: 0,
+      cashOut: p.cashOut ?? 0,
     }));
   }, [data?.revenueTrend]);
 
@@ -76,7 +76,7 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
   }, [data?.revenueTrend]);
 
   const hasPaymentData = paymentMethodRadar.some(p => p.transactionCount > 0);
-  const hasExpenseData = expenseCategoryRadar.length > 0;
+  const hasExpenseData = expenseCategoryRadar.some(e => e.amount > 0);
 
   return (
     <div className="space-y-6">

@@ -112,6 +112,7 @@ export function ServiceSparepartSection({
     const res = await listInventoryItemsAction(brandSlug, {
       search: q.trim(),
       pageSize: 10,
+      stockType: "SPAREPART",
     });
     if (res.success) {
       const addedIds = new Set(selected.map((s) => s.inventoryItemId));

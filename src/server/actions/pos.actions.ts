@@ -76,6 +76,7 @@ export async function searchPosProductsAction(
   params: {
     query?: string;
     itemType?: string;
+    stockType?: string;
     categoryId?: string;
     branchId?: string | null;
     page?: number;
@@ -95,6 +96,7 @@ export async function searchPosProductsAction(
       branchId: branch.branchId,
       query: params.query,
       itemType: normalizePosItemType(params.itemType),
+      stockType: params.stockType,
       categoryId: params.categoryId,
       page: params.page,
       pageSize: params.pageSize,

@@ -121,12 +121,13 @@ export async function searchPosProducts(
     branchId: string;
     query?: string;
     itemType?: string;
+    stockType?: string;
     categoryId?: string;
     page?: number;
     pageSize?: number;
   },
 ): Promise<{ data: PosProductResult[]; total: number }> {
-  const { brandId, branchId, query, itemType, categoryId, page = 1, pageSize = 50 } = params;
+  const { brandId, branchId, query, itemType, stockType, categoryId, page = 1, pageSize = 50 } = params;
 
   // Build the base query
   let dbQuery = supabase
@@ -136,6 +137,7 @@ export async function searchPosProducts(
       name,
       sku,
       item_type,
+      stock_type,
       selling_price,
       cost_price,
       track_stock,
@@ -149,11 +151,17 @@ export async function searchPosProducts(
     `, { count: "exact" })
     .eq("brand_id", brandId)
     .eq("is_active", true)
+    .eq("appears_in_pos", true)
     .eq("branch_inventory_stocks.branch_id", branchId);
 
-  // Filter by type
+  // Filter by item_type
   if (itemType) {
     dbQuery = dbQuery.eq("item_type", itemType);
+  }
+
+  // Filter by stock_type
+  if (stockType) {
+    dbQuery = dbQuery.eq("stock_type", stockType);
   }
 
   // Filter by category
@@ -178,7 +186,7 @@ export async function searchPosProducts(
   if (error) {
     console.error("[PosRepository] searchPosProducts error:", {
       error,
-      params: { brandId, branchId, query, itemType, categoryId, page, pageSize },
+      params: { brandId, branchId, query, itemType, stockType, categoryId, page, pageSize },
     });
     throw new Error(error.message || "Gagal mencari produk POS.");
   }
@@ -193,6 +201,7 @@ export async function searchPosProducts(
         name: item.name,
         sku: item.sku,
         itemType: item.item_type as PosProductResult["itemType"],
+        stockType: item.stock_type,
         categoryName: item.inventory_categories?.name,
         sellingPrice: Number(item.selling_price) || 0,
         costPrice: Number(item.cost_price) || 0,

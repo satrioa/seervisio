@@ -305,7 +305,9 @@ where item_type = 'DEVICE_UNIT'
 -- 9. UPDATE inventory_listing VIEW WITH NEW COLUMNS
 -- ============================================================
 
-create or replace view public.inventory_listing as
+drop view if exists public.inventory_listing cascade;
+
+create view public.inventory_listing as
 select
   ii.id,
   ii.brand_id,

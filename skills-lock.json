@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "update-ui-inventory": {
+      "source": "autumnsgrove/groveengine",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/update-ui-inventory/SKILL.md",
+      "computedHash": "4a86c99658422f9c25ea2cfba20abbffc41174ac969a0ecd33d0fe3b1c8c1bc0"
+    }
+  }
+}

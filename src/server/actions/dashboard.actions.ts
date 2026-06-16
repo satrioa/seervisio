@@ -31,6 +31,11 @@ export interface DashboardGeneral {
   needActions: NeedActionItem[];
   shiftStatuses: ShiftStatusItem[];
   serviceCompletedToday?: number;
+  unclosedShiftsCount: number;
+  unpickedUnitsCount: number;
+  unpaidInvoicesCount: number;
+  lowStockItemsCount: number;
+  outOfStockItemsCount: number;
 }
 
 export interface RevenueTrendPoint {
@@ -40,6 +45,7 @@ export interface RevenueTrendPoint {
   posRevenue: number;
   otherIncome: number;
   totalRevenue: number;
+  cashOut?: number;
 }
 
 export interface BranchRevenueTrendPoint {
@@ -372,27 +378,32 @@ export async function getDashboardOverviewAction(
       auditLogs.length;
 
     /* ── Revenue trend (grouped by date) ── */
-    const revMap = new Map<string, { svc: number; pos: number; oi: number }>();
+    const revMap = new Map<string, { svc: number; pos: number; oi: number; co: number }>();
     for (const p of servicePayments) {
       const d = (p.paid_at || "").split("T")[0];
       if (!d) continue;
-      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0 };
+      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
       e.svc += Number(p.gross_amount || 0);
+      e.co += Number(p.mdr_amount || 0);
       revMap.set(d, e);
     }
     for (const s of posSales) {
       const d = (s.sold_at || "").split("T")[0];
       if (!d) continue;
-      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0 };
+      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
       e.pos += Number(s.gross_amount || 0);
+      e.co += Number(s.mdr_amount || 0);
       revMap.set(d, e);
     }
     for (const m of movements) {
-      if (m.movement_type !== "OTHER_INCOME" || m.direction !== "IN") continue;
       const d = (m.created_at || "").split("T")[0];
       if (!d) continue;
-      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0 };
-      e.oi += Number(m.amount || 0);
+      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
+      if (m.movement_type === "OTHER_INCOME" && m.direction === "IN") {
+        e.oi += Number(m.amount || 0);
+      } else if (m.direction === "OUT") {
+        e.co += Number(m.amount || 0);
+      }
       revMap.set(d, e);
     }
     const sortedDates = Array.from(revMap.keys()).sort();
@@ -405,6 +416,7 @@ export async function getDashboardOverviewAction(
         posRevenue: e.pos,
         otherIncome: e.oi,
         totalRevenue: e.svc + e.pos + e.oi,
+        cashOut: e.co,
       };
     });
 
@@ -441,21 +453,31 @@ export async function getDashboardOverviewAction(
     /* ── Payment method breakdown ── */
     const paymentMethodsMap = new Map(paymentMethods.map((pm: any) => [pm.id, pm]));
     const paymentMethodMap = new Map<string, { method: string; grossAmount: number; transactionCount: number; mdrAmount: number; netAmount: number }>();
+    
+    const typeMap: Record<string, string> = {
+      CASH: "Tunai",
+      QRIS: "QRIS",
+      TRANSFER: "Transfer",
+      DEBIT: "Debit",
+      EWALLET: "Ewallet",
+      CREDIT: "Kredit",
+    };
+
     for (const sale of posSales) {
       const pmId = sale.payment_method_id;
       if (!pmId) continue;
       const pm = paymentMethodsMap.get(pmId);
-      const methodName = pm?.name || pmId;
-      const entry = paymentMethodMap.get(pmId) || { method: methodName, grossAmount: 0, transactionCount: 0, mdrAmount: 0, netAmount: 0 };
+      const methodName = pm ? (typeMap[pm.type] || pm.name) : "Lainnya";
+      const entry = paymentMethodMap.get(methodName) || { method: methodName, grossAmount: 0, transactionCount: 0, mdrAmount: 0, netAmount: 0 };
       entry.grossAmount += Number(sale.gross_amount || 0);
       entry.transactionCount++;
       entry.mdrAmount += Number(sale.mdr_amount || 0);
       entry.netAmount += Math.max(0, Number(sale.paid_amount || sale.gross_amount || 0) - Number(sale.change_amount || 0));
-      paymentMethodMap.set(pmId, entry);
+      paymentMethodMap.set(methodName, entry);
     }
-    const allPaymentMethodNames = ["Tunai", "QRIS", "Transfer", "Debit", "QRIS Test"];
+    const allPaymentMethodNames = ["Tunai", "QRIS", "Transfer", "Debit", "Ewallet"];
     const paymentMethodRadar = allPaymentMethodNames.map((methodName) => {
-      const fromPos = Array.from(paymentMethodMap.values()).find(pm => pm.method === methodName);
+      const fromPos = paymentMethodMap.get(methodName);
       return {
         method: methodName,
         grossAmount: fromPos?.grossAmount ?? 0,
@@ -464,10 +486,6 @@ export async function getDashboardOverviewAction(
         netAmount: fromPos?.netAmount ?? 0,
         percentage: 0,
       };
-    }).filter(p => {
-      // Only include methods with transactions, plus Tunai and QRIS
-      const knownBaseMethods = ["Tunai", "QRIS"];
-      return p.transactionCount > 0 || knownBaseMethods.includes(p.method);
     });
     const totalRevenueForPct = paymentMethodRadar.reduce((s, p) => s + p.netAmount, 0);
     for (const p of paymentMethodRadar) {
@@ -500,14 +518,15 @@ export async function getDashboardOverviewAction(
       const existingMdr = expenseMap.get("MDR_FEE") || 0;
       expenseMap.set("MDR_FEE", existingMdr + totalMdrFromSales);
     }
-    const expenseCategoryRadar = Array.from(expenseMap.entries())
-      .filter(([, amount]) => amount > 0)
-      .map(([type, amount]) => ({
+    const allCategoryKeys = Array.from(new Set([...Object.keys(expenseLabels), ...expenseMap.keys()]));
+    const expenseCategoryRadar = allCategoryKeys.map((type) => {
+      const amount = expenseMap.get(type) ?? 0;
+      return {
         category: expenseLabels[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
         amount,
         percentage: 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
+      };
+    });
     const totalExpenseAmount = expenseCategoryRadar.reduce((s, e) => s + e.amount, 0);
     for (const e of expenseCategoryRadar) {
       e.percentage = totalExpenseAmount > 0 ? Math.round((e.amount / totalExpenseAmount) * 100) : 0;
@@ -776,6 +795,10 @@ export async function getDashboardOverviewAction(
       });
     const outOfStockCount = lowStockItems.filter((i) => i.currentStock === 0).length;
 
+    const unclosedShiftsCount = shifts.filter((s: any) => s.shift_status === "OPEN" && s.opened_at && new Date(s.opened_at).toDateString() !== new Date().toDateString()).length;
+    const unpickedUnitsCount = serviceUncollectedCount;
+    const unpaidInvoicesCount = serviceUnpaidCount;
+
     const result: DashboardData = {
       general: {
         revenue: totalRevenue,
@@ -788,6 +811,11 @@ export async function getDashboardOverviewAction(
         needActions,
         shiftStatuses,
         serviceCompletedToday: completedServices.filter((s: any) => (s.done_at || "").startsWith(todayStr)).length,
+        unclosedShiftsCount,
+        unpickedUnitsCount,
+        unpaidInvoicesCount,
+        lowStockItemsCount: lowStockItems.length,
+        outOfStockItemsCount: outOfStockCount,
         activityHeatmap: (() => {
           const map = new Map<string, number>();
           for (const log of auditLogs) {
@@ -809,7 +837,7 @@ export async function getDashboardOverviewAction(
         serviceInCount,
         serviceDoneCount,
         serviceUnpaidCount,
-        serviceUncollectedCount: 0,
+        serviceUncollectedCount: serviceUncollectedCount,
         pipelineData,
         recentServices,
         needAttention,
