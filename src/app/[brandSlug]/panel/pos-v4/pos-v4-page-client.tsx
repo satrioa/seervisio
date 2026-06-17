@@ -4,7 +4,7 @@ import * as React from "react";
 import { useParams } from "next/navigation";
 import {
   Search, Plus, Minus, X, Loader2, ShoppingCart, CreditCard,
-  Smartphone, Package, ChevronDown, ChevronUp,
+  Smartphone, Package,   ChevronDown, ChevronUp, ChevronLeft,
   Receipt, Eye, AlertTriangle, History,
 } from "lucide-react";
 
@@ -320,6 +320,10 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailItems, setDetailItems] = React.useState<PosTransactionItemV4Row[]>([]);
   const [detailTx, setDetailTx] = React.useState<PosTransactionV4Row | null>(null);
+
+  /* ── Mobile Drawer ── */
+  const [mobileCartOpen, setMobileCartOpen] = React.useState(false);
+  const [mobileDrawerView, setMobileDrawerView] = React.useState<"cart" | "payment">("cart");
 
   /* ── Void ── */
   const [voidOpen, setVoidOpen] = React.useState(false);
@@ -658,6 +662,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   }
 
   return (
+    <>
     <div className="flex h-full min-h-0 w-full flex-col lg:flex-row gap-3 bg-transparent text-sidebar-foreground">
         {/* ═══════════════ LEFT PANEL — Products ═══════════════ */}
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
@@ -769,7 +774,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
         </section>
 
         {/* ═══════════════ RIGHT PANEL — Cart + Payment ═══════════════ */}
-        <aside className="flex min-h-[320px] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground shadow-sm lg:min-h-0 lg:w-[380px]">
+        <aside className="hidden min-h-[320px] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground shadow-sm md:flex lg:min-h-0 lg:w-[380px]">
           {/* Cart */}
           <div className="flex min-h-0 flex-1 flex-col border-b">
             <div className="flex shrink-0 items-center justify-between border-b bg-card/95 px-3 py-2.5 backdrop-blur">
@@ -1416,5 +1421,335 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
         </DialogContent>
       </Dialog>
     </div>
-  );
+
+    {/* ── Mobile floating cart button ── */}
+    {cart.length > 0 && (
+      <button
+        type="button"
+        onClick={() => { setMobileDrawerView("cart"); setMobileCartOpen(true); }}
+        className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-primary px-5 py-3 text-primary-foreground shadow-lg transition-transform active:scale-95 md:hidden"
+      >
+        <div className="relative">
+          <ShoppingCart className="size-5" />
+          <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+            {cart.length}
+          </span>
+        </div>
+        <span className="text-sm font-semibold tabular-nums">{formatPrice(total)}</span>
+      </button>
+    )}
+
+    {/* ── Mobile cart drawer ── */}
+    <FamilyDrawerRoot
+      open={mobileCartOpen}
+      onOpenChange={(open) => { setMobileCartOpen(open); if (!open) setMobileDrawerView("cart"); }}
+    >
+      <FamilyDrawerPortal>
+        <FamilyDrawerOverlay onClick={() => setMobileCartOpen(false)} />
+        <FamilyDrawerContent className="inset-x-0 bottom-0 max-w-none rounded-b-none rounded-t-[20px] !rounded-[20px] w-full max-h-[92vh] md:!hidden">
+          <FamilyDrawerAnimatedWrapper className="flex max-h-[85vh] flex-col overflow-hidden px-0 pb-0 pt-0">
+            {/* Handle */}
+            <div className="flex shrink-0 justify-center pt-3 pb-2">
+              <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+            </div>
+
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between border-b px-4 pb-3">
+              {mobileDrawerView === "cart" ? (
+                <>
+                  <h2 className="flex items-center gap-2 text-xs font-semibold">
+                    <span className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <ShoppingCart className="size-3.5" />
+                    </span>
+                    <span>Keranjang</span>
+                    <Badge variant="secondary" className="h-5 rounded-full px-1.5 text-[10px]">
+                      {cart.length}
+                    </Badge>
+                  </h2>
+                  {cart.length > 0 && (
+                    <button
+                      type="button"
+                      className="rounded-md px-2 py-1 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/10"
+                      onClick={clearCart}
+                    >
+                      Kosongkan
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => setMobileDrawerView("cart")}
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <h2 className="text-xs font-semibold">Pembayaran</h2>
+                  <div className="size-7" />
+                </>
+              )}
+            </div>
+
+            {/* Scrollable body */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {mobileDrawerView === "cart" ? (
+                /* ── Cart Items ── */
+                cart.length === 0 ? (
+                  <div className="flex h-full min-h-[168px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 text-center">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <ShoppingCart className="size-5" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs font-medium">Keranjang kosong</p>
+                      <p className="max-w-[220px] text-[10px] leading-relaxed text-muted-foreground">
+                        Pilih produk dari daftar untuk mulai membuat transaksi.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {cart.map((item) => {
+                      const serializedMetaBadges =
+                        item.type === "UNIT_SECOND_SERIALIZED" ? getSerializedMetaBadges(item) : [];
+                      const placeBadgesBelowTitle =
+                        serializedMetaBadges.length >= 4 ||
+                        serializedMetaBadges.join(" ").length > 32;
+
+                      return (
+                        <div key={item.tempId} className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/75 px-2.5 py-2.5 shadow-sm backdrop-blur-[1px] dark:bg-background/55">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-medium leading-none">{item.nameSnapshot}</div>
+                              {shouldShowVariant(item.nameSnapshot, item.variantSnapshot) && (
+                                <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                                  {item.variantSnapshot}
+                                </div>
+                              )}
+                              {!placeBadgesBelowTitle && serializedMetaBadges.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {serializedMetaBadges.map((badge, index) => (
+                                    <Badge
+                                      key={`${item.tempId}-inline-${index}`}
+                                      variant="secondary"
+                                      className="max-w-full rounded-md px-1.5 py-0 text-[9px] font-normal"
+                                    >
+                                      <span className="truncate">{badge}</span>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-start gap-1.5 shrink-0">
+                              {item.type === "UNIT_SECOND_SERIALIZED" ? (
+                                <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[9px] font-medium">
+                                  x1
+                                </Badge>
+                              ) : (
+                                <div className="flex items-center rounded-md border border-sidebar-border bg-background/90 px-1 dark:bg-background/70">
+                                  <button
+                                    type="button"
+                                    className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+                                    onClick={() => updateCartQty(item.tempId, -1)}
+                                    disabled={item.quantity <= 1}
+                                  >
+                                    <Minus className="size-3" />
+                                  </button>
+                                  <span className="min-w-5 px-1 text-center text-[10px] font-medium tabular-nums">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+                                    onClick={() => updateCartQty(item.tempId, 1)}
+                                    disabled={item.quantity >= item.stockAvailable}
+                                  >
+                                    <Plus className="size-3" />
+                                  </button>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+                                onClick={() => removeFromCart(item.tempId)}
+                                aria-label={`Hapus ${item.nameSnapshot} dari keranjang`}
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {item.type === "UNIT_SECOND_SERIALIZED" && placeBadgesBelowTitle && (
+                            <div className="flex flex-wrap gap-1">
+                              {serializedMetaBadges.map((badge, index) => (
+                                <Badge
+                                  key={`${item.tempId}-below-${index}`}
+                                  variant="secondary"
+                                  className="max-w-full rounded-md px-1.5 py-0 text-[9px] font-normal"
+                                >
+                                  <span className="truncate">{badge}</span>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 text-[10px]">
+                            <span className="truncate text-muted-foreground">
+                              {item.type === "UNIT_SECOND_SERIALIZED"
+                                ? "Unit serialized"
+                                : `${item.stockAvailable} unit tersedia`}
+                            </span>
+                            <span className="shrink-0 text-[11px] font-semibold tabular-nums">
+                              {formatPrice(item.price * item.quantity)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                /* ── Payment ── */
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2 rounded-xl border bg-muted/15 p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium tabular-nums">{formatPrice(subtotal)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="w-16 shrink-0 text-[10px] text-muted-foreground">Diskon</Label>
+                      <Input
+                        type="number"
+                        value={discountAmount || ""}
+                        onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
+                        className="h-7 text-[10px]"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="w-16 shrink-0 text-[10px] text-muted-foreground">Biaya Jasa</Label>
+                      <Input
+                        type="number"
+                        value={serviceFeeAmount || ""}
+                        onChange={(e) => setServiceFeeAmount(Number(e.target.value) || 0)}
+                        className="h-7 text-[10px]"
+                        placeholder="0"
+                      />
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between text-sm font-semibold">
+                      <span>Total</span>
+                      <span className="tabular-nums">{formatPrice(total)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <Label className="text-[10px]">Metode Pembayaran</Label>
+                      {paymentMethods.length > 0 && (
+                        <span className="text-[9px] text-muted-foreground">{paymentMethods.length} aktif</span>
+                      )}
+                    </div>
+                    {paymentMethods.length === 0 ? (
+                      <div className="rounded-[14px] border border-dashed border-border/70 bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+                        <div className="font-medium text-foreground">Belum ada metode pembayaran aktif</div>
+                        <p className="mt-1 text-[10px] leading-relaxed">
+                          Aktifkan Cash, QRIS, Transfer, atau Debit di pengaturan metode pembayaran cabang ini.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {paymentMethods.map((pm) => {
+                          const selected = selectedMethod === pm.paymentMethodId;
+                          const label = getPaymentMethodLabel(pm);
+                          const cashMethod = isCashPaymentMethod(pm);
+                          return (
+                            <button
+                              key={pm.paymentMethodId ?? pm.branchPaymentMethodId}
+                              type="button"
+                              onClick={() => { setSelectedMethod(pm.paymentMethodId!); if (!cashMethod) setPaidAmount(total); }}
+                              className={`flex h-8 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${
+                                selected
+                                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                  : "border-border/70 bg-background/75 text-foreground hover:border-primary/40 hover:bg-muted/40"
+                              }`}
+                            >
+                              <span className="min-w-0 truncate">{label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {isCash && (
+                    <div>
+                      <Label className="text-[10px]">Jumlah Dibayar</Label>
+                      <Input
+                        type="number"
+                        value={paidAmount || ""}
+                        onChange={(e) => setPaidAmount(Number(e.target.value) || 0)}
+                        className="mt-1 h-8 text-xs"
+                        placeholder="0"
+                      />
+                      {paidAmount > 0 && (
+                        <div className={`mt-1 flex items-center justify-between text-[10px] ${change >= 0 ? "text-muted-foreground" : "text-destructive font-medium"}`}>
+                          <span>Kembali</span>
+                          <span className="tabular-nums">{formatPrice(change)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[10px]">Catatan (opsional)</Label>
+                    <Input
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="h-8 text-xs"
+                      placeholder="Catatan transaksi"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 border-t px-4 py-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+              {mobileDrawerView === "cart" ? (
+                cart.length > 0 ? (
+                  <Button
+                    className="h-9 w-full gap-1.5 text-xs"
+                    onClick={() => setMobileDrawerView("payment")}
+                  >
+                    Lanjut ke Pembayaran — {formatPrice(total)}
+                  </Button>
+                ) : null
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <Button
+                    className="h-9 w-full gap-1.5 text-xs"
+                    onClick={handleCheckout}
+                    disabled={submitting || cart.length === 0 || !selectedMethod}
+                  >
+                    {submitting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <CreditCard className="size-3.5" />
+                    )}
+                    {submitting ? "Memproses..." : `Bayar ${formatPrice(total)}`}
+                  </Button>
+                  <p className="text-center text-[9px] text-muted-foreground">
+                    Pastikan nominal sudah benar sebelum membayar
+                  </p>
+                </div>
+              )}
+            </div>
+          </FamilyDrawerAnimatedWrapper>
+        </FamilyDrawerContent>
+      </FamilyDrawerPortal>
+    </FamilyDrawerRoot>
+  </>
+);
 }
