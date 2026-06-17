@@ -47,6 +47,7 @@ import {
   createProductV4Action,
   createUnitBaruV4Action,
   createUnitSecondV4Action,
+  searchUnitSecondModelsV4Action,
   listUnitSecondV4Action,
   listCategoriesV4Action,
   createCategoryV4Action,
@@ -1894,7 +1895,7 @@ function StockOpnameDialog({
 }) {
   const [tab, setTab] = React.useState<"SPAREPART" | "PRODUCT" | "UNIT">("SPAREPART");
   const [search, setSearch] = React.useState("");
-  const [categoryId, setCategoryId] = React.useState("");
+  const [categoryId, setCategoryId] = React.useState("**ALL_CATEGORIES**");
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<{ data: StockOpnameVariantRow[]; total: number } | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -1911,7 +1912,7 @@ function StockOpnameDialog({
     const res = await listStockOpnameVariantsV4Action(brandSlug, {
       branchId,
       productKind: tab,
-      categoryId: categoryId || null,
+      categoryId: categoryId === "**ALL_CATEGORIES**" ? null : categoryId,
       search: search || undefined,
       page,
       pageSize: 25,
@@ -2021,7 +2022,7 @@ function StockOpnameDialog({
                 <Select value={categoryId} onValueChange={setCategoryId}>
                   <SelectTrigger className="h-9 w-[160px] text-xs"><SelectValue placeholder="Semua kategori" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="" className="text-xs">Semua kategori</SelectItem>
+                    <SelectItem value="**ALL_CATEGORIES**" className="text-xs">Semua kategori</SelectItem>
                     {filteredCategories.map((c) => (
                       <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                     ))}
@@ -2587,15 +2588,72 @@ function UnitSecondFormDialog({
   const [name, setName] = React.useState("");
   const [imageUrl, setImageUrl] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
+  const [existingProductId, setExistingProductId] = React.useState<string | null>(null);
+  const [searchResults, setSearchResults] = React.useState<Array<{ productId: string; name: string; categoryName: string | null; readyCount: number }>>([]);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [searchLoading, setSearchLoading] = React.useState(false);
   const [units, setUnits] = React.useState<CreateUnitSecondRowInput[]>([
     { unitAttributes: {}, batteryHealth: null, imei: "", serialNumber: "", barcode: "", purchaseCost: 0, sellingPrice: 0, status: "READY_STOCK" },
   ]);
+
+  const searchRef = React.useRef<HTMLDivElement>(null);
 
   const reset = () => {
     setName("");
     setImageUrl("");
     setCategoryId("");
+    setExistingProductId(null);
+    setSearchResults([]);
+    setSearchOpen(false);
     setUnits([{ unitAttributes: {}, batteryHealth: null, imei: "", serialNumber: "", barcode: "", purchaseCost: 0, sellingPrice: 0, status: "READY_STOCK" }]);
+  };
+
+  // Debounced model search
+  React.useEffect(() => {
+    if (!name.trim() || existingProductId) {
+      setSearchResults([]);
+      setSearchOpen(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await searchUnitSecondModelsV4Action(brandSlug, branchId, name.trim());
+        if (res.success) {
+          const results = res.data ?? [];
+          setSearchResults(results);
+          setSearchOpen(results.length > 0);
+        }
+      } catch { /* ignore */ } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [name, existingProductId, brandSlug, branchId]);
+
+  // Close search on outside click
+  React.useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleSelectExisting = (item: { productId: string; name: string }) => {
+    setName(item.name);
+    setExistingProductId(item.productId);
+    setSearchResults([]);
+    setSearchOpen(false);
+  };
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (existingProductId && value.trim().toLowerCase() !== name.trim().toLowerCase()) {
+      setExistingProductId(null);
+    }
   };
 
   const updateUnit = (i: number, field: keyof CreateUnitSecondRowInput, value: any) => {
@@ -2627,6 +2685,7 @@ function UnitSecondFormDialog({
       const res = await createUnitSecondV4Action(brandSlug, {
         brandId: 0,
         branchId,
+        existingProductId: existingProductId || null,
         name: name.trim(),
         imageUrl: imageUrl.trim() || null,
         categoryId: categoryId || null,
@@ -2674,9 +2733,38 @@ function UnitSecondFormDialog({
             </div>
           )}
 
-          <div>
+          <div ref={searchRef} className="relative">
             <Label className="text-xs">Nama Unit / Model</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Contoh: iPhone 16 Pro Max" />
+            <Input value={name} onChange={(e) => handleNameChange(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Contoh: iPhone 16 Pro Max" />
+            {searchLoading && (
+              <Loader2 className="absolute right-2 top-1/2 size-3.5 animate-spin text-muted-foreground translate-y-0.5" />
+            )}
+            {searchOpen && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md">
+                {searchResults.length === 0 && (
+                  <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">Tidak ada model ditemukan</div>
+                )}
+                {searchResults.map((item) => (
+                  <button
+                    key={item.productId}
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+                    onClick={() => handleSelectExisting(item)}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium">{item.name}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {item.readyCount} ready{item.categoryName ? ` · ${item.categoryName}` : ""} · Model existing
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-[10px]">Existing</Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+            {existingProductId && (
+              <Badge variant="secondary" className="mt-1 text-[10px]">Menggunakan model existing</Badge>
+            )}
           </div>
 
           <div>

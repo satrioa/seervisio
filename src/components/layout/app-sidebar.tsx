@@ -221,8 +221,6 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
       { href: "settings?section=brand-profile", label: "Brand Profile" },
       { href: "settings?section=appearance", label: "Appearance & Brand Theme" },
       { href: "settings?section=target-goal", label: "Target & Goal" },
-      { href: "settings?section=payment", label: "Payment Settings" },
-      { href: "settings?section=payment-methods", label: "Payment Method" },
       { href: "settings?section=user-access", label: "User & Access" },
       { href: "settings?section=system", label: "System" },
     ],

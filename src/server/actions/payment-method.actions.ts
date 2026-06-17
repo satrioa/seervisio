@@ -177,14 +177,30 @@ export async function linkPaymentMethodAccountAction(
       return errorResult("Akun kas tunai tidak dapat diubah tautannya.");
     }
 
-    const { data: account } = await (supabase as any)
+    console.log("[payment-methods/link-account] input", {
+      brandId: session.brandId,
+      branchId: input.branchId,
+      methodCode: input.methodCode,
+      paymentAccountId: input.paymentAccountId,
+      isActive: input.isActive,
+    });
+
+    const { data: account, error: accountErr } = await (supabase as any)
       .from("payment_accounts")
-      .select("id")
+      .select("id, branch_id, is_active")
       .eq("id", input.paymentAccountId)
       .eq("brand_id", session.brandId)
-      .single();
+      .maybeSingle();
 
+    if (accountErr) {
+      console.error("[payment-methods/link-account] account query error", accountErr);
+      return errorResult("Gagal memvalidasi akun pembayaran.");
+    }
     if (!account) return errorResult("Akun pembayaran tidak ditemukan.");
+    if (!account.is_active) return errorResult("Akun pembayaran tidak aktif.");
+    if (account.branch_id && account.branch_id !== input.branchId) {
+      return errorResult("Akun pembayaran tidak valid untuk cabang ini.");
+    }
 
     const { data: existing } = await (supabase as any)
       .from("branch_payment_methods")
@@ -208,7 +224,7 @@ export async function linkPaymentMethodAccountAction(
         .single();
 
       if (updError) {
-        console.error("[PaymentMethods] link update error:", updError);
+        console.error("[payment-methods/link-account] update error", updError);
         return errorResult("Gagal menautkan akun.");
       }
       updatedRow = data;
@@ -226,7 +242,7 @@ export async function linkPaymentMethodAccountAction(
         .single();
 
       if (insError) {
-        console.error("[PaymentMethods] link insert error:", insError);
+        console.error("[payment-methods/link-account] insert error", insError);
         return errorResult("Gagal menautkan akun.");
       }
       updatedRow = data;
@@ -257,8 +273,8 @@ export async function linkPaymentMethodAccountAction(
 
     return successResult(result);
   } catch (err: any) {
-    console.error("[PaymentMethods] linkPaymentMethodAccountAction:", err.message);
-    return errorResult(err.message || "Gagal menautkan akun.");
+    console.error("[payment-methods/link-account] error", err);
+    return errorResult("Gagal menautkan akun.");
   }
 }
 
@@ -464,6 +480,13 @@ export async function listCompatibleAccountsAction(
     requireActionPermission(session.role, "payment_method.view");
 
     const supabase = await createServerSupabase();
+
+    // Debug log parameters
+    console.log("[payment-methods/list-compatible]", {
+      brandId: session.brandId,
+      branchId,
+      methodCode: _methodCode,
+    });
 
     const { data, error } = await (supabase as any)
       .from("payment_accounts")

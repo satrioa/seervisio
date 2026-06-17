@@ -43,6 +43,7 @@ import {
   createProductV4 as repoCreateProduct,
   createUnitBaruV4 as repoCreateUnitBaru,
   createUnitSecondV4 as repoCreateUnitSecond,
+  searchUnitSecondModelsV4 as repoSearchUnitSecondModels,
   listUnitSecondV4,
   listCategoriesV4 as repoListCategories,
   createCategoryV4 as repoCreateCategory,
@@ -753,6 +754,27 @@ export async function createUnitBaruV4Action(
 
 /* ─── Create unit second V4 ─── */
 
+/* ─── Search Unit Second models V4 ─── */
+
+export async function searchUnitSecondModelsV4Action(
+  brandSlug: string,
+  branchId: string,
+  query: string,
+) {
+  try {
+    if (!query.trim()) return successResult([]);
+    const session = await getSessionData(brandSlug);
+    if (!session) return errorResult("Sesi tidak valid.");
+
+    const supabase = await createServerSupabase();
+    const result = await repoSearchUnitSecondModels(supabase as any, session.brandId, branchId, query);
+    return successResult(result);
+  } catch (err: any) {
+    console.error("[searchUnitSecondModelsV4Action]", err);
+    return errorResult(err.message || "Gagal mencari model.");
+  }
+}
+
 export async function createUnitSecondV4Action(
   brandSlug: string,
   input: CreateUnitSecondV4Input,
@@ -1097,6 +1119,19 @@ export async function listPosPaymentMethodsV4Action(
 
     const supabase = await createServerSupabase();
     const result = await repoListPosPaymentMethods(supabase as any, session.brandId, branchId);
+    console.log("[pos-v4/payment-methods] result", {
+      brandSlug,
+      brandId: session.brandId,
+      branchId,
+      count: result?.length ?? 0,
+      methods: result?.map((m: any) => ({
+        name: m.paymentMethodName,
+        type: m.paymentMethodType,
+        paymentMethodId: m.paymentMethodId,
+        branchPaymentMethodId: m.branchPaymentMethodId,
+        defaultPaymentAccountId: m.defaultPaymentAccountId,
+      })),
+    });
     return successResult(result);
   } catch (err: any) {
     console.error("[listPosPaymentMethodsV4Action]", err);

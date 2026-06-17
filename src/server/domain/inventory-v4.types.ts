@@ -86,6 +86,7 @@ export interface CreateUnitSecondV4Input {
   brandId: number;
   branchId: string;
   categoryId?: string | null;
+  existingProductId?: string | null;
   name: string;
   description?: string | null;
   imageUrl?: string | null;
@@ -499,6 +500,7 @@ export interface PosProductV4Row {
   categoryId: string | null;
   categoryName: string | null;
   imageUrl: string | null;
+  fallbackUnitImageUrl?: string | null;
   unit: string;
   appearsInPos: boolean;
   variants: PosVariantV4Row[];

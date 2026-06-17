@@ -513,21 +513,53 @@ export async function createUnitBaruV4(
 
 /* ─── Create unit second V4 ─── */
 
-export async function createUnitSecondV4(
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+async function resolveProductIdForUnitSecond(
   supabase: SupabaseClientLike,
   input: CreateUnitSecondV4Input,
   createdBy: string,
-): Promise<{
-  productId: string;
-  variantIds: string[];
-  unitIds: string[];
-}> {
-  const { brandId, branchId, categoryId, name, description, imageUrl, variants, units } = input;
+): Promise<string> {
+  const { brandId, branchId, categoryId, existingProductId, name, description, imageUrl } = input;
 
-  const effectiveVariants =
-    variants && variants.length > 0 ? variants : [{ name }];
+  // If existingProductId is provided, validate it
+  if (existingProductId) {
+    const { data: product, error: productErr } = await supabase
+      .from("inv_products")
+      .select("id, brand_id, branch_id, product_kind, condition_type, is_active")
+      .eq("id", existingProductId)
+      .single();
 
-  // 1. Create product
+    if (productErr) throw new Error("Model existing tidak ditemukan.");
+    if (product.brand_id !== brandId) throw new Error("Model bukan milik brand ini.");
+    if (product.branch_id !== branchId) throw new Error("Model bukan milik cabang ini.");
+    if (product.product_kind !== "UNIT") throw new Error("Model bukan unit.");
+    if (product.condition_type !== "SECOND") throw new Error("Model bukan unit second.");
+    if (!product.is_active) throw new Error("Model sudah tidak aktif.");
+
+    return (product as any).id;
+  }
+
+  // Check for exact name match (trim, lowercase, collapse spaces)
+  const normalizedName = normalizeName(name);
+
+  const { data: exactMatch } = await (supabase as any)
+    .from("inv_products")
+    .select("id")
+    .eq("brand_id", brandId)
+    .eq("branch_id", branchId)
+    .eq("product_kind", "UNIT")
+    .eq("condition_type", "SECOND")
+    .eq("is_active", true)
+    .ilike("name", normalizedName);
+
+  if (exactMatch && exactMatch.length > 0) {
+    return (exactMatch[0] as any).id;
+  }
+
+  // Create new product
   const { data: product, error: productErr } = await supabase
     .from("inv_products")
     .insert({
@@ -549,7 +581,25 @@ export async function createUnitSecondV4(
 
   if (productErr) throw new Error(parsePgErr(productErr));
 
-  const productId = (product as any).id;
+  return (product as any).id;
+}
+
+export async function createUnitSecondV4(
+  supabase: SupabaseClientLike,
+  input: CreateUnitSecondV4Input,
+  createdBy: string,
+): Promise<{
+  productId: string;
+  variantIds: string[];
+  unitIds: string[];
+}> {
+  const { brandId, branchId, name, imageUrl, variants, units } = input;
+
+  // Resolve product ID (existing or new)
+  const productId = await resolveProductIdForUnitSecond(supabase, input, createdBy);
+
+  const effectiveVariants =
+    variants && variants.length > 0 ? variants : [{ name }];
 
   // 2. Create variants
   const variantIds: string[] = [];
@@ -1385,17 +1435,25 @@ export async function listPosProductsV4(
 
   // unitReadyMap: productId → count
   const unitReadyMap = new Map<string, number>();
+  // fallbackUnitImageMap: productId → image_url of newest ready unit
+  const fallbackUnitImageMap = new Map<string, string | null>();
   if (unitSecondProductIds.length > 0) {
     const { data: unitsData, error: unitsError } = await (supabase as any)
       .from("inv_units")
-      .select("product_id")
+      .select("product_id, image_url, created_at")
       .in("product_id", unitSecondProductIds)
       .eq("branch_id", branchId)
-      .eq("status", "READY_STOCK");
+      .eq("status", "READY_STOCK")
+      .order("created_at", { ascending: false });
     if (unitsError) throw new Error(parsePgErr(unitsError));
     console.log("[pos-v4/repo] units (READY_STOCK) count", unitsData?.length ?? 0);
     for (const u of (unitsData ?? []) as any[]) {
-      unitReadyMap.set(u.product_id, (unitReadyMap.get(u.product_id) ?? 0) + 1);
+      const pid = u.product_id;
+      unitReadyMap.set(pid, (unitReadyMap.get(pid) ?? 0) + 1);
+      // Only set fallback if not already set (first = newest due to ordering desc)
+      if (!fallbackUnitImageMap.has(pid)) {
+        fallbackUnitImageMap.set(pid, u.image_url ?? null);
+      }
     }
   }
 
@@ -1476,6 +1534,9 @@ export async function listPosProductsV4(
 
     if (assembledVariants.length === 0) continue; // skip products with no sellable variants
 
+    const productImageUrl = p.image_url ?? null;
+    const fallbackImage = isUnitSecond ? (fallbackUnitImageMap.get(pid) ?? null) : null;
+
     result.push({
       productId: pid,
       name: p.name,
@@ -1483,7 +1544,8 @@ export async function listPosProductsV4(
       conditionType: p.condition_type ?? null,
       categoryId: p.category_id ?? null,
       categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
-      imageUrl: p.image_url ?? null,
+      imageUrl: productImageUrl,
+      fallbackUnitImageUrl: fallbackImage,
       unit: p.unit ?? "pcs",
       appearsInPos: p.appears_in_pos,
       variants: assembledVariants,
@@ -1494,6 +1556,73 @@ export async function listPosProductsV4(
   return result;
 }
 
+
+/* ─── Search Unit Second models for autocomplete V4 ─── */
+
+export async function searchUnitSecondModelsV4(
+  supabase: SupabaseClientLike,
+  brandId: number,
+  branchId: string,
+  query: string,
+): Promise<Array<{
+  productId: string;
+  name: string;
+  categoryName: string | null;
+  readyCount: number;
+}>> {
+  if (!query.trim()) return [];
+
+  // Search matching products
+  const { data: products, error: productsErr } = await (supabase as any)
+    .from("inv_products")
+    .select("id, name, category_id")
+    .eq("brand_id", brandId)
+    .eq("branch_id", branchId)
+    .eq("product_kind", "UNIT")
+    .eq("condition_type", "SECOND")
+    .eq("is_active", true)
+    .ilike("name", `%${query.trim()}%`)
+    .order("name", { ascending: true })
+    .limit(10);
+
+  if (productsErr) throw new Error(parsePgErr(productsErr));
+  if (!products || products.length === 0) return [];
+
+  const productIds = (products as any[]).map((p) => p.id);
+
+  // Fetch category names
+  const catIds = [...new Set((products as any[]).map((p) => p.category_id).filter(Boolean))];
+  const categoryNameMap = new Map<string, string>();
+  if (catIds.length > 0) {
+    const { data: cats } = await (supabase as any)
+      .from("inventory_categories")
+      .select("id, name")
+      .in("id", catIds);
+    for (const c of (cats ?? []) as any[]) {
+      categoryNameMap.set(c.id, c.name);
+    }
+  }
+
+  // Count READY_STOCK units per product
+  const { data: unitsData } = await (supabase as any)
+    .from("inv_units")
+    .select("product_id")
+    .in("product_id", productIds)
+    .eq("branch_id", branchId)
+    .eq("status", "READY_STOCK");
+
+  const readyCountMap = new Map<string, number>();
+  for (const u of (unitsData ?? []) as any[]) {
+    readyCountMap.set(u.product_id, (readyCountMap.get(u.product_id) ?? 0) + 1);
+  }
+
+  return (products as any[]).map((p) => ({
+    productId: p.id,
+    name: p.name,
+    categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
+    readyCount: readyCountMap.get(p.id) ?? 0,
+  }));
+}
 
 /* ─── List Unit Second options for a product V4 ─── */
 
@@ -1717,27 +1846,50 @@ export async function listPosPaymentMethodsV4(
   brandId: number,
   branchId: string,
 ): Promise<any[]> {
+  // Allowed POS method types
+  const POS_METHOD_TYPES = ["CASH", "QRIS", "TRANSFER", "DEBIT"];
+
+  // Helper to convert method_type to display name
+  const labelFromMethodType = (type: string): string => {
+    switch (type) {
+      case "CASH":
+        return "Tunai";
+      case "QRIS":
+        return "QRIS";
+      case "TRANSFER":
+        return "Transfer";
+      case "DEBIT":
+        return "Debit";
+      case "E_WALLET":
+        return "E-Wallet";
+      default:
+        return type;
+    }
+  };
+
   const { data, error } = await (supabase as any)
     .from("branch_payment_methods")
-    .select(`
-      id, brand_id, branch_id, method_type, payment_account_id, mdr_percentage, is_active,
-      payment_methods!inner(id, name, type, is_active as pm_is_active, default_payment_account_id)
-    `)
+    .select("id, brand_id, branch_id, method_type, payment_account_id, mdr_percentage, is_active")
     .eq("brand_id", brandId)
     .eq("branch_id", branchId)
     .eq("is_active", true);
 
-  if (error) throw new Error(parsePgErr(error));
+  if (error) {
+    console.error("[pos-v4/payment-methods] query error", error);
+    throw new Error(error.message);
+  }
 
-  return ((data as any[]) ?? []).map((r: any) => ({
-    branchPaymentMethodId: r.id,
-    methodType: r.method_type,
-    paymentAccountId: r.payment_account_id ?? null,
-    mdrPercentage: r.mdr_percentage ?? null,
-    paymentMethodId: r.payment_methods?.id ?? null,
-    paymentMethodName: r.payment_methods?.name ?? null,
-    paymentMethodType: r.payment_methods?.type ?? r.method_type,
-    defaultPaymentAccountId: r.payment_methods?.default_payment_account_id ?? null,
+  const rows = (data ?? []).filter((r: any) => POS_METHOD_TYPES.includes(r.method_type));
+
+  return rows.map((row: any) => ({
+    branchPaymentMethodId: row.id,
+    methodType: row.method_type,
+    paymentAccountId: row.payment_account_id ?? null,
+    mdrPercentage: row.mdr_percentage === null ? null : Number(row.mdr_percentage),
+    paymentMethodId: row.id,
+    paymentMethodName: labelFromMethodType(row.method_type),
+    paymentMethodType: row.method_type,
+    defaultPaymentAccountId: row.payment_account_id ?? null,
   }));
 }
 

@@ -4,8 +4,8 @@ import * as React from "react";
 import { useParams } from "next/navigation";
 import {
   Search, Plus, Minus, X, Loader2, ShoppingCart, CreditCard,
-  Smartphone, Package, ChevronDown, ChevronUp, Wifi, Banknote,
-  QrCode, Receipt, Eye, AlertTriangle, History, ChevronRight,
+  Smartphone, Package, ChevronDown, ChevronUp,
+  Receipt, Eye, AlertTriangle, History,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/minimal-card";
 import {
   FamilyDrawerRoot,
-  FamilyDrawerTrigger,
   FamilyDrawerPortal,
   FamilyDrawerOverlay,
   FamilyDrawerContent,
@@ -65,27 +64,32 @@ function formatPrice(n: number) {
 }
 
 function getDisplayImage(product: PosProductV4Row, variant?: PosVariantV4Row) {
-  return variant?.imageUrl ?? product.imageUrl ?? null;
+  return variant?.imageUrl ?? product.imageUrl ?? product.fallbackUnitImageUrl ?? null;
 }
 
 function stockBadge(variant: PosVariantV4Row, isUnitSecond: boolean) {
   if (isUnitSecond) {
-    return { label: `${variant.currentStock} ready`, className: "border-blue-200 bg-blue-50 text-blue-700" };
+    return {
+      label: `${variant.currentStock} ready`,
+      className: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200",
+    };
   }
-  if (variant.currentStock <= 0) return { label: "Habis", className: "border-red-200 bg-red-50 text-red-700" };
-  if (variant.minStock > 0 && variant.currentStock <= variant.minStock) return { label: "Menipis", className: "border-amber-200 bg-amber-50 text-amber-700" };
-  return { label: "Ready", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
-}
-
-function getPaymentMethodIcon(type?: string | null, name?: string | null) {
-  const value = `${type ?? ""} ${name ?? ""}`.toLowerCase();
-
-  if (value.includes("cash") || value.includes("tunai")) return Banknote;
-  if (value.includes("qris") || value.includes("qr")) return QrCode;
-  if (value.includes("transfer")) return Wifi;
-  if (value.includes("debit") || value.includes("card") || value.includes("kartu")) return CreditCard;
-
-  return CreditCard;
+  if (variant.currentStock <= 0) {
+    return {
+      label: "Habis",
+      className: "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200",
+    };
+  }
+  if (variant.minStock > 0 && variant.currentStock <= variant.minStock) {
+    return {
+      label: "Menipis",
+      className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200",
+    };
+  }
+  return {
+    label: "Ready",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200",
+  };
 }
 
 function getPaymentMethodLabel(pm: PaymentMethodOption) {
@@ -118,6 +122,7 @@ function PosProductCard({
     product.variants.find((v) => v.imageUrl)?.imageUrl ??
     firstVariant?.imageUrl ??
     product.imageUrl ??
+    product.fallbackUnitImageUrl ??
     null;
 
   const badge = isSingleVariant ? stockBadge(firstVariant, isUnitSecond) : null;
@@ -132,16 +137,22 @@ function PosProductCard({
     .map((p) => p[0]?.toUpperCase())
     .join("");
 
+  const productLabel = product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk");
+
+  const totalUnitSecondStock = isUnitSecond
+    ? product.variants.reduce((s, v) => s + v.currentStock, 0)
+    : 0;
+
   return (
     <button
       id={`pos-product-${product.productId}`}
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="group w-[220px] text-left disabled:opacity-40"
+      className="w-[220px] text-left disabled:opacity-40"
     >
-      <div className="flex h-[280px] w-full flex-col overflow-hidden rounded-[14px] border border-border/70 bg-white p-3 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
-        <div className="mb-3 flex h-[104px] w-full shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-muted/25">
+      <div className="relative flex h-[238px] w-full flex-col rounded-[14px] border border-border bg-card p-3 text-card-foreground shadow-sm transition hover:border-sidebar-accent hover:bg-card/95 hover:shadow-md dark:border-sidebar-border dark:bg-background/70 dark:hover:bg-background/85">
+        <div className="mb-3 flex h-[100px] w-full items-center justify-center overflow-hidden rounded-xl bg-muted/60 dark:bg-sidebar-accent/45">
           {displayImage ? (
             <img
               src={displayImage}
@@ -149,66 +160,53 @@ function PosProductCard({
               className="h-full w-full object-contain p-2"
             />
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground/70">
+            <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground">
               {product.productKind === "UNIT" ? (
-                <Smartphone className="size-8" />
+                <Smartphone className="h-7 w-7" />
               ) : (
-                <Package className="size-8" />
+                <Package className="h-7 w-7" />
               )}
-              <span className="text-xs font-semibold tracking-wide">
-                {initials || "—"}
-              </span>
+              <span className="mt-1 text-xs font-medium">{initials || "—"}</span>
             </div>
           )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-[44px] items-start justify-between gap-2">
-            <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
-              {product.name}
-            </h3>
-
-            {isSingleVariant && badge && (
-              <Badge
-                variant="outline"
-                className={`h-5 shrink-0 rounded-full px-2 text-[10px] font-medium ${badge.className}`}
-              >
-                {badge.label}
-              </Badge>
-            )}
-
-            {!isSingleVariant && isUnitSecond && (
-              <Badge
-                variant="outline"
-                className="h-5 shrink-0 rounded-full border-blue-200 bg-blue-50 px-2 text-[10px] font-medium text-blue-700"
-              >
-                {product.variants.reduce((s, v) => s + v.currentStock, 0)} ready
-              </Badge>
-            )}
+          <div className="min-h-[42px]">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="line-clamp-1 flex-1 text-sm font-semibold text-foreground">
+                {product.name}
+              </h3>
+              {isSingleVariant && badge && (
+                <Badge
+                  variant="outline"
+                  className={`h-5 shrink-0 rounded-full px-2 text-[10px] font-medium ${badge.className}`}
+                >
+                  {badge.label}
+                </Badge>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{productLabel}</p>
           </div>
 
-          <p className="mt-1 text-xs text-muted-foreground">
-            {product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk")}
-          </p>
-
-          <div className="mt-2 flex min-h-[28px] shrink-0 flex-wrap gap-1.5 overflow-hidden">
+          <div className="mt-2 flex min-h-[24px] shrink-0 flex-wrap gap-1.5 overflow-hidden">
             {!isSingleVariant &&
               product.variants.slice(0, 2).map((v) => (
                 <span
                   key={v.variantId}
-                  className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground"
+                  className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground dark:bg-sidebar-accent/55"
                 >
                   {v.variantName}
                 </span>
               ))}
 
             {!isSingleVariant && product.variants.length > 2 && (
-              <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground dark:bg-sidebar-accent/55">
                 +{product.variants.length - 2}
               </span>
             )}
             {isSingleVariant && shouldShowVariant(product.name, firstVariant.variantName) && (
-              <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground dark:bg-sidebar-accent/55">
                 {firstVariant.variantName}
               </span>
             )}
@@ -219,7 +217,6 @@ function PosProductCard({
               {formatPrice(minPrice)}
               {hasPriceRange ? "+" : ""}
             </span>
-
             {isSingleVariant && !isUnitSecond && (
               <span className="text-xs text-muted-foreground">
                 Stok {firstVariant.currentStock}
@@ -227,6 +224,15 @@ function PosProductCard({
             )}
           </div>
         </div>
+
+        {!isSingleVariant && isUnitSecond && (
+          <Badge
+            variant="outline"
+            className="absolute right-3 top-3 h-5 rounded-full border-blue-200 bg-blue-50 px-2 text-[10px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+          >
+            {totalUnitSecondStock} ready
+          </Badge>
+        )}
       </div>
     </button>
   );
@@ -343,8 +349,14 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
 
   const fetchPaymentMethods = React.useCallback(async () => {
     if (!activeBranchId) return;
+    console.log("[pos-v4/payment-methods] fetching", { brandSlug, branchId: activeBranchId });
     const res = await listPosPaymentMethodsV4Action(brandSlug, activeBranchId);
-    if (res.success) setPaymentMethods(res.data ?? []);
+    if (res.success) {
+      console.log("[pos-v4/payment-methods] loaded", { count: res.data?.length ?? 0 });
+      setPaymentMethods(res.data);
+    } else {
+      console.warn("[pos-v4/payment-methods] failed", res.error);
+    }
   }, [brandSlug, activeBranchId]);
 
   const fetchTransactions = React.useCallback(async () => {
@@ -529,7 +541,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const total = subtotal - discountAmount + serviceFeeAmount;
   const change = paidAmount - total;
   const selectedPaymentMethod = paymentMethods.find(
-    (pm) => pm.branchPaymentMethodId === selectedMethod,
+    (pm) => pm.paymentMethodId === selectedMethod,
   );
   const isCash = isCashPaymentMethod(selectedPaymentMethod);
 
@@ -537,7 +549,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
     if (selectedMethod || paymentMethods.length === 0) return;
 
     const cashMethod = paymentMethods.find((pm) => isCashPaymentMethod(pm));
-    setSelectedMethod((cashMethod ?? paymentMethods[0])!.branchPaymentMethodId);
+    setSelectedMethod(((cashMethod ?? paymentMethods[0])!).paymentMethodId!);
   }, [paymentMethods, selectedMethod]);
 
   /* ── Checkout ── */
@@ -730,7 +742,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             )}
 
             {!productsLoading && (
-              <div className="grid justify-start gap-3 p-1 [grid-template-columns:repeat(auto-fill,220px)]">
+              <div className="grid justify-start gap-4 p-4 [grid-template-columns:repeat(auto-fill,220px)]">
                 {products.map((product) => {
                   const isUnitSecond = product.productKind === "UNIT" && product.conditionType === "SECOND";
                   const firstVariant = product.variants[0]!;
@@ -757,41 +769,64 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
         </section>
 
         {/* ═══════════════ RIGHT PANEL — Cart + Payment ═══════════════ */}
-        <aside className="flex min-h-[320px] w-full shrink-0 flex-col rounded-2xl border border-border/60 bg-card shadow-sm lg:min-h-0 lg:w-[380px]">
+        <aside className="flex min-h-[320px] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card text-card-foreground shadow-sm lg:min-h-0 lg:w-[380px]">
           {/* Cart */}
-          <div className="flex-1 overflow-y-auto border-b p-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-xs font-semibold flex items-center gap-1.5">
-                <ShoppingCart className="size-3.5" />
-                Keranjang ({cart.length})
+          <div className="flex min-h-0 flex-1 flex-col border-b">
+            <div className="flex shrink-0 items-center justify-between border-b bg-card/95 px-3 py-2.5 backdrop-blur">
+              <h2 className="flex items-center gap-2 text-xs font-semibold">
+                <span className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <ShoppingCart className="size-3.5" />
+                </span>
+                <span>Keranjang</span>
+                <Badge variant="secondary" className="h-5 rounded-full px-1.5 text-[10px]">
+                  {cart.length}
+                </Badge>
               </h2>
-              {cart.length > 0 && (
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  className="text-[10px] text-destructive hover:underline"
-                  onClick={clearCart}
+                  className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() => setTxDrawerOpen(true)}
+                  aria-label="Buka riwayat transaksi"
                 >
-                  Kosongkan
+                  <History className="size-3.5" />
                 </button>
-              )}
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    className="rounded-md px-2 py-1 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/10"
+                    onClick={clearCart}
+                  >
+                    Kosongkan
+                  </button>
+                )}
+              </div>
             </div>
 
-            {cart.length === 0 && (
-              <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
-                Keranjang kosong
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {cart.length === 0 ? (
+                <div className="flex h-full min-h-[168px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 text-center">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <ShoppingCart className="size-5" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs font-medium">Keranjang kosong</p>
+                    <p className="max-w-[220px] text-[10px] leading-relaxed text-muted-foreground">
+                      Pilih produk dari daftar untuk mulai membuat transaksi.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {cart.map((item) => {
+                    const serializedMetaBadges =
+                      item.type === "UNIT_SECOND_SERIALIZED" ? getSerializedMetaBadges(item) : [];
+                    const placeBadgesBelowTitle =
+                      serializedMetaBadges.length >= 4 ||
+                      serializedMetaBadges.join(" ").length > 32;
 
-            <div className="space-y-1.5">
-              {cart.map((item) => {
-                const serializedMetaBadges =
-                  item.type === "UNIT_SECOND_SERIALIZED" ? getSerializedMetaBadges(item) : [];
-                const placeBadgesBelowTitle =
-                  serializedMetaBadges.length >= 4 ||
-                  serializedMetaBadges.join(" ").length > 32;
-
-                return (
-                <div key={item.tempId} className="flex flex-col gap-2 rounded-xl border border-sidebar-border bg-background/75 px-2.5 py-2.5 backdrop-blur-[1px] dark:bg-background/55">
+                    return (
+                <div key={item.tempId} className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/75 px-2.5 py-2.5 shadow-sm backdrop-blur-[1px] dark:bg-background/55">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-medium leading-none">{item.nameSnapshot}</div>
@@ -880,49 +915,53 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   </div>
                 </div>
               )})}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Payment */}
-          <div className="space-y-2.5 border-b p-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium tabular-nums">{formatPrice(subtotal)}</span>
-            </div>
+          <div className="border-b p-3">
+            <div className="flex flex-col gap-2 rounded-xl border bg-muted/15 p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium tabular-nums">{formatPrice(subtotal)}</span>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <Label className="text-[10px] shrink-0 w-14">Diskon</Label>
-              <Input
-                type="number"
-                value={discountAmount || ""}
-                onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
-                className="h-7 text-[10px]"
-                placeholder="0"
-              />
-            </div>
+              <div className="flex items-center gap-2">
+                <Label className="w-16 shrink-0 text-[10px] text-muted-foreground">Diskon</Label>
+                <Input
+                  type="number"
+                  value={discountAmount || ""}
+                  onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
+                  className="h-7 text-[10px]"
+                  placeholder="0"
+                />
+              </div>
 
-            <div className="flex items-center gap-2">
-              <Label className="text-[10px] shrink-0 w-14">Biaya Jasa</Label>
-              <Input
-                type="number"
-                value={serviceFeeAmount || ""}
-                onChange={(e) => setServiceFeeAmount(Number(e.target.value) || 0)}
-                className="h-7 text-[10px]"
-                placeholder="0"
-              />
-            </div>
+              <div className="flex items-center gap-2">
+                <Label className="w-16 shrink-0 text-[10px] text-muted-foreground">Biaya Jasa</Label>
+                <Input
+                  type="number"
+                  value={serviceFeeAmount || ""}
+                  onChange={(e) => setServiceFeeAmount(Number(e.target.value) || 0)}
+                  className="h-7 text-[10px]"
+                  placeholder="0"
+                />
+              </div>
 
-            <Separator />
+              <Separator />
 
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <span>Total</span>
-              <span className="tabular-nums">{formatPrice(total)}</span>
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{formatPrice(total)}</span>
+              </div>
             </div>
           </div>
 
           {/* Payment method & checkout */}
-          <div className="space-y-2.5 p-3">
-            <div>
+          <div className="flex flex-col gap-2.5 p-3">
+            <div className="flex flex-col gap-1.5">
               <div className="mb-1.5 flex items-center justify-between">
                 <Label className="text-[10px]">Metode Pembayaran</Label>
                 {paymentMethods.length > 0 && (
@@ -940,46 +979,30 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-1.5">
                   {paymentMethods.map((pm) => {
-                    const Icon = getPaymentMethodIcon(pm.paymentMethodType, pm.paymentMethodName);
-                    const selected = selectedMethod === pm.branchPaymentMethodId;
+                    const selected = selectedMethod === pm.paymentMethodId;
                     const label = getPaymentMethodLabel(pm);
                     const cashMethod = isCashPaymentMethod(pm);
 
                     return (
                       <button
-                        key={pm.branchPaymentMethodId}
+                        key={pm.paymentMethodId ?? pm.branchPaymentMethodId}
                         type="button"
                         onClick={() => {
-                          setSelectedMethod(pm.branchPaymentMethodId);
+                          setSelectedMethod(pm.paymentMethodId!);
 
                           if (!cashMethod) {
                             setPaidAmount(total);
                           }
                         }}
-                        className={`flex min-h-[54px] items-center gap-2 rounded-[14px] border px-3 py-2 text-left text-xs transition-all ${
+                        className={`flex h-8 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${
                           selected
-                            ? "border-primary bg-primary/10 text-primary shadow-sm"
-                            : "border-border/70 bg-white hover:border-primary/40 hover:bg-muted/30"
+                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                            : "border-border/70 bg-background/75 text-foreground hover:border-primary/40 hover:bg-muted/40"
                         }`}
                       >
-                        <span
-                          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-                            selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          <Icon className="size-4" />
-                        </span>
-
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">
-                            {label}
-                          </span>
-                          <span className="block truncate text-[9px] text-muted-foreground">
-                            {pm.paymentMethodType ?? pm.methodType}
-                          </span>
-                        </span>
+                        <span className="min-w-0 truncate">{label}</span>
                       </button>
                     );
                   })}
@@ -1006,12 +1029,12 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
               </div>
             )}
 
-            <div>
+            <div className="flex flex-col gap-1">
               <Label className="text-[10px]">Catatan (opsional)</Label>
               <Input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="mt-1 h-8 text-xs"
+                className="h-8 text-xs"
                 placeholder="Catatan transaksi"
               />
             </div>
@@ -1029,26 +1052,8 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
               {submitting ? "Memproses..." : `Bayar ${formatPrice(total)}`}
             </Button>
 
-            {/* Trigger riwayat transaksi */}
+            {/* Riwayat transaksi */}
             <FamilyDrawerRoot open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
-              <FamilyDrawerTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <History className="size-3.5" />
-                    Riwayat Transaksi
-                    {transactions.length > 0 && (
-                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        {transactions.length}
-                      </span>
-                    )}
-                  </span>
-                  <ChevronRight className="size-3.5" />
-                </button>
-              </FamilyDrawerTrigger>
-
               <FamilyDrawerPortal>
                 <FamilyDrawerOverlay />
                 <FamilyDrawerContent
@@ -1201,17 +1206,28 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   className="flex w-full items-center gap-3 rounded-lg border p-3 text-left text-xs transition-colors hover:bg-accent"
                   onClick={() => addUnitToCart(unit)}
                 >
-                  {unit.unitAttributes && (
-                    <div className="shrink-0 space-y-0.5">
-                      {(unit.unitAttributes as any).Warna && (
-                        <div className="text-[10px]"><span className="text-muted-foreground">Warna:</span> {(unit.unitAttributes as any).Warna}</div>
-                      )}
-                      {(unit.unitAttributes as any).Storage && (
-                        <div className="text-[10px]"><span className="text-muted-foreground">Storage:</span> {(unit.unitAttributes as any).Storage}</div>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/20">
+                    {unit.imageUrl ? (
+                      <img
+                        src={unit.imageUrl}
+                        alt=""
+                        className="h-full w-full object-contain p-1"
+                      />
+                    ) : (
+                      <Smartphone className="h-6 w-6 text-muted-foreground/50" />
+                    )}
+                  </div>
                   <div className="min-w-0 flex-1 space-y-0.5">
+                    {unit.unitAttributes && (
+                      <div className="flex flex-wrap gap-x-2 text-[10px]">
+                        {(unit.unitAttributes as any).Warna && (
+                          <span><span className="text-muted-foreground">Warna:</span> {(unit.unitAttributes as any).Warna}</span>
+                        )}
+                        {(unit.unitAttributes as any).Storage && (
+                          <span><span className="text-muted-foreground">Storage:</span> {(unit.unitAttributes as any).Storage}</span>
+                        )}
+                      </div>
+                    )}
                     {unit.imei && (
                       <div className="text-[10px] font-mono"><span className="text-muted-foreground">IMEI:</span> {unit.imei}</div>
                     )}
