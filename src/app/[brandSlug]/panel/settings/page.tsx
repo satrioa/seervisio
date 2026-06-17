@@ -5,7 +5,7 @@ import { SettingsLayout } from "@/components/settings/settings-layout";
 
 export default function SettingsPage() {
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
       <PageHeader
         title="Settings"
         breadcrumbs={[

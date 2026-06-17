@@ -190,7 +190,7 @@ export default function CashflowPage() {
   }, [safePage, pageSize, movements]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title="Mutasi Kas & Bank"
         breadcrumbs={[{ label: "Beranda", href: `/${brandSlug}/panel/dashboard` }, { label: "Finance", href: `/${brandSlug}/panel/finance` }, { label: "Mutasi Kas & Bank" }]} />
       <p className="text-sm text-muted-foreground -mt-4">Pantau seluruh pergerakan uang dari kas, bank, dan metode pembayaran.</p>

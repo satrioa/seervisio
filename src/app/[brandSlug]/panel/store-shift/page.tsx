@@ -220,7 +220,7 @@ function ShiftSummaryGrid({
   ];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((item) => (
         <Card key={item.label} className={item.highlight ? "border-primary/30 bg-primary/5" : ""}>
           <CardContent className="flex flex-col gap-1.5 p-4">
@@ -375,7 +375,8 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
           <CardDescription className="text-xs">20 shift terakhir</CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      {/* Desktop table */}
+      <CardContent className="hidden sm:block overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -413,13 +414,34 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
                 }`}>
                   {(shift.cashDifference ?? 0) > 0 ? "+" : ""}{formatCurrency(shift.cashDifference)}
                 </TableCell>
-                <TableCell>
-                  <StatusBadge status={shift.shiftStatus} />
-                </TableCell>
+                <TableCell><StatusBadge status={shift.shiftStatus} /></TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+      </CardContent>
+      {/* Mobile card list */}
+      <CardContent className="sm:hidden space-y-2">
+        {shifts.map((shift) => (
+          <div key={shift.id} className="rounded-lg border p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">{shift.shiftNumber}</span>
+              <StatusBadge status={shift.shiftStatus} />
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              <span>Tanggal: {formatDate(shift.openedAt)}</span>
+              <span>Dibuka: {formatDateTime(shift.openedAt)}</span>
+              <span>Ditutup: {formatDateTime(shift.closedAt)}</span>
+              <span>Oleh: {shift.openedByName || shift.openedBy || "-"}</span>
+              <span>Saldo awal: {formatCurrency(shift.openingCash)}</span>
+              <span>Expected: {formatCurrency(shift.shiftStatus === "OPEN" ? activeExpectedCash ?? shift.expectedClosingCash : shift.expectedClosingCash)}</span>
+              <span>Aktual: {formatCurrency(shift.countedClosingCash)}</span>
+              <span className={`font-medium ${(shift.cashDifference ?? 0) > 0 ? "text-green-600" : (shift.cashDifference ?? 0) < 0 ? "text-red-600" : ""}`}>
+                Selisih: {(shift.cashDifference ?? 0) > 0 ? "+" : ""}{formatCurrency(shift.cashDifference)}
+              </span>
+            </div>
+          </div>
+        ))}
       </CardContent>
     </Card>
   );
@@ -520,7 +542,7 @@ function StoreShiftPageContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title="Shift Toko" breadcrumbs={[
         { label: "Beranda", href: `/${brandSlug}/panel/dashboard` },
         { label: "Shift Toko" },
@@ -560,7 +582,7 @@ function StoreShiftPageContent() {
             transactions={overview.transactions}
           />
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
             <PaymentBreakdown items={overview.paymentBreakdown} />
             <TransactionActivity transactions={overview.transactions} />
           </div>

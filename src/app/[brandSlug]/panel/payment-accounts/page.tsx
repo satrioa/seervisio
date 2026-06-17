@@ -158,7 +158,7 @@ export default function PaymentAccountsPage() {
   const totalBalance = cashTotal + nonCashTotal;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title="Akun Pembayaran"
         breadcrumbs={[{ label: "Beranda", href: `/${brandSlug}/panel/dashboard` }, { label: "Akun Pembayaran" }]} />
       <p className="text-sm text-muted-foreground -mt-4">Kelola akun kas dan rekening penampung pembayaran.</p>

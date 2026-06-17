@@ -209,7 +209,7 @@ export default function FinanceReportPage() {
   const recentMovements = report?.recentMovements ?? [];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader
         title="Laporan Keuangan"
         breadcrumbs={[
@@ -319,7 +319,7 @@ export default function FinanceReportPage() {
               </div>
 
               {/* ── Two-column layout ── */}
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
                 {/* Revenue Breakdown */}
                 <Card>
                   <CardHeader className="pb-3">

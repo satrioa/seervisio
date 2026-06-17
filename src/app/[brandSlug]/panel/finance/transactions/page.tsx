@@ -325,7 +325,7 @@ export default function FinanceTransactionsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title="Pendapatan & Pengeluaran"
         breadcrumbs={[{ label: "Beranda", href: `/${brandSlug}/panel/dashboard` }, { label: "Finance", href: `/${brandSlug}/panel/finance` }, { label: "Pendapatan & Pengeluaran" }]} />
       <p className="text-sm text-muted-foreground -mt-4">Catat transaksi keuangan manual di luar servis dan POS.</p>

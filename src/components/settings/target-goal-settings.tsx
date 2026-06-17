@@ -106,7 +106,7 @@ export function TargetGoalSettings() {
     }`;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Section header */}
       <div className="flex items-center gap-3">
         <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
@@ -122,7 +122,7 @@ export function TargetGoalSettings() {
 
       <Separator />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_360px]">
         {/* ══ LEFT COLUMN: Settings Form ══ */}
         <div className="flex flex-col gap-6">
           {/* ── Target Scope ── */}
@@ -249,7 +249,7 @@ export function TargetGoalSettings() {
                         <Store className="size-3.5 text-muted-foreground" />
                         <span className="text-xs font-medium">{branch.name}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                           <Label
                             htmlFor={`branch-${index}-monthly`}

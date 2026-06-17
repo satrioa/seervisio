@@ -234,7 +234,7 @@ function PanelLayoutShell({
 
           <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
             {/* ── Desktop header ── */}
-            <header className="relative z-40 flex h-16 items-center overflow-visible px-6">
+            <header className="relative z-40 flex h-14 items-center overflow-visible px-3 md:h-16 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
@@ -294,15 +294,15 @@ function PanelLayoutShell({
             </header>
 
             {/* ── Mobile Dynamic Island row ── */}
-            <div className="relative z-50 flex justify-center px-4 pb-3 pt-1 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
+            <div className="relative z-50 flex justify-center px-3 pb-2 pt-0 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
               <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} />
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden outline-none ring-0 ${isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
+            <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
               <main
                 ref={mainScrollRef}
-                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : "p-6 [&>*]:space-y-3"}`}
+                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"}`}
               >
                 {children}
               </main>

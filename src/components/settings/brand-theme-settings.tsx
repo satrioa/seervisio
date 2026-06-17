@@ -182,7 +182,7 @@ export function BrandThemeSettings() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Section header */}
       <div className="flex items-center gap-3">
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
@@ -201,7 +201,7 @@ export function BrandThemeSettings() {
       <Separator />
 
       {/* 2-column layout on desktop */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_360px]">
         {/* ══ LEFT: Controls ══ */}
         <div className="flex flex-col gap-6">
           {/* ── Section 1: Theme Mode ── */}
@@ -253,15 +253,15 @@ export function BrandThemeSettings() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {/* Primary Color */}
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs font-medium text-foreground">
-                  Primary Color
-                </Label>
-                <div className="flex items-center gap-3">
-                  <ColorPicker
-                    color={primaryColor}
-                    onChange={handlePrimaryChange}
-                  />
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-medium text-foreground">
+                    Primary Color
+                  </Label>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <ColorPicker
+                      color={primaryColor}
+                      onChange={handlePrimaryChange}
+                    />
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <div
@@ -288,7 +288,7 @@ export function BrandThemeSettings() {
                 <Label className="text-xs font-medium text-foreground">
                   Accent Color
                 </Label>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <ColorPicker
                     color={accentColor}
                     onChange={setAccentColor}
