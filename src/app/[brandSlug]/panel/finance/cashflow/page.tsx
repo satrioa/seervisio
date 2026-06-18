@@ -57,6 +57,17 @@ function formatDateShort(value: string | null | undefined): string {
   catch { return value; }
 }
 
+function formatTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "-";
+  }
+}
+
 function todayISO(): string {
   const d = new Date();
   return d.toISOString().split("T")[0];
@@ -140,29 +151,48 @@ export default function CashflowPage() {
     }
   }, []);
 
-  const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
-
   /* Fetch movements */
   const fetchMovements = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const dateToExclusive = dateTo
+      ? (() => {
+          const [y, m, d] = dateTo.split("-").map(Number);
+          const exclusive = new Date(Date.UTC(y, m - 1, d + 1));
+          return exclusive.toISOString().split("T")[0];
+        })()
+      : null;
     const result = await listCashflowMovementsAction(brandSlug, {
-      branchId: branchFilter === "ALL_BRANCHES" ? resolvedBranchId ?? null : branchFilter,
+      branchId: branchFilter === "ALL_BRANCHES" ? null : branchFilter,
       accountId: accountFilter === "ALL_ACCOUNTS" ? null : accountFilter,
       movementType: typeFilter === "ALL_TYPES" ? null : typeFilter,
       direction: directionFilter === "ALL_DIRECTIONS" ? null : directionFilter,
       search: search || null,
       dateFrom: dateFrom || null,
-      dateTo: dateTo || null,
+      dateTo: dateToExclusive,
     });
     if (result.success) {
-      setMovements(result.data.movements);
-      setSummary(result.data.summary);
+      const m = result.data.movements;
+      const s = result.data.summary;
+      console.log("[cashflow-page] received", {
+        totalRows: m.length,
+        movementTypes: [...new Set(m.map((r) => r.movementType))],
+        totalIn: s.totalIn,
+        totalOut: s.totalOut,
+        branchFilterSent: branchFilter === "ALL_BRANCHES" ? "ALL_BRANCHES" : branchFilter,
+        dateFrom,
+        dateTo,
+        endDateExclusive: dateToExclusive,
+        typeFilter,
+        directionFilter,
+      });
+      setMovements(m);
+      setSummary(s);
     } else {
       setError(result.error);
     }
     setLoading(false);
-  }, [brandSlug, branchFilter, resolvedBranchId, accountFilter, typeFilter, directionFilter, search, dateFrom, dateTo]);
+  }, [brandSlug, branchFilter, accountFilter, typeFilter, directionFilter, search, dateFrom, dateTo]);
 
   useEffect(() => { void fetchMovements(); }, [fetchMovements]);
 
@@ -373,7 +403,14 @@ export default function CashflowPage() {
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => setDetailMovement(m)}
                       >
-                        <TableCell className="text-xs whitespace-nowrap">{formatDateShort(m.createdAt)}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            <span>{formatDateShort(m.createdAt)}</span>
+                            <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">
+                              {formatTime(m.createdAt)}
+                            </span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-xs max-w-[120px] truncate">{m.accountName}</TableCell>
                         <TableCell className="text-xs">{m.branchName || (m.isCashAccount ? m.accountName : "-")}</TableCell>
                         <TableCell>

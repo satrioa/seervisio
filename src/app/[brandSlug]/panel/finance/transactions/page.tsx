@@ -5,9 +5,8 @@ import { useCallback, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import {
   Search, AlertTriangle, ArrowUpRight, ArrowDownRight,
-  Calendar, Download, History, ArrowRightLeft,
-  Plus, X, ChevronLeft, ChevronRight, Landmark,
-  Wallet, ScrollText, Ban, Loader2,
+  Calendar, Plus, ChevronLeft, ChevronRight,
+  Ban, Loader2, ScrollText, List,
 } from "lucide-react";
 
 import { useActiveBranch } from "@/components/layout/active-branch-context";
@@ -37,11 +36,10 @@ import {
   voidFinanceTransactionAction,
   type FinanceTransactionRow,
   type FinanceTransactionSummary,
+  type SourceFilter,
 } from "@/server/actions/finance-transaction.actions";
 
 import { listPaymentAccountsAction } from "@/server/actions/payment-account.actions";
-
-import { MOVEMENT_TYPE_LABELS } from "@/lib/finance/movement-labels";
 
 /* ── Categories ── */
 
@@ -64,17 +62,21 @@ const EXPENSE_CATEGORIES = [
   "Lainnya",
 ];
 
+/* ── Source filter tabs ── */
+
+const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
+  { value: "ALL", label: "Semua" },
+  { value: "MANUAL", label: "Manual" },
+  { value: "POS", label: "POS" },
+  { value: "SERVICE", label: "Servis" },
+  { value: "EXPENSE", label: "Biaya" },
+];
+
 /* ── Formatting ── */
 
 function formatCurrency(n: number | null | undefined): string {
   if (n == null) return "Rp 0";
   return `Rp ${n.toLocaleString("id-ID")}`;
-}
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return "-";
-  try { return new Date(value).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
-  catch { return value; }
 }
 
 function formatDateShort(value: string | null | undefined): string {
@@ -87,15 +89,20 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().split("T")[0];
-}
-
 function monthStartISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/* ── Source badge color ── */
+
+function sourceBadgeVariant(source: string): "default" | "secondary" | "outline" | "destructive" {
+  switch (source) {
+    case "POS": return "default";
+    case "Servis": return "secondary";
+    case "MDR": return "destructive";
+    default: return "outline";
+  }
 }
 
 /* ── Types ── */
@@ -119,12 +126,11 @@ export default function FinanceTransactionsPage() {
   const [accountsLoading, setAccountsLoading] = useState(true);
 
   /* Filters */
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateFrom, setDateFrom] = useState(monthStartISO());
   const [dateTo, setDateTo] = useState(todayISO());
   const [branchFilter, setBranchFilter] = useState("ALL_BRANCHES");
-  const [accountFilter, setAccountFilter] = useState("ALL_ACCOUNTS");
-  const [typeFilter, setTypeFilter] = useState("ALL_TYPES");
   const [directionFilter, setDirectionFilter] = useState<"IN" | "OUT" | "ALL_DIRECTIONS">("ALL_DIRECTIONS");
   const [search, setSearch] = useState("");
 
@@ -177,7 +183,8 @@ export default function FinanceTransactionsPage() {
         setDateTo(todayISO());
         break;
       case "7days":
-        setDateFrom(daysAgoISO(7));
+        const d = new Date(); d.setDate(d.getDate() - 7);
+        setDateFrom(d.toISOString().split("T")[0]);
         setDateTo(todayISO());
         break;
       case "month":
@@ -196,14 +203,13 @@ export default function FinanceTransactionsPage() {
     const result = await listFinanceTransactionsAction({
       brandSlug,
       branchId: branchFilter === "ALL_BRANCHES" ? resolvedBranchId ?? null : branchFilter,
-      accountId: accountFilter === "ALL_ACCOUNTS" ? null : accountFilter,
-      movementType: typeFilter === "ALL_TYPES" ? null : typeFilter,
       direction: directionFilter === "ALL_DIRECTIONS" ? null : directionFilter,
       search: search || null,
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
       page,
       pageSize,
+      sourceFilter,
     });
     if (result.success) {
       setTransactions(result.data.transactions);
@@ -213,20 +219,18 @@ export default function FinanceTransactionsPage() {
       setError(result.error);
     }
     setLoading(false);
-  }, [brandSlug, branchFilter, resolvedBranchId, accountFilter, typeFilter, directionFilter, search, dateFrom, dateTo, page, pageSize]);
+  }, [brandSlug, branchFilter, resolvedBranchId, directionFilter, search, dateFrom, dateTo, page, pageSize, sourceFilter]);
 
   useEffect(() => { void fetchTransactions(); }, [fetchTransactions]);
 
-  useEffect(() => { setPage(1); }, [branchFilter, accountFilter, typeFilter, directionFilter, search, dateFrom, dateTo, datePreset]);
-
-  const movementTypeOptions = Object.entries(MOVEMENT_TYPE_LABELS).filter(
-    ([key]) => ["OTHER_INCOME", "OPERATING_EXPENSE", "BANK_FEE"].includes(key),
-  );
+  useEffect(() => { setPage(1); }, [branchFilter, directionFilter, search, dateFrom, dateTo, datePreset, sourceFilter]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, totalPages);
   const rangeStart = totalCount === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const rangeEnd = Math.min(safePage * pageSize, totalCount);
+
+  const summaryLabel = sourceFilter === "ALL" ? "Total Pendapatan" : sourceFilter === "MANUAL" ? "Total Pendapatan Manual" : "Total Pendapatan";
 
   /* ── Income modal handlers ── */
 
@@ -328,7 +332,9 @@ export default function FinanceTransactionsPage() {
     <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title="Pendapatan & Pengeluaran"
         breadcrumbs={[{ label: "Beranda", href: `/${brandSlug}/panel/dashboard` }, { label: "Finance", href: `/${brandSlug}/panel/finance` }, { label: "Pendapatan & Pengeluaran" }]} />
-      <p className="text-sm text-muted-foreground -mt-4">Catat transaksi keuangan manual di luar servis dan POS.</p>
+      <p className="text-sm text-muted-foreground -mt-4">
+        Gunakan filter sumber untuk melihat transaksi manual, POS, servis, dan biaya.
+      </p>
 
       {error && (
         <Alert variant="destructive">
@@ -341,6 +347,25 @@ export default function FinanceTransactionsPage() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4 space-y-4">
+          {/* Source filter tabs */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-xs font-medium text-muted-foreground mr-1">Sumber:</span>
+            {SOURCE_FILTERS.map((sf) => (
+              <button
+                key={sf.value}
+                type="button"
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  sourceFilter === sf.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setSourceFilter(sf.value)}
+              >
+                {sf.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground mr-1">Periode:</span>
             {(["today", "7days", "month", "custom"] as const).map((preset) => (
@@ -379,28 +404,6 @@ export default function FinanceTransactionsPage() {
               </SelectContent>
             </Select>
 
-            <Select value={accountFilter} onValueChange={setAccountFilter} disabled={accountsLoading}>
-              <SelectTrigger className="w-44 h-8 text-xs">
-                <SelectValue placeholder="Akun" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL_ACCOUNTS">Semua Akun</SelectItem>
-                {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue placeholder="Tipe" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL_TYPES">Semua Tipe</SelectItem>
-                {movementTypeOptions.map(([key, label]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as typeof directionFilter)}>
               <SelectTrigger className="w-28 h-8 text-xs">
                 <SelectValue placeholder="Arah" />
@@ -416,10 +419,6 @@ export default function FinanceTransactionsPage() {
               <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Cari..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 ml-auto" disabled>
-              <Download className="size-3.5" /> Export
-            </Button>
           </div>
 
           {/* Action buttons */}
@@ -439,7 +438,7 @@ export default function FinanceTransactionsPage() {
         <Card>
           <CardContent className="flex flex-col gap-1 p-4">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <ArrowUpRight className="size-3 text-green-600" /> Total Pendapatan Lain
+              <ArrowUpRight className="size-3 text-green-600" /> {summaryLabel}
             </span>
             <span className="text-xl font-semibold text-green-600">
               {loading ? <Skeleton className="h-7 w-28" /> : formatCurrency(summary.totalIncome)}
@@ -459,7 +458,7 @@ export default function FinanceTransactionsPage() {
         <Card>
           <CardContent className="flex flex-col gap-1 p-4">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <ArrowRightLeft className="size-3" /> Net Manual
+              <List className="size-3" /> Net
             </span>
             <span className={`text-xl font-semibold ${summary.netManual >= 0 ? "text-green-600" : "text-red-600"}`}>
               {loading ? <Skeleton className="h-7 w-28" /> : formatCurrency(summary.netManual)}
@@ -486,8 +485,8 @@ export default function FinanceTransactionsPage() {
           ) : transactions.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12">
               <ScrollText className="size-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Belum ada pendapatan atau pengeluaran.</p>
-              <p className="text-xs text-muted-foreground/60">Gunakan tombol di atas untuk mencatat transaksi keuangan manual.</p>
+              <p className="text-sm text-muted-foreground">Belum ada transaksi pada periode ini.</p>
+              <p className="text-xs text-muted-foreground/60">Gunakan filter sumber atau tombol di atas untuk mencatat transaksi manual.</p>
             </div>
           ) : (
             <>
@@ -496,13 +495,12 @@ export default function FinanceTransactionsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tanggal</TableHead>
+                      <TableHead>Sumber</TableHead>
                       <TableHead>Tipe</TableHead>
-                      <TableHead>Akun</TableHead>
                       <TableHead>Cabang</TableHead>
                       <TableHead className="max-w-[160px]">Deskripsi</TableHead>
                       <TableHead className="text-right">Nominal</TableHead>
-                      <TableHead>Dibuat Oleh</TableHead>
-                      <TableHead className="w-12" />
+                      {sourceFilter === "MANUAL" && <TableHead className="w-12" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -510,20 +508,29 @@ export default function FinanceTransactionsPage() {
                       <TableRow key={tx.id} className={tx.isVoided ? "opacity-50" : ""}>
                         <TableCell className="text-xs whitespace-nowrap">{formatDateShort(tx.createdAt)}</TableCell>
                         <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant={sourceBadgeVariant(tx.sourceLabel)} className="text-[10px] px-1.5 py-0">
+                              {tx.sourceLabel}
+                            </Badge>
+                            {tx.isAutomatic && (
+                              <span className="text-[10px] text-muted-foreground italic">Otomatis</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                            tx.movementType === "OTHER_INCOME"
+                            tx.direction === "IN"
                               ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : tx.movementType === "BANK_FEE"
+                              : tx.entryType === "MDR_EXPENSE"
                                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                 : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                           }`}>
-                            {MOVEMENT_TYPE_LABELS[tx.movementType] || tx.movementType}
+                            {tx.direction === "IN" ? "Pendapatan" : tx.entryType === "MDR_EXPENSE" ? "MDR" : "Pengeluaran"}
                           </span>
                           {tx.isVoided && (
                             <span className="ml-1.5 inline-flex items-center text-[10px] text-muted-foreground">(void)</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs max-w-[120px] truncate">{tx.accountName}</TableCell>
                         <TableCell className="text-xs">{tx.branchName || "-"}</TableCell>
                         <TableCell className="text-xs max-w-[160px] truncate text-muted-foreground">
                           {tx.description || "-"}
@@ -533,19 +540,20 @@ export default function FinanceTransactionsPage() {
                         }`}>
                           {tx.direction === "IN" ? "+" : "-"}{formatCurrency(tx.amount)}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{tx.createdByName || "-"}</TableCell>
-                        <TableCell>
-                          {!tx.isVoided && (
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                              title="Batalkan"
-                              onClick={() => handleVoidOpen(tx)}
-                            >
-                              <Ban className="size-3.5" />
-                            </button>
-                          )}
-                        </TableCell>
+                        {sourceFilter === "MANUAL" && (
+                          <TableCell>
+                            {!tx.isAutomatic && !tx.isVoided && (
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-destructive transition-colors"
+                                title="Batalkan"
+                                onClick={() => handleVoidOpen(tx)}
+                              >
+                                <Ban className="size-3.5" />
+                              </button>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -589,7 +597,7 @@ export default function FinanceTransactionsPage() {
       <Dialog open={showIncomeModal} onOpenChange={setShowIncomeModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Tambah Pendapatan Lain</DialogTitle>
+            <DialogTitle>Tambah Pendapatan</DialogTitle>
             <DialogDescription>Catat pemasukan manual di luar servis dan POS.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -745,7 +753,7 @@ export default function FinanceTransactionsPage() {
           {voidTarget && (
             <div className="space-y-4">
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                <p><span className="text-muted-foreground">Tipe:</span> {MOVEMENT_TYPE_LABELS[voidTarget.movementType] || voidTarget.movementType}</p>
+                <p><span className="text-muted-foreground">Sumber:</span> {voidTarget.sourceLabel}</p>
                 <p><span className="text-muted-foreground">Jumlah:</span> {formatCurrency(voidTarget.amount)}</p>
                 <p className="truncate"><span className="text-muted-foreground">Deskripsi:</span> {voidTarget.description || "-"}</p>
               </div>

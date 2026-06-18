@@ -38,6 +38,7 @@ interface PanelLayoutClientProps {
   activeOperatorName: string | null;
   userName: string;
   userEmail: string;
+  userAvatarUrl: string | null;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -75,13 +76,14 @@ export function PanelLayoutClient({
   activeOperatorName,
   userName,
   userEmail,
+  userAvatarUrl,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
           <PosCartProvider>
-            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl}>{children}</PanelLayoutShell>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -99,11 +101,13 @@ function PanelLayoutShell({
   activeOperatorName,
   userName,
   userEmail,
+  userAvatarUrl,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
   const isPosPage = pathname?.includes("/panel/pos");
   const isPosV4Page = pathname?.includes("/panel/pos-v4");
+  const isInventoryV4Page = pathname?.includes("/panel/inventory-v4");
   const isPaymentAccountsPage = pathname?.includes("/panel/payment-accounts");
   const isFinanceTransactionsPage = pathname?.includes("/panel/finance/transactions");
   const hasFlushRightEdge = isPosPage || isPaymentAccountsPage || isFinanceTransactionsPage;
@@ -228,13 +232,13 @@ function PanelLayoutShell({
 
   return (
     <StoreShiftProvider>
-      <div className="flex h-screen overflow-hidden bg-[#f7f5f1]">
+      <div className="flex h-screen overflow-hidden bg-sidebar text-sidebar-foreground">
         <SidebarProvider>
-          <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
+          <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
 
-          <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
+          <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
             {/* ── Desktop header ── */}
-            <header className="relative z-40 flex h-14 items-center overflow-visible px-3 md:h-16 md:px-6">
+            <header className="relative z-40 flex h-14 items-center overflow-visible !bg-sidebar px-3 text-sidebar-foreground md:h-16 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
@@ -244,7 +248,7 @@ function PanelLayoutShell({
 
               {/* Dynamic Island — desktop only, sticky viewport top anchor */}
               <motion.div
-                className="pointer-events-none fixed left-1/2 top-3 z-50 hidden md:block"
+                className="pointer-events-none absolute left-1/2 top-3 z-50 hidden md:block"
                 initial={false}
                 animate={{
                   x: "-50%",
@@ -299,10 +303,10 @@ function PanelLayoutShell({
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
+            <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isInventoryV4Page ? "rounded-[14px] border-none bg-sidebar shadow-none" : isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
               <main
                 ref={mainScrollRef}
-                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"}`}
+                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"}`}
               >
                 {children}
               </main>

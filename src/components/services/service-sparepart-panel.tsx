@@ -48,6 +48,7 @@ export function ServiceSparepartPanel({
           <ServiceSparepartSection
             serviceId={service.id}
             serviceNumber={service.serviceNumber || service.id}
+            branchId={service.branchId}
             spareparts={service.spareparts}
             currentStatus={service.status}
             onSparepartAdded={onSparepartAdded}

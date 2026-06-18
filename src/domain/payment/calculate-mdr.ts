@@ -18,12 +18,18 @@ export type PaymentMethodType = "CASH" | "QRIS" | "TRANSFER" | "DEBIT" | "CREDIT
  * - CASH, TRANSFER → MDR always 0
  * - QRIS → 0 if amount <= 500,000, otherwise amount * mdrPercentage / 100
  * - Others → amount * mdrPercentage / 100
+ * - If mdrMinTransaction > 0 and amount < mdrMinTransaction, MDR = 0
  */
 export function calculateMdrFee(
   methodType: PaymentMethodType,
   amount: number,
-  mdrPercentage: number = 0
+  mdrPercentage: number = 0,
+  mdrMinTransaction: number = 0
 ): number {
+  if (mdrMinTransaction > 0 && amount < mdrMinTransaction) {
+    return 0;
+  }
+
   if (methodType === "CASH" || methodType === "TRANSFER") {
     return 0;
   }

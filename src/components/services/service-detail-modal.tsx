@@ -92,7 +92,7 @@ export function ServiceDetailModal({
     service.payments.length > 0 &&
     service.payments.every((p) => p.status === "lunas");
   const isCancelled = localStatus === "cancelled";
-  const totalDueVal = Math.max(totalSparepart, 100000);
+  const totalDueVal = Number(service.finalCost || service.estimatedCost || 0);
   const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
     totalDueVal,
     enrichedPayments,
@@ -211,9 +211,17 @@ export function ServiceDetailModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
-                      Total Tagihan
+                      Estimasi Biaya
                     </span>
                     <span className="font-medium text-foreground">
+                      {formatCurrency(Number(service.estimatedCost || 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-xs">
+                    <span className="font-medium text-foreground">
+                      Total Tagihan
+                    </span>
+                    <span className="font-semibold text-foreground">
                       {formatCurrency(totalDueVal)}
                     </span>
                   </div>
@@ -234,7 +242,6 @@ export function ServiceDetailModal({
                     </span>
                   </div>
                   <div className="mt-1">
-NEW VERSION - 
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${paymentStatusLabel.color}`}
@@ -292,11 +299,7 @@ NEW VERSION -
                     </span>
                   )}
 
-                {totalSparepart > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    Total sparepart: {formatCurrency(totalSparepart)}
-                  </span>
-                )}
+
               </div>
             </div>
 
@@ -456,7 +459,7 @@ NEW VERSION -
                   ))}
                   <div className="flex items-center justify-between px-3 py-1.5">
                     <span className="text-xs font-semibold text-foreground">
-                      Total Sparepart
+                      Nilai sparepart (internal)
                     </span>
                     <span className="text-xs font-semibold tabular-nums text-foreground">
                       {formatCurrency(totalSparepart)}

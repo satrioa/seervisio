@@ -8,7 +8,6 @@ import { TargetGoalSettings } from "@/components/settings/target-goal-settings";
 import { BrandProfileSettings } from "@/components/settings/brand-profile-settings";
 import { PaymentSettings } from "@/components/settings/payment-settings";
 import { PaymentMethodSettings } from "@/components/settings/payment-method-settings";
-import { UserAccessSettings } from "@/components/settings/user-access-settings";
 import { SystemSettings } from "@/components/settings/system-settings";
 
 /* ─── Section Definition ─── */
@@ -24,7 +23,6 @@ const SECTIONS: SettingsSection[] = [
   { id: "target-goal", component: TargetGoalSettings },
   { id: "payment", component: PaymentSettings },
   { id: "payment-methods", component: PaymentMethodSettings },
-  { id: "user-access", component: UserAccessSettings },
   { id: "system", component: SystemSettings },
 ];
 

@@ -4,7 +4,7 @@ import * as React from "react";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Send, Coins, PiggyBank } from "lucide-react";
-import { createServiceAction } from "@/server/actions/service.actions";
+import { createServiceAction, listTechniciansAction, type TechnicianOption } from "@/server/actions/service.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,8 @@ import {
   getPaymentAccountName,
   getPaymentMethodName,
 } from "@/components/services/service-data";
+
+const UNASSIGNED_TECHNICIAN_VALUE = "**UNASSIGNED_TECHNICIAN**";
 
 const DEVICE_TYPES = [
   "Smartphone",
@@ -70,6 +72,7 @@ export interface CreateServiceFormData {
   issue: string;
   additionalNotes: string;
   branch: string;
+  assignedTechnicianId: string;
 }
 
 const initialFormData: CreateServiceFormData = {
@@ -90,6 +93,7 @@ const initialFormData: CreateServiceFormData = {
   issue: "",
   additionalNotes: "",
   branch: "",
+  assignedTechnicianId: UNASSIGNED_TECHNICIAN_VALUE,
 };
 
 interface CreateServiceFormProps {
@@ -118,6 +122,20 @@ export function CreateServiceForm({
     () => branches.find((b) => b.id === formData.branch)?.name ?? "",
     [branches, formData.branch],
   );
+
+  const [technicians, setTechnicians] = React.useState<TechnicianOption[]>([]);
+  const [loadingTechs, setLoadingTechs] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoadingTechs(true);
+    listTechniciansAction(brandSlug, formData.branch || undefined).then((res) => {
+      if (cancelled) return;
+      setTechnicians(res.success ? res.data : []);
+      setLoadingTechs(false);
+    });
+    return () => { cancelled = true; };
+  }, [brandSlug, formData.branch]);
 
   // Auto-fill branch on mount if active branch scope is set
   React.useEffect(() => {
@@ -222,6 +240,10 @@ export function CreateServiceForm({
         deviceSerialNumber: formData.serialNumber,
         reportedIssue: formData.issue,
         estimatedCost: formData.estimatedCost ? parseInt(formData.estimatedCost) : undefined,
+        assignedTechnicianId:
+          formData.assignedTechnicianId === UNASSIGNED_TECHNICIAN_VALUE
+            ? undefined
+            : formData.assignedTechnicianId,
         dpAmount: formData.dpEnabled && formData.dpAmount ? parseInt(formData.dpAmount) : undefined,
         dpPaymentMethodId: formData.dpEnabled ? formData.dpMethodId : undefined,
         dpPaymentAccountId: formData.dpEnabled ? formData.dpAccountId : undefined,
@@ -516,6 +538,36 @@ export function CreateServiceForm({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Assigned Technician */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cs-technician" className="text-xs font-medium">
+                Teknisi Penanggung Jawab
+              </Label>
+              <Select
+                value={formData.assignedTechnicianId}
+                onValueChange={(v) => updateField("assignedTechnicianId", v)}
+              >
+                <SelectTrigger className="h-10 text-sm" id="cs-technician">
+                  <SelectValue placeholder={
+                    loadingTechs ? "Memuat teknisi..." : "Belum ditugaskan"
+                  } />
+                </SelectTrigger>
+                <SelectContent className="z-[1001]">
+                  <SelectItem value={UNASSIGNED_TECHNICIAN_VALUE} className="text-sm text-muted-foreground">
+                    Belum ditugaskan
+                  </SelectItem>
+                  {technicians.filter((t) => Boolean(t.profileId)).map((t) => (
+                    <SelectItem key={t.profileId} value={t.profileId} className="text-sm">
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Bisa dikosongkan jika teknisi belum ditentukan.
+              </p>
             </div>
 
             {/* Estimated Cost */}

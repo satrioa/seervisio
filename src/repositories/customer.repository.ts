@@ -1,4 +1,8 @@
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+
+function adminDb() {
+  return createServiceRoleSupabaseClient() as any;
+}
 
 export interface CustomerRow {
   id: string;
@@ -27,9 +31,9 @@ export async function searchCustomers(
   brandId: number,
   query: string
 ): Promise<CustomerRow[]> {
-  const supabase = await createServerSupabase();
+  const db = adminDb();
   const q = `%${query}%`;
-  const { data, error } = await (supabase as any)
+  const { data, error } = await db
     .from("customers")
     .select("*")
     .eq("brand_id", brandId)
@@ -45,8 +49,8 @@ export async function findCustomerByPhone(
   brandId: number,
   phone: string
 ): Promise<CustomerRow | null> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await (supabase as any)
+  const db = adminDb();
+  const { data, error } = await db
     .from("customers")
     .select("*")
     .eq("brand_id", brandId)
@@ -58,8 +62,8 @@ export async function findCustomerByPhone(
 }
 
 export async function getCustomerById(id: string): Promise<CustomerRow | null> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await (supabase as any)
+  const db = adminDb();
+  const { data, error } = await db
     .from("customers")
     .select("*")
     .eq("id", id)
@@ -72,8 +76,8 @@ export async function getCustomerById(id: string): Promise<CustomerRow | null> {
 export async function createCustomer(
   input: CreateCustomerInput
 ): Promise<CustomerRow> {
-  const supabase = await createServerSupabase();
-  const { data, error } = await (supabase as any)
+  const db = adminDb();
+  const { data, error } = await db
     .from("customers")
     .insert({
       brand_id: input.brand_id,

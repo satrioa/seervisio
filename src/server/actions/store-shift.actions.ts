@@ -9,6 +9,7 @@ import {
   requireBranchAccess,
   type ActionResult,
 } from "./action-helper";
+import { sendOperationalNotification } from "@/server/notifications/notification.service";
 import {
   getActiveShift,
   getShiftById,
@@ -33,6 +34,10 @@ export interface TransactionItem {
   direction: string;
   amount: number;
   createdAt: string;
+  accountName?: string;
+  accountType?: string;
+  referenceType?: string | null;
+  referenceId?: string | null;
 }
 
 export interface StoreShiftOverview {
@@ -41,6 +46,15 @@ export interface StoreShiftOverview {
   cashInTotal: number;
   cashOutTotal: number;
   openingCash: number;
+  paymentBreakdown: PaymentBreakdownItem[];
+  transactions: TransactionItem[];
+}
+
+export interface StoreShiftReport {
+  shift: StoreShift;
+  expectedCash: number | null;
+  cashInTotal: number;
+  cashOutTotal: number;
   paymentBreakdown: PaymentBreakdownItem[];
   transactions: TransactionItem[];
 }
@@ -119,6 +133,8 @@ export async function getStoreShiftOverviewAction(
       }));
 
       transactions = (movements as any[]).map((m: any) => ({
+        accountName: accountMap.get(m.payment_account_id)?.name,
+        accountType: accountMap.get(m.payment_account_id)?.type,
         id: m.id,
         type: resolveMovementTypeLabel(m.movement_type),
         description: m.description || resolveMovementTypeLabel(m.movement_type),
@@ -126,6 +142,8 @@ export async function getStoreShiftOverviewAction(
         direction: m.direction,
         amount: Number(m.amount),
         createdAt: m.created_at,
+        referenceType: m.reference_type,
+        referenceId: m.reference_id,
       }));
     }
 
@@ -141,6 +159,118 @@ export async function getStoreShiftOverviewAction(
   } catch (err: any) {
     console.error("[StoreShiftActions] getStoreShiftOverviewAction:", err.message);
     return errorResult(err.message || "Gagal memuat data shift.");
+  }
+}
+
+export async function getStoreShiftReportAction(
+  brandSlug: string,
+  shiftId: string,
+): Promise<ActionResult<StoreShiftReport>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "store_shift.view");
+
+    const supabase = await createServerSupabase();
+    const shift = await getShiftById(supabase, shiftId);
+
+    if (!shift) {
+      return errorResult("Shift tidak ditemukan.");
+    }
+
+    requireBranchAccess(session, shift.branchId, "getStoreShiftReportAction");
+
+    const { data: calcData } = await (supabase as any).rpc("calculate_shift_expected_cash", {
+      p_shift_id: shift.id,
+    });
+    const expectedCash =
+      calcData != null
+        ? Number(calcData)
+        : shift.expectedClosingCash != null
+          ? Number(shift.expectedClosingCash)
+          : null;
+
+    const movements = await getShiftMovements(
+      supabase,
+      shift.branchId,
+      shift.openedAt,
+      shift.closedAt,
+    );
+
+    const accountIds = [...new Set((movements as any[]).map((m: any) => m.payment_account_id).filter(Boolean))];
+
+    let accounts: any[] = [];
+    if (accountIds.length > 0) {
+      const { data: accData } = await supabase
+        .from("payment_accounts")
+        .select("id, type, account_name")
+        .in("id", accountIds);
+      accounts = accData || [];
+    }
+
+    const accountMap = new Map<string, { type: string; name: string }>();
+    for (const acc of accounts) {
+      accountMap.set(acc.id, { type: acc.type, name: acc.account_name });
+    }
+
+    let cashInTotal = 0;
+    let cashOutTotal = 0;
+    const typeMap = new Map<string, { total: number; count: number }>();
+    const typeLabelMap = new Map<string, string>();
+
+    for (const movement of movements as any[]) {
+      const amount = Number(movement.amount);
+      const accInfo = accountMap.get(movement.payment_account_id);
+      const typeKey = accInfo?.type || "UNKNOWN";
+      const label = typeLabelMap.get(typeKey) || resolveAccountTypeLabel(typeKey);
+
+      if (!typeLabelMap.has(typeKey)) typeLabelMap.set(typeKey, label);
+
+      if (movement.movement_type === "CASH_IN") cashInTotal += amount;
+      if (movement.movement_type === "CASH_OUT") cashOutTotal += amount;
+
+      if (movement.direction === "IN" || movement.movement_type === "CASH_IN") {
+        const entry = typeMap.get(typeKey) || { total: 0, count: 0 };
+        entry.total += amount;
+        entry.count += 1;
+        typeMap.set(typeKey, entry);
+      }
+    }
+
+    const paymentBreakdown = Array.from(typeMap.entries()).map(([typeKey, val]) => ({
+      methodName: typeLabelMap.get(typeKey) || typeKey,
+      methodType: typeKey,
+      total: val.total,
+      count: val.count,
+    }));
+
+    const transactions = (movements as any[]).map((movement: any) => {
+      const accInfo = accountMap.get(movement.payment_account_id);
+      return {
+        accountName: accInfo?.name,
+        accountType: accInfo?.type,
+        id: movement.id,
+        type: resolveMovementTypeLabel(movement.movement_type),
+        description: movement.description || resolveMovementTypeLabel(movement.movement_type),
+        movementType: movement.movement_type,
+        direction: movement.direction,
+        amount: Number(movement.amount),
+        createdAt: movement.created_at,
+        referenceType: movement.reference_type,
+        referenceId: movement.reference_id,
+      };
+    });
+
+    return successResult({
+      shift,
+      expectedCash,
+      cashInTotal,
+      cashOutTotal,
+      paymentBreakdown,
+      transactions,
+    });
+  } catch (err: any) {
+    console.error("[StoreShiftActions] getStoreShiftReportAction:", err.message);
+    return errorResult(err.message || "Gagal memuat rincian shift.");
   }
 }
 
@@ -284,6 +414,45 @@ export async function closeStoreShiftAction(
         p_created_by: session.profileId,
         p_metadata: { reason: "closing_adjustment", cash_difference: cashDiff },
       });
+    }
+
+    try {
+      const { data: branchRow } = await (supabase as any)
+        .from("branches")
+        .select("name")
+        .eq("id", shift.branchId)
+        .maybeSingle();
+
+      await sendOperationalNotification({
+        brandId: session.brandId,
+        branchId: shift.branchId,
+        eventType: "CLOSE_SHIFT",
+        actorProfileId: session.profileId,
+        payload: {
+          branchName: branchRow?.name ?? "",
+          shiftNumber: shift.shiftNumber,
+          expectedCash: expectedCash,
+          countedCash: actualCash,
+          cashDifference: cashDiff,
+        },
+      });
+
+      if (Math.abs(cashDiff) > 0) {
+        await sendOperationalNotification({
+          brandId: session.brandId,
+          branchId: shift.branchId,
+          eventType: "CASH_DIFFERENCE_DETECTED",
+          actorProfileId: session.profileId,
+          payload: {
+            branchName: branchRow?.name ?? "",
+            cashDifference: cashDiff,
+            expectedCash: expectedCash,
+            countedCash: actualCash,
+          },
+        });
+      }
+    } catch (notifErr: any) {
+      console.warn("[StoreShiftActions] notification error:", notifErr.message);
     }
 
     return successResult({ shiftId });

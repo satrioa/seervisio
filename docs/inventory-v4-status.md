@@ -22,7 +22,7 @@
 - Dashboard (should not read V4 tables until reporting views exist)
 - Reporting / Finance report summaries
 - Finance dashboard summaries
-- Legacy service billing integration with V4 sparepart usage
+- ~~Legacy service billing integration with V4 sparepart usage~~ **CORRECTED**: sparepart usage is stock tracking only, does not affect billing
 - Trade-in (legacy POS handles this)
 - Partial refund (full void only)
 - Customer auto-complete in POS V4
@@ -79,7 +79,10 @@
 
 ## Known Limitations (Internal)
 
-1. **Service billing not auto-updated**: V4 service sparepart usage (`inv_sparepart_usage`) is recorded atomically but does not automatically update the service's `final_cost`. A separate sync step is needed.
+1. ~~Service billing not auto-updated~~ **RESOLVED (corrected)**:
+   - `final_cost = estimated_cost` on creation. Sparepart usage is **stock tracking only** and does **not** affect `final_cost`.
+   - `syncServiceBillingFromEstimate(serviceId)` normalises `final_cost = max(estimated_cost, totalPaid, 0)`.
+   - Backfill migration applied existing services.
 
 2. **Legacy/V4 coexistence**: Legacy `inventory_items`, `pos_sales`, `purchases` tables remain active. Do not mix legacy and V4 data in reports.
 
@@ -142,9 +145,89 @@ WHERE reference_type IN ('POS_TRANSACTION', 'INV_STOCK_PURCHASE')
 ORDER BY created_at DESC LIMIT 50;
 ```
 
+## Service Billing Validation SQL
+
+```sql
+-- Sanity check: final_cost should equal estimated_cost (sparepart usage is
+-- stock tracking only and does NOT affect billing).
+-- final_cost must never be below total paid.
+
+select
+  s.service_number,
+  s.estimated_cost,
+  s.final_cost,
+  coalesce((
+    select sum(p.gross_amount)
+    from public.service_payments p
+    where p.service_id = s.id
+      and p.payment_status = 'COMPLETED'
+  ), 0) as total_paid,
+  greatest(
+    coalesce(s.estimated_cost, 0),
+    coalesce((
+      select sum(p.gross_amount)
+      from public.service_payments p
+      where p.service_id = s.id
+        and p.payment_status = 'COMPLETED'
+    ), 0)
+  ) as expected_final_cost,
+  case
+    when coalesce(s.final_cost, 0) = greatest(
+      coalesce(s.estimated_cost, 0),
+      coalesce((
+        select sum(p.gross_amount)
+        from public.service_payments p
+        where p.service_id = s.id
+          and p.payment_status = 'COMPLETED'
+      ), 0)
+    ) then 'OK'
+    else 'MISMATCH'
+  end as check_status
+from public.services s
+where s.deleted_at is null
+order by s.created_at desc
+limit 50;
+
+-- Summary: count mismatches
+select
+  case
+    when coalesce(s.final_cost, 0) = greatest(
+      coalesce(s.estimated_cost, 0),
+      coalesce((
+        select sum(p.gross_amount)
+        from public.service_payments p
+        where p.service_id = s.id
+          and p.payment_status = 'COMPLETED'
+      ), 0)
+    ) then 'OK'
+    else 'MISMATCH'
+  end as check_status,
+  count(*)::integer
+from public.services s
+where s.deleted_at is null
+group by check_status;
+
+-- Simple check: estimated_cost > 0 should not have final_cost = 0
+select service_number, estimated_cost, final_cost
+from public.services
+where deleted_at is null
+  and coalesce(estimated_cost, 0) > 0
+  and coalesce(final_cost, 0) = 0;
+```
+
+## Service Sparepart Usage (stock tracking only)
+
+Sparepart consumed during a service is recorded in `inv_sparepart_usage` (V4) or `service_sparepart_usages` (legacy).
+These records exist solely for stock/debounce tracking and operational visibility.
+
+- Stock is deducted on usage; restored on return/cancel.
+- Service timeline and audit log record the usage event.
+- `final_cost` is **never** adjusted by sparepart consumption.
+- Customer billing is based on `estimated_cost` / `final_cost` only.
+
 ## Next Phase Plan
 
-- Service billing sync with V4 sparepart usage
+- ~~Service billing sync with V4 sparepart usage~~ **CORRECTED**: sparepart does not affect billing
 - Dashboard views for V4 data
 - Migrate legacy inventory features to V4
 - Full replacement of legacy routes (future phase)

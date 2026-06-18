@@ -32,18 +32,14 @@ import {
   getFinanceReportAction,
   exportFinanceReportCSVAction,
   type FinanceReportData,
+  type ShiftSummaryItem,
 } from "@/server/actions/finance-report.actions";
+import { getStoreShiftReportAction } from "@/server/actions/store-shift.actions";
 
+import { buildShiftReportPdf } from "@/lib/pdf/shift-report-pdf";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { can } from "@/lib/permissions/can";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
-
-/* ── Formatting ── */
-
-function fmtCurrency(n: number | null | undefined): string {
-  if (n == null) return "Rp 0";
-  return `Rp ${n.toLocaleString("id-ID")}`;
-}
 
 function fmtDate(value: string | null | undefined): string {
   if (!value) return "-";
@@ -57,6 +53,39 @@ function fmtDateTime(value: string | null | undefined): string {
   try {
     return new Date(value).toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch { return value; }
+}
+
+function fmtCurrency(n: number | null | undefined): string {
+  if (n == null) return "Rp 0";
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+async function downloadFinanceShiftSummaryPdf(brandSlug: string, shift: ShiftSummaryItem): Promise<void> {
+  const result = await getStoreShiftReportAction(brandSlug, shift.shiftId);
+  const report = result.success ? result.data : null;
+  const pdf = buildShiftReportPdf({
+    shiftNumber: shift.shiftNumber,
+    status: shift.status,
+    branchName: shift.branchName,
+    openedAt: shift.openedAt,
+    closedAt: shift.closedAt,
+    openedByName: shift.openedByName,
+    closedByName: shift.closedByName,
+    openingCash: shift.openingCash,
+    expectedClosingCash: shift.expectedClosingCash ?? null,
+    countedClosingCash: shift.countedClosingCash ?? null,
+    cashDifference: shift.cashDifference ?? null,
+    report: report ?? null,
+  });
+  const blob = new Blob([pdf], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `rincian-shift-${shift.shiftNumber.replace(/[^a-zA-Z0-9-]/g, "-")}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function todayISO(): string {
@@ -249,22 +278,11 @@ export default function FinanceReportPage() {
                 {preset === "today" ? "Hari ini" : preset === "7days" ? "7 Hari" : preset === "month" ? "Bulan ini" : "Custom"}
               </button>
             ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {datePreset === "custom" && (
-              <div className="flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-muted-foreground" />
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
-                <span className="text-xs text-muted-foreground">—</span>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
-              </div>
-            )}
 
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5 ml-auto"
+              className="ml-auto h-8 gap-1.5 text-xs"
               onClick={handleExport}
               disabled={exporting || loading || !canExport}
             >
@@ -272,6 +290,17 @@ export default function FinanceReportPage() {
               Export CSV
             </Button>
           </div>
+
+          {datePreset === "custom" && (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-muted-foreground" />
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
+                <span className="text-xs text-muted-foreground">—</span>
+                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -489,13 +518,13 @@ export default function FinanceReportPage() {
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <ArrowUpRight className="size-3 text-emerald-600" /> Total Masuk
                       </p>
-                      <p className="text-lg font-semibold text-emerald-600 tabular-nums">{fmtCurrency(s.netCashflow + s.totalExpense + s.totalMdr)}</p>
+                      <p className="text-lg font-semibold text-emerald-600 tabular-nums">{fmtCurrency(s.totalInMovements)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <ArrowDownRight className="size-3 text-red-600" /> Total Keluar
                       </p>
-                      <p className="text-lg font-semibold text-red-600 tabular-nums">{fmtCurrency(s.totalExpense + s.totalMdr)}</p>
+                      <p className="text-lg font-semibold text-red-600 tabular-nums">{fmtCurrency(s.totalOutMovements)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground">Net Cashflow</p>
@@ -511,14 +540,21 @@ export default function FinanceReportPage() {
                     ) : (
                       <div className="space-y-1">
                         {recentMovements.slice(0, 10).map((m) => (
-                          <div key={m.id} className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-xs">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div key={m.id} className="flex items-start justify-between gap-3 rounded-md bg-muted/30 px-3 py-2 text-xs">
+                            <div className="flex min-w-0 flex-1 items-start gap-2">
                               <span className={`shrink-0 font-medium ${m.direction === "IN" ? "text-emerald-600" : "text-red-600"}`}>
                                 {m.direction === "IN" ? "+" : "-"}
                               </span>
-                              <span className="truncate text-muted-foreground">{m.accountName}</span>
-                              <span className="text-muted-foreground/60">·</span>
-                              <span className="truncate">{m.movementType}</span>
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate text-muted-foreground">{m.accountName}</span>
+                                  <span className="text-muted-foreground/60">·</span>
+                                  <span className="truncate">{m.movementType}</span>
+                                </div>
+                                <p className="text-[11px] leading-4 text-muted-foreground">
+                                  {fmtDateTime(m.createdAt)}
+                                </p>
+                              </div>
                             </div>
                             <span className={`shrink-0 font-medium tabular-nums ${m.direction === "IN" ? "text-emerald-600" : "text-red-600"}`}>
                               {fmtCurrency(m.amount)}
@@ -567,6 +603,7 @@ export default function FinanceReportPage() {
                             <TableHead className="text-xs text-right">Kas Akhir (Harapan)</TableHead>
                             <TableHead className="text-xs text-right">Kas Akhir (Riil)</TableHead>
                             <TableHead className="text-xs text-right">Selisih</TableHead>
+                            <TableHead className="text-xs text-right">Aksi</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -586,6 +623,19 @@ export default function FinanceReportPage() {
                                   : ""
                               }`}>
                                 {sh.cashDifference != null ? fmtCurrency(sh.cashDifference) : "-"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => void downloadFinanceShiftSummaryPdf(brandSlug, sh)}
+                                  title="Download rincian shift PDF"
+                                  aria-label={`Download rincian shift ${sh.shiftNumber}`}
+                                >
+                                  <Download className="size-3.5" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}

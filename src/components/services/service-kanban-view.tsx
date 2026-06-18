@@ -222,6 +222,41 @@ interface ServiceColumnProps {
 function ServiceColumn({ status, services, index = 0, isOverlay, onCardClick, onCardDoubleClick }: ServiceColumnProps) {
   const styles = STATUS_COLUMN_STYLES[status];
   const config = STATUS_CONFIG[status];
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const [scrollFade, setScrollFade] = React.useState({
+    top: false,
+    bottom: false,
+  });
+
+  const updateScrollFade = React.useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    const maxScrollTop = element.scrollHeight - element.clientHeight;
+    const hasOverflow = maxScrollTop > 2;
+
+    setScrollFade({
+      top: hasOverflow && element.scrollTop > 2,
+      bottom: hasOverflow && maxScrollTop - element.scrollTop > 2,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    updateScrollFade();
+
+    const element = scrollRef.current;
+    if (!element) return;
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateScrollFade);
+      return () => window.removeEventListener("resize", updateScrollFade);
+    }
+
+    const resizeObserver = new ResizeObserver(updateScrollFade);
+    resizeObserver.observe(element);
+
+    return () => resizeObserver.disconnect();
+  }, [services.length, updateScrollFade]);
 
   return (
     <KanbanColumn
@@ -264,9 +299,21 @@ function ServiceColumn({ status, services, index = 0, isOverlay, onCardClick, on
 
         {/* Column Content */}
         <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-4 bg-gradient-to-b from-card/95 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-gradient-to-t from-card/95 to-transparent" />
-          <div className="h-full overflow-y-auto p-2 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div
+            className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-4 bg-gradient-to-b from-card/95 to-transparent transition-opacity duration-200 ${
+              scrollFade.top ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <div
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-gradient-to-t from-card/95 to-transparent transition-opacity duration-200 ${
+              scrollFade.bottom ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollFade}
+            className="h-full overflow-y-auto p-2 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             <KanbanColumnContent
               value={status}
               className="flex flex-col gap-2 pb-2"

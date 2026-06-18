@@ -118,15 +118,15 @@ export function PartitionBarSegment({
 }: PartitionBarSegment) {
   const { total, size } = usePartitionBarContext();
 
-  const widthPercent = total > 0 ? (num / total) * 100 : 0;
+  const segmentWeight = total > 0 ? Math.max(num, 0.35) : 1;
 
   return (
     <li
       className="flex min-w-0 flex-col"
       style={{
-        flexBasis: `${widthPercent}%`,
-        flexGrow: 0,
-        flexShrink: 0
+        flexBasis: 0,
+        flexGrow: segmentWeight,
+        flexShrink: 1
       }}
       {...props}
     >

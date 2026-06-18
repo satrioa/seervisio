@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useCallback, useState, useEffect, Suspense } from "react";
 import { usePathname } from "next/navigation";
-import { Clock, Store, ArrowUpRight, ArrowDownRight, CircleDollarSign, Wallet, History, X, AlertTriangle, Timer, User, CalendarDays } from "lucide-react";
+import { Clock, Store, ArrowUpRight, ArrowDownRight, CircleDollarSign, Wallet, History, X, AlertTriangle, Timer, User, CalendarDays, Download } from "lucide-react";
 
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { PageHeader } from "@/components/layout/page-header";
@@ -16,39 +16,49 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StoreShiftCloseModal } from "@/components/store-shift/StoreShiftCloseModal";
 import {
   getStoreShiftOverviewAction,
+  getStoreShiftReportAction,
   listStoreShiftsAction,
   type StoreShiftOverview,
   type PaymentBreakdownItem,
   type TransactionItem,
 } from "@/server/actions/store-shift.actions";
 import type { StoreShift } from "@/types/app";
+import { buildShiftReportPdf, formatRupiah as formatCurrency, formatDateTime, formatDateShort as formatDate } from "@/lib/pdf/shift-report-pdf";
 
-function formatCurrency(n: number | null | undefined): string {
-  if (n == null) return "Rp 0";
-  return `Rp ${n.toLocaleString("id-ID")}`;
+function getExpectedClosingCash(shift: StoreShift, activeExpectedCash?: number | null) {
+  return shift.shiftStatus === "OPEN" ? activeExpectedCash ?? shift.expectedClosingCash : shift.expectedClosingCash;
 }
 
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("id-ID", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
-}
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleDateString("id-ID", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+async function downloadShiftSummaryPdf(
+  brandSlug: string,
+  shift: StoreShift,
+  activeExpectedCash?: number | null,
+) {
+  const result = await getStoreShiftReportAction(brandSlug, shift.id);
+  const report = result.success ? result.data : null;
+  const expectedCash = report?.expectedCash ?? getExpectedClosingCash(shift, activeExpectedCash);
+  const pdf = buildShiftReportPdf({
+    shiftNumber: shift.shiftNumber,
+    status: shift.shiftStatus,
+    openedAt: shift.openedAt,
+    closedAt: shift.closedAt ?? null,
+    openedByName: shift.openedByName ?? (shift.openedBy ?? null),
+    closedByName: shift.closedByName ?? (shift.closedBy ?? null),
+    openingCash: shift.openingCash,
+    expectedClosingCash: expectedCash ?? null,
+    countedClosingCash: shift.countedClosingCash ?? null,
+    cashDifference: shift.cashDifference ?? null,
+    report: report ?? null,
+  });
+  const blob = new Blob([pdf], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${shift.shiftNumber || "shift"}-ringkasan.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function SkeletonCard() {
@@ -347,7 +357,15 @@ function TransactionActivity({ transactions }: { transactions: TransactionItem[]
 }
 
 /* ── Shift History Table ── */
-function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[]; activeExpectedCash?: number | null }) {
+function ShiftHistoryTable({
+  shifts,
+  activeExpectedCash,
+  brandSlug,
+}: {
+  shifts: StoreShift[];
+  activeExpectedCash?: number | null;
+  brandSlug: string;
+}) {
   if (shifts.length === 0) {
     return (
       <Card>
@@ -404,9 +422,7 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
                 <TableCell className="text-xs whitespace-nowrap">{formatDateTime(shift.closedAt)}</TableCell>
                 <TableCell className="text-xs text-right">{formatCurrency(shift.openingCash)}</TableCell>
                 <TableCell className="text-xs text-right">
-                  {shift.shiftStatus === "OPEN"
-                    ? formatCurrency(activeExpectedCash ?? shift.expectedClosingCash)
-                    : formatCurrency(shift.expectedClosingCash)}
+                  {formatCurrency(getExpectedClosingCash(shift, activeExpectedCash))}
                 </TableCell>
                 <TableCell className="text-xs text-right">{formatCurrency(shift.countedClosingCash)}</TableCell>
                 <TableCell className={`text-xs text-right font-medium ${
@@ -414,7 +430,22 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
                 }`}>
                   {(shift.cashDifference ?? 0) > 0 ? "+" : ""}{formatCurrency(shift.cashDifference)}
                 </TableCell>
-                <TableCell><StatusBadge status={shift.shiftStatus} /></TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge status={shift.shiftStatus} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                      onClick={() => void downloadShiftSummaryPdf(brandSlug, shift, activeExpectedCash)}
+                      title="Download rincian shift PDF"
+                      aria-label={`Download rincian shift ${shift.shiftNumber}`}
+                    >
+                      <Download className="size-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -426,7 +457,20 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
           <div key={shift.id} className="rounded-lg border p-3 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium">{shift.shiftNumber}</span>
-              <StatusBadge status={shift.shiftStatus} />
+              <div className="flex items-center gap-1.5">
+                <StatusBadge status={shift.shiftStatus} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                  onClick={() => void downloadShiftSummaryPdf(brandSlug, shift, activeExpectedCash)}
+                  title="Download rincian shift PDF"
+                  aria-label={`Download rincian shift ${shift.shiftNumber}`}
+                >
+                  <Download className="size-3.5" />
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
               <span>Tanggal: {formatDate(shift.openedAt)}</span>
@@ -434,7 +478,7 @@ function ShiftHistoryTable({ shifts, activeExpectedCash }: { shifts: StoreShift[
               <span>Ditutup: {formatDateTime(shift.closedAt)}</span>
               <span>Oleh: {shift.openedByName || shift.openedBy || "-"}</span>
               <span>Saldo awal: {formatCurrency(shift.openingCash)}</span>
-              <span>Expected: {formatCurrency(shift.shiftStatus === "OPEN" ? activeExpectedCash ?? shift.expectedClosingCash : shift.expectedClosingCash)}</span>
+              <span>Expected: {formatCurrency(getExpectedClosingCash(shift, activeExpectedCash))}</span>
               <span>Aktual: {formatCurrency(shift.countedClosingCash)}</span>
               <span className={`font-medium ${(shift.cashDifference ?? 0) > 0 ? "text-green-600" : (shift.cashDifference ?? 0) < 0 ? "text-red-600" : ""}`}>
                 Selisih: {(shift.cashDifference ?? 0) > 0 ? "+" : ""}{formatCurrency(shift.cashDifference)}
@@ -609,7 +653,7 @@ function StoreShiftPageContent() {
           </CardContent>
         </Card>
       ) : (
-        <ShiftHistoryTable shifts={shiftHistory} activeExpectedCash={expectedCash} />
+        <ShiftHistoryTable shifts={shiftHistory} activeExpectedCash={expectedCash} brandSlug={brandSlug} />
       )}
     </div>
   );

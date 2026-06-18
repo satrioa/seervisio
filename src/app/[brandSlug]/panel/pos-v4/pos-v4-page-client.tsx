@@ -127,8 +127,16 @@ function PosProductCard({
 
   const badge = isSingleVariant ? stockBadge(firstVariant, isUnitSecond) : null;
 
-  const minPrice = Math.min(...product.variants.map((v) => v.sellingPrice));
-  const hasPriceRange = product.variants.some((v) => v.sellingPrice !== minPrice);
+  const prices = product.variants
+    .map((v) => Number(v.sellingPrice ?? 0))
+    .filter((p) => Number.isFinite(p) && p > 0);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : minPrice;
+  const priceText = minPrice <= 0
+    ? formatPrice(0)
+    : minPrice === maxPrice
+      ? formatPrice(minPrice)
+      : `${formatPrice(minPrice)} - ${formatPrice(maxPrice)}`;
 
   const initials = product.name
     .split(" ")
@@ -136,8 +144,6 @@ function PosProductCard({
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
-
-  const productLabel = product.categoryName ?? (product.productKind === "UNIT" ? "Unit" : "Produk");
 
   const totalUnitSecondStock = isUnitSecond
     ? product.variants.reduce((s, v) => s + v.currentStock, 0)
@@ -152,7 +158,7 @@ function PosProductCard({
       className="w-[220px] text-left disabled:opacity-40"
     >
       <div className="relative flex h-[238px] w-full flex-col rounded-[14px] border border-border bg-card p-3 text-card-foreground shadow-sm transition hover:border-sidebar-accent hover:bg-card/95 hover:shadow-md dark:border-sidebar-border dark:bg-background/70 dark:hover:bg-background/85">
-        <div className="mb-3 flex h-[100px] w-full items-center justify-center overflow-hidden rounded-xl bg-muted/60 dark:bg-sidebar-accent/45">
+        <div className="relative mb-3 flex h-[100px] w-full items-center justify-center overflow-hidden rounded-xl bg-muted/60 dark:bg-sidebar-accent/45">
           {displayImage ? (
             <img
               src={displayImage}
@@ -168,6 +174,22 @@ function PosProductCard({
               )}
               <span className="mt-1 text-xs font-medium">{initials || "—"}</span>
             </div>
+          )}
+          {isSingleVariant && badge && (
+             <Badge
+               variant="outline"
+               className={`absolute right-2 top-2 h-5 shrink-0 rounded-full border px-2 text-[10px] font-medium ${badge.className}`}
+             >
+               {badge.label}
+             </Badge>
+          )}
+          {!isSingleVariant && isUnitSecond && (
+            <Badge
+              variant="outline"
+              className="absolute right-2 top-2 h-5 rounded-full border-blue-200 bg-blue-50 px-2 text-[10px] font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+            >
+              {totalUnitSecondStock} ready
+            </Badge>
           )}
         </div>
 
@@ -186,7 +208,7 @@ function PosProductCard({
                 </Badge>
               )}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{productLabel}</p>
+            
           </div>
 
           <div className="mt-2 flex min-h-[24px] shrink-0 flex-wrap gap-1.5 overflow-hidden">
@@ -214,8 +236,7 @@ function PosProductCard({
 
           <div className="mt-auto flex shrink-0 items-center justify-between pt-2">
             <span className="text-sm font-bold tabular-nums text-foreground">
-              {formatPrice(minPrice)}
-              {hasPriceRange ? "+" : ""}
+              {priceText}
             </span>
             {isSingleVariant && !isUnitSecond && (
               <span className="text-xs text-muted-foreground">
@@ -404,11 +425,11 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
 
   /* ── Unit Second Picker ── */
 
-  const openUnitPicker = React.useCallback(async (productId: string, productName: string) => {
+  const openUnitPicker = React.useCallback(async (productIds: string[], productName: string) => {
     if (!activeBranchId) return;
     setUnitPickerProductName(productName);
     setUnitPickerOpen(true);
-    const res = await listPosUnitOptionsV4Action(brandSlug, productId, activeBranchId);
+    const res = await listPosUnitOptionsV4Action(brandSlug, productIds, activeBranchId);
     if (res.success) setUnitOptions(res.data ?? []);
   }, [brandSlug, activeBranchId]);
 
@@ -417,7 +438,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
       triggerDynamicIslandFeedback({ title: "Unit sudah ada di keranjang.", type: "error" });
       return;
     }
-    const product = products.find((p) => p.productId === unit.productId);
+    const product = products.find((p) => p.productId === unit.productId || p.productIds?.includes(unit.productId));
     const variant = unit.variantId ? product?.variants.find((v) => v.variantId === unit.variantId) : null;
     const newItem: PosCartItemV4 = {
       tempId: crypto.randomUUID(),
@@ -445,7 +466,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
 
   const addVariantToCart = React.useCallback((product: PosProductV4Row, variant: PosVariantV4Row) => {
     if (product.conditionType === "SECOND") {
-      openUnitPicker(product.productId, product.name);
+      openUnitPicker(product.productIds ?? [product.productId], product.name);
       return;
     }
     const existing = cart.find((c) => c.variantId === variant.variantId && c.type !== "UNIT_SECOND_SERIALIZED");
@@ -492,7 +513,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
 
     // Unit SECOND → open IMEI picker
     if (product.productKind === "UNIT" && product.conditionType === "SECOND") {
-      openUnitPicker(product.productId, product.name);
+      openUnitPicker(product.productIds ?? [product.productId], product.name);
       return;
     }
 
@@ -592,6 +613,14 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
         sellingPrice: c.price,
       })),
     };
+
+    console.log("[pos-v4/checkout] input", {
+      branchId: activeBranchId,
+      selectedMethod,
+      paymentMethods,
+      total,
+      paidAmount: isCash ? paidAmount : total,
+    });
 
     const res = await checkoutPosV4Action(brandSlug, input);
     setSubmitting(false);

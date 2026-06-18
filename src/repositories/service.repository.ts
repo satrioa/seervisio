@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 
 export interface ServiceRow {
   id: string;
@@ -133,6 +134,7 @@ export interface CreateServiceDBInput {
   reported_issue: string;
   diagnosis_result?: string | null;
   estimated_cost?: number;
+  assigned_technician_id?: string | null;
   created_by: string;
 }
 
@@ -156,6 +158,8 @@ export async function insertService(
       reported_issue: input.reported_issue,
       diagnosis_result: input.diagnosis_result ?? null,
       estimated_cost: input.estimated_cost ?? 0,
+      final_cost: input.estimated_cost ?? 0,
+      assigned_technician_id: input.assigned_technician_id ?? null,
       current_status: "INTAKE",
       created_by: input.created_by,
     })
@@ -181,6 +185,23 @@ export async function getServiceStatusSummary(
     counts[row.current_status] = (counts[row.current_status] ?? 0) + 1;
   }
   return Object.entries(counts).map(([status, count]) => ({ status, count }));
+}
+
+export async function updateServiceTechnician(
+  serviceId: string,
+  technicianProfileId: string | null,
+  updatedBy: string
+): Promise<void> {
+  const supabase = await createServerSupabase();
+  const { error } = await (supabase as any)
+    .from("services")
+    .update({
+      assigned_technician_id: technicianProfileId,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", serviceId);
+  if (error) throw error;
 }
 
 export async function updateServiceStatus(
@@ -324,4 +345,93 @@ export async function getServiceStatusHistory(
     .order("changed_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+/* ─── Service Billing Sync ─── */
+
+export interface SyncBillingResult {
+  previousFinalCost: number;
+  newFinalCost: number;
+  totalPaid: number;
+  isPaymentSafe: boolean;
+}
+
+/**
+ * Normalise services.final_cost based on estimated_cost and payment safety.
+ *
+ * Business rule: sparepart usage is stock tracking only and does NOT affect
+ * service billing. final_cost is the customer-facing service charge.
+ *
+ *   newFinalCost = max(estimated_cost, totalPaid, 0)
+ */
+export async function syncServiceBillingFromEstimate(
+  serviceId: string,
+): Promise<SyncBillingResult> {
+  const supabase = createServiceRoleSupabaseClient();
+
+  const { data: service } = await (supabase as any)
+    .from("services")
+    .select("id, estimated_cost, final_cost")
+    .eq("id", serviceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!service) throw new Error("Service not found");
+
+  const estimatedCost = Number(service.estimated_cost ?? 0);
+  const previousFinalCost = Number(service.final_cost ?? 0);
+
+  const { data: payments } = await (supabase as any)
+    .from("service_payments")
+    .select("gross_amount, payment_status")
+    .eq("service_id", serviceId)
+    .eq("payment_status", "COMPLETED");
+
+  const totalPaid = (payments ?? []).reduce(
+    (sum: number, p: any) => sum + Number(p.gross_amount ?? 0),
+    0,
+  );
+
+  let newFinalCost = Math.max(estimatedCost, totalPaid, 0);
+  const isPaymentSafe = newFinalCost >= totalPaid;
+
+  await (supabase as any)
+    .from("services")
+    .update({
+      final_cost: newFinalCost,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", serviceId);
+
+  console.log("[syncServiceBillingFromEstimate]", {
+    serviceId,
+    estimatedCost,
+    previousFinalCost,
+    newFinalCost,
+    totalPaid,
+    isPaymentSafe,
+  });
+
+  return {
+    previousFinalCost,
+    newFinalCost,
+    totalPaid,
+    isPaymentSafe,
+  };
+}
+
+export async function getServiceTotalPaid(
+  serviceId: string,
+): Promise<number> {
+  const supabase = createServiceRoleSupabaseClient();
+  const { data: payments } = await (supabase as any)
+    .from("service_payments")
+    .select("gross_amount")
+    .eq("service_id", serviceId)
+    .eq("payment_status", "COMPLETED");
+
+  return (payments ?? []).reduce(
+    (sum: number, p: any) => sum + Number(p.gross_amount ?? 0),
+    0,
+  );
 }

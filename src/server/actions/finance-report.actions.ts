@@ -32,6 +32,8 @@ export interface ReportSummary {
   bankFee: number;
   totalMdr: number;
   netCashflow: number;
+  totalInMovements: number;
+  totalOutMovements: number;
   estimatedNetProfit: number;
   unpaidServiceCount: number;
   totalReceivable: number;
@@ -170,7 +172,7 @@ export async function getFinanceReportAction(
         : accessibleBranchIds;
 
     /* ── 2. Run parallel queries ── */
-    const [movementsResult, servicePaymentsResult, posSalesResult, accountsResult, shiftsResult, servicesResult, bpmResult] =
+    const [movementsResult, servicePaymentsResult, posSalesResult, accountsResult, shiftsResult, servicesResult, bpmResult, ledgerResult, posTransactionsResult] =
       await Promise.all([
         /* Movements */
         (supabase as any)
@@ -249,8 +251,27 @@ export async function getFinanceReportAction(
         /* Branch payment methods for account linkage */
         (supabase as any)
           .from("branch_payment_methods")
-          .select(`payment_account_id, payment_methods!inner(name, type)`)
+          .select(`id, payment_account_id, method_type, payment_methods!inner(name, type)`)
           .in("branch_id", branchFilter),
+
+        /* Finance ledger */
+        (supabase as any)
+          .from("finance_ledger")
+          .select("entry_type, direction, amount, branch_id")
+          .eq("brand_id", session.brandId)
+          .in("branch_id", branchFilter)
+          .gte("ledger_date", dateFromStr)
+          .lte("ledger_date", dateToStr),
+
+        /* POS transactions V4 */
+        (supabase as any)
+          .from("pos_transactions")
+          .select("id, branch_id, payment_method_id, total_amount, mdr_amount")
+          .eq("brand_id", session.brandId)
+          .in("branch_id", branchFilter)
+          .eq("transaction_status", "COMPLETED")
+          .gte("created_at", dateFromStr)
+          .lte("created_at", dateToStr),
       ]);
 
     const movements = (movementsResult.data ?? []) as any[];
@@ -260,6 +281,8 @@ export async function getFinanceReportAction(
     const shifts = (shiftsResult.data ?? []) as any[];
     const services = (servicesResult.data ?? []) as any[];
     const bpms = (bpmResult.data ?? []) as any[];
+    const ledgerRows = (ledgerResult.data ?? []) as any[];
+    const posTransactions = (posTransactionsResult.data ?? []) as any[];
 
     /* Build account→methods map */
     const accountMethodMap = new Map<string, Set<string>>();
@@ -272,41 +295,32 @@ export async function getFinanceReportAction(
       if (pm?.name) accountMethodMap.get(bpm.payment_account_id)!.add(pm.name);
     }
 
-    /* ── 3. Compute summary KPIs ── */
+    /* ── 3. Compute summary KPIs from finance_ledger ── */
 
-    const totalServiceRevenue = servicePayments.reduce(
-      (s: number, p: any) => s + Number(p.gross_amount || 0), 0,
-    );
-    const serviceRevenueCount = servicePayments.length;
+    const ledgerTotalRevenue = ledgerRows
+      .filter((r: any) => r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerServiceRevenue = ledgerRows
+      .filter((r: any) => r.entry_type === "SERVICE_REVENUE" && r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerServiceRevenueCount = ledgerRows
+      .filter((r: any) => r.entry_type === "SERVICE_REVENUE" && r.direction === "CREDIT").length;
+    const ledgerPosRevenue = ledgerRows
+      .filter((r: any) => r.entry_type === "POS_REVENUE" && r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerPosRevenueCount = ledgerRows
+      .filter((r: any) => r.entry_type === "POS_REVENUE" && r.direction === "CREDIT").length;
+    const ledgerOtherIncome = ledgerRows
+      .filter((r: any) => r.direction === "CREDIT" && r.entry_type !== "SERVICE_REVENUE" && r.entry_type !== "POS_REVENUE")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerTotalExpense = ledgerRows
+      .filter((r: any) => r.direction === "DEBIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerTotalMdr = ledgerRows
+      .filter((r: any) => r.entry_type === "MDR_EXPENSE" && r.direction === "DEBIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
-    const totalPosRevenue = posSales.reduce(
-      (s: number, p: any) => s + Number(p.gross_amount || 0), 0,
-    );
-    const posRevenueCount = posSales.length;
-
-    const otherIncome = movements
-      .filter((m: any) => m.movement_type === "OTHER_INCOME" && m.direction === "IN")
-      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-
-    const operatingExpense = movements
-      .filter((m: any) => m.movement_type === "OPERATING_EXPENSE" && m.direction === "OUT")
-      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-
-    const bankFee = movements
-      .filter((m: any) => m.movement_type === "BANK_FEE")
-      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-
-    const mdrFromMovements = bankFee;
-    const mdrFromServicePayments = servicePayments.reduce(
-      (s: number, p: any) => s + Number(p.mdr_amount || 0), 0,
-    );
-    const mdrFromPosSales = posSales.reduce(
-      (s: number, p: any) => s + Number(p.mdr_amount || 0), 0,
-    );
-    const totalMdr = mdrFromMovements + mdrFromServicePayments + mdrFromPosSales;
-
-    const totalExpense = operatingExpense + bankFee;
-
+    /* Keep net cashflow from payment_account_movements (actual cash flow) */
     const totalIn = movements
       .filter((m: any) => m.direction === "IN")
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
@@ -315,8 +329,13 @@ export async function getFinanceReportAction(
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
     const netCashflow = totalIn - totalOut;
 
-    const totalRevenue = totalServiceRevenue + totalPosRevenue + otherIncome;
-    const estimatedNetProfit = totalRevenue - totalExpense - totalMdr;
+    /* Keep legacy values for backward compat */
+    const operatingExpense = movements
+      .filter((m: any) => m.movement_type === "OPERATING_EXPENSE" && m.direction === "OUT")
+      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
+    const bankFee = movements
+      .filter((m: any) => m.movement_type === "BANK_FEE")
+      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
 
     /* Unpaid services */
     let unpaidServiceCount = 0;
@@ -333,28 +352,30 @@ export async function getFinanceReportAction(
     }
 
     const summary: ReportSummary = {
-      totalRevenue,
-      serviceRevenue: totalServiceRevenue,
-      serviceRevenueCount,
-      posRevenue: totalPosRevenue,
-      posRevenueCount,
-      otherIncome,
-      totalExpense,
+      totalRevenue: ledgerTotalRevenue,
+      serviceRevenue: ledgerServiceRevenue,
+      serviceRevenueCount: ledgerServiceRevenueCount,
+      posRevenue: ledgerPosRevenue,
+      posRevenueCount: ledgerPosRevenueCount,
+      otherIncome: ledgerOtherIncome,
+      totalExpense: ledgerTotalExpense,
       operatingExpense,
       bankFee,
-      totalMdr,
+      totalMdr: ledgerTotalMdr,
       netCashflow,
-      estimatedNetProfit,
+      totalInMovements: totalIn,
+      totalOutMovements: totalOut,
+      estimatedNetProfit: ledgerTotalRevenue - ledgerTotalExpense,
       unpaidServiceCount,
       totalReceivable,
     };
 
     /* ── 4. Revenue breakdown ── */
-    const revTotal = totalRevenue || 1;
+    const revTotal = ledgerTotalRevenue || 1;
     const revenueBreakdown: RevenueBreakdownItem[] = [
-      { source: "Servis", amount: totalServiceRevenue, percentage: (totalServiceRevenue / revTotal) * 100 },
-      { source: "POS / Aksesoris", amount: totalPosRevenue, percentage: (totalPosRevenue / revTotal) * 100 },
-      { source: "Pendapatan Lain", amount: otherIncome, percentage: (otherIncome / revTotal) * 100 },
+      { source: "Servis", amount: ledgerServiceRevenue, percentage: (ledgerServiceRevenue / revTotal) * 100 },
+      { source: "POS / Aksesoris", amount: ledgerPosRevenue, percentage: (ledgerPosRevenue / revTotal) * 100 },
+      { source: "Pendapatan Lain", amount: ledgerOtherIncome, percentage: (ledgerOtherIncome / revTotal) * 100 },
     ];
 
     /* ── 5. Payment method breakdown ── */
@@ -381,6 +402,29 @@ export async function getFinanceReportAction(
       entry.gross += Number(s.gross_amount || 0);
       entry.count++;
       entry.mdr += Number(s.mdr_amount || 0);
+      entry.name = name;
+      entry.type = key;
+      pmtMap.set(key, entry);
+    }
+
+    /* POS V4 transactions */
+    const bpmMethodMap = new Map<string, string>();
+    for (const bpm of bpms) {
+      if (bpm.id) bpmMethodMap.set(bpm.id, bpm.method_type || bpm.payment_methods?.type || "UNKNOWN");
+    }
+    const bpmNameMap = new Map<string, string>();
+    for (const bpm of bpms) {
+      if (bpm.id) bpmNameMap.set(bpm.id, bpm.payment_methods?.name || bpm.method_type || "UNKNOWN");
+    }
+
+    for (const t of posTransactions) {
+      const bpmId = t.payment_method_id;
+      const key = bpmMethodMap.get(bpmId) || "UNKNOWN";
+      const name = bpmNameMap.get(bpmId) || key;
+      const entry = pmtMap.get(key) || { gross: 0, count: 0, mdr: 0, name, type: key };
+      entry.gross += Number(t.total_amount || 0);
+      entry.count++;
+      entry.mdr += Number(t.mdr_amount || 0);
       entry.name = name;
       entry.type = key;
       pmtMap.set(key, entry);
@@ -442,14 +486,23 @@ export async function getFinanceReportAction(
       }
     }
 
-    for (const p of servicePayments) {
-      const perf = branchPerfMap.get(p.branch_id);
-      if (perf) perf.serviceRevenue += Number(p.gross_amount || 0);
+    /* Aggregate from finance_ledger (source of truth) */
+    for (const r of ledgerRows) {
+      const perf = branchPerfMap.get(r.branch_id);
+      if (!perf) continue;
+      if (r.direction === "CREDIT") {
+        if (r.entry_type === "SERVICE_REVENUE") {
+          perf.serviceRevenue += Number(r.amount || 0);
+        } else if (r.entry_type === "POS_REVENUE") {
+          perf.posRevenue += Number(r.amount || 0);
+        } else {
+          perf.otherIncome += Number(r.amount || 0);
+        }
+      } else if (r.direction === "DEBIT") {
+        perf.expense += Number(r.amount || 0);
+      }
     }
-    for (const s of posSales) {
-      const perf = branchPerfMap.get(s.branch_id);
-      if (perf) perf.posRevenue += Number(s.gross_amount || 0);
-    }
+    /* Also aggregate from movements for non-ledger data */
     for (const m of movements) {
       const perf = branchPerfMap.get(m.branch_id);
       if (!perf) continue;
@@ -495,13 +548,29 @@ export async function getFinanceReportAction(
     }));
 
     /* ── 9. Recent movements (top 20) ── */
-    const enrichedRecent = movements.slice(0, 20).map((m: any) => {
+    const recentSlice = movements.slice(0, 20);
+    const recentPosTransIds = recentSlice
+      .filter((m: any) => m.reference_type === "pos_transaction" && m.reference_id)
+      .map((m: any) => m.reference_id);
+    let recentPosTransMap = new Map<string, string>();
+    if (recentPosTransIds.length > 0) {
+      const { data: ptData } = await (supabase as any)
+        .from("pos_transactions")
+        .select("id, transaction_number")
+        .in("id", recentPosTransIds);
+      if (ptData) {
+        for (const pt of ptData) recentPosTransMap.set(pt.id, pt.transaction_number);
+      }
+    }
+    const enrichedRecent = recentSlice.map((m: any) => {
       const refType = m.reference_type;
       const refId = m.reference_id;
       let refLabel = "-";
       if (refType === "BALANCE_ADJUSTMENT" || m.movement_type === "BALANCE_ADJUSTMENT") refLabel = "Penyesuaian Saldo";
       else if (refType === "OPENING_BALANCE" || m.movement_type === "OPENING_BALANCE") refLabel = "Saldo Awal";
-      else if (refType && refId) refLabel = `${refType}:${refId.slice(0, 8)}`;
+      else if (refType === "pos_transaction" && refId) {
+        refLabel = recentPosTransMap.get(refId) || `POS:${refId.slice(0, 8)}`;
+      } else if (refType && refId) refLabel = `${refType}:${refId.slice(0, 8)}`;
 
       return {
         id: m.id,

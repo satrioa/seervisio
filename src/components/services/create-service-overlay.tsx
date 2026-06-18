@@ -25,6 +25,7 @@ const initialFormData: CreateServiceFormData = {
   issue: "",
   additionalNotes: "",
   branch: "",
+  assignedTechnicianId: "",
 };
 
 interface CreateServiceOverlayProps {

@@ -924,6 +924,8 @@ export async function searchPurchaseVariantsV4(
       sellingPrice: Number(raw.selling_price),
       minStock: Number(raw.min_stock ?? 0),
       currentStock: Number(stockData?.current_stock ?? 0),
+      reservedStock: 0,
+      stockAvailable: Number(stockData?.current_stock ?? 0),
       attributes: raw.attributes ?? {},
       categoryId: raw.inv_products.category_id,
     });
@@ -1191,7 +1193,7 @@ export async function submitStockOpnameV4(
   };
 }
 
-/* ─── Search service sparepart variants V4 (spareparts only, for service usage) ─── */
+/* ─── Search service sparepart variants V4 (for service usage picker) ─── */
 
 export async function searchServiceSparepartsV4(
   supabase: SupabaseClientLike,
@@ -1200,56 +1202,90 @@ export async function searchServiceSparepartsV4(
   search?: string,
 ): Promise<PurchaseVariantSearchRow[]> {
   let query = (supabase as any)
-    .from("inv_variants")
+    .from("inv_variant_stocks")
     .select(`
-      id, name, product_id, sku, barcode, unit, min_stock,
-      cost_price, selling_price, attributes,
-      inv_products!inner(id, name, product_kind, condition_type, category_id)
+      id, branch_id, variant_id, current_stock, reserved_stock,
+      inv_variants!inner(
+        id, name, product_id, sku, barcode, unit, min_stock,
+        cost_price, selling_price, attributes,
+        is_active,
+        inv_products!inner(
+          id, name, product_kind, condition_type,
+          category_id, is_active, service_usage_enabled
+        )
+      )
     `)
-    .eq("inv_products.brand_id", brandId)
-    .eq("inv_products.product_kind", "SPAREPART")
-    .eq("inv_products.service_usage_enabled", true)
+    .eq("branch_id", branchId)
     .eq("inv_variants.is_active", true)
-    .order("inv_products.name", { ascending: true });
+    .eq("inv_variants.inv_products.brand_id", brandId)
+    .eq("inv_variants.inv_products.product_kind", "SPAREPART")
+    .eq("inv_variants.inv_products.service_usage_enabled", true)
+    .eq("inv_variants.inv_products.is_active", true)
+    .gte("current_stock", 1);
 
   if (search && search.trim()) {
     const term = search.trim();
     query = query.or(
-      `inv_products.name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
+      `inv_variants.inv_products.name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
     );
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(parsePgErr(error));
+  if (error) {
+    console.error("[service-sparepart-v4/search/error]", { brandId, branchId, search, error });
+    throw new Error(parsePgErr(error));
+  }
 
   const rows: PurchaseVariantSearchRow[] = [];
   for (const raw of (data as any[]) ?? []) {
-    const variantId = raw.id;
-    const { data: stockData } = await (supabase as any)
-      .from("inv_variant_stocks")
-      .select("current_stock")
-      .eq("branch_id", branchId)
-      .eq("variant_id", variantId)
-      .maybeSingle();
+    const variant = raw.inv_variants;
+    const product = variant.inv_products;
+    const currentStock = Number(raw.current_stock ?? 0);
+    const reservedStock = Number(raw.reserved_stock ?? 0);
+    const stockAvailable = Math.max(0, currentStock - reservedStock);
+
+    if (stockAvailable <= 0) continue;
 
     rows.push({
-      variantId,
-      variantName: raw.name,
-      productId: raw.product_id,
-      productName: raw.inv_products.name,
-      productKind: raw.inv_products.product_kind,
-      conditionType: raw.inv_products.condition_type,
-      sku: raw.sku,
-      barcode: raw.barcode,
-      unit: raw.unit,
-      costPrice: Number(raw.cost_price),
-      sellingPrice: Number(raw.selling_price),
-      minStock: Number(raw.min_stock ?? 0),
-      currentStock: Number(stockData?.current_stock ?? 0),
-      attributes: raw.attributes ?? {},
-      categoryId: raw.inv_products.category_id,
+      variantId: variant.id,
+      variantName: variant.name,
+      productId: variant.product_id,
+      productName: product.name,
+      productKind: product.product_kind,
+      conditionType: product.condition_type,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      unit: variant.unit,
+      costPrice: Number(variant.cost_price),
+      sellingPrice: Number(variant.selling_price),
+      minStock: Number(variant.min_stock ?? 0),
+      currentStock: stockAvailable,
+      reservedStock,
+      stockAvailable,
+      attributes: variant.attributes ?? {},
+      categoryId: product.category_id,
     });
   }
+
+  rows.sort((a, b) => a.productName.localeCompare(b.productName));
+
+  console.log("[service-sparepart-v4/search/debug]", {
+    brandId,
+    branchId,
+    query: search ?? null,
+    productKindFilter: "SPAREPART",
+    serviceUsageEnabled: true,
+    resultCount: rows.length,
+    results: rows.map((r) => ({
+      productId: r.productId,
+      productName: r.productName,
+      variantId: r.variantId,
+      variantName: r.variantName,
+      currentStock: r.currentStock,
+      reservedStock: r.reservedStock,
+      stockAvailable: r.stockAvailable,
+    })),
+  });
 
   return rows;
 }
@@ -1435,12 +1471,14 @@ export async function listPosProductsV4(
 
   // unitReadyMap: productId → count
   const unitReadyMap = new Map<string, number>();
+  // unitPriceMap: productId → selling_price[]
+  const unitPriceMap = new Map<string, number[]>();
   // fallbackUnitImageMap: productId → image_url of newest ready unit
   const fallbackUnitImageMap = new Map<string, string | null>();
   if (unitSecondProductIds.length > 0) {
     const { data: unitsData, error: unitsError } = await (supabase as any)
       .from("inv_units")
-      .select("product_id, image_url, created_at")
+      .select("product_id, image_url, created_at, selling_price")
       .in("product_id", unitSecondProductIds)
       .eq("branch_id", branchId)
       .eq("status", "READY_STOCK")
@@ -1450,6 +1488,12 @@ export async function listPosProductsV4(
     for (const u of (unitsData ?? []) as any[]) {
       const pid = u.product_id;
       unitReadyMap.set(pid, (unitReadyMap.get(pid) ?? 0) + 1);
+      const price = Number(u.selling_price ?? 0);
+      if (price > 0) {
+        const prices = unitPriceMap.get(pid) ?? [];
+        prices.push(price);
+        unitPriceMap.set(pid, prices);
+      }
       // Only set fallback if not already set (first = newest due to ordering desc)
       if (!fallbackUnitImageMap.has(pid)) {
         fallbackUnitImageMap.set(pid, u.image_url ?? null);
@@ -1481,37 +1525,73 @@ export async function listPosProductsV4(
 
   const result: PosProductV4Row[] = [];
 
+  interface UnitSecondGroup {
+    productIds: string[];
+    name: string;
+    productKind: string;
+    conditionType: string;
+    categoryId: string | null;
+    categoryName: string | null;
+    imageUrl: string | null;
+    unit: string;
+    appearsInPos: boolean;
+    readyCount: number;
+    unitPrices: number[];
+    fallbackImage: string | null;
+    variants: any[];
+  }
+
+  // Group Unit Second by name to merge duplicate products
+  const unitSecondGroups = new Map<string, UnitSecondGroup>();
+
   for (const p of (productsData as any[])) {
     const pid = p.id;
     const isUnitSecond = p.product_kind === "UNIT" && p.condition_type === "SECOND";
     const pvariants = variantsByProduct.get(pid) ?? [];
 
-    const assembledVariants: PosVariantV4Row[] = [];
-
     if (isUnitSecond) {
-      // Unit SECOND: show if there are READY_STOCK units; stock = count of those units
       const readyCount = unitReadyMap.get(pid) ?? 0;
-      if (readyCount > 0) {
-        // Use first variant as representative (Unit Second has one variant)
-        const v = pvariants[0];
-        if (v) {
-          assembledVariants.push({
-            variantId: v.id,
-            variantName: v.name,
-            attributes: v.attributes ?? {},
-            sku: v.sku ?? null,
-            barcode: v.barcode ?? null,
-            imageUrl: v.image_url ?? p.image_url ?? null,
-            costPrice: Number(v.cost_price ?? 0),
-            sellingPrice: Number(v.selling_price ?? 0),
-            minStock: Number(v.min_stock ?? 0),
-            currentStock: readyCount,
-            unit: v.unit ?? p.unit ?? "pcs",
-          });
+      if (readyCount === 0) continue;
+
+      let group = unitSecondGroups.get(p.name);
+      if (!group) {
+        group = {
+          productIds: [],
+          name: p.name,
+          productKind: p.product_kind,
+          conditionType: p.condition_type,
+          categoryId: p.category_id ?? null,
+          categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
+          imageUrl: p.image_url ?? null,
+          unit: p.unit ?? "pcs",
+          appearsInPos: p.appears_in_pos,
+          readyCount: 0,
+          unitPrices: [],
+          fallbackImage: null,
+          variants: [],
+        };
+      }
+
+      group.productIds.push(pid);
+      group.readyCount += readyCount;
+
+      const prices = unitPriceMap.get(pid) ?? [];
+      group.unitPrices.push(...prices);
+
+      if (!group.fallbackImage) {
+        group.fallbackImage = fallbackUnitImageMap.get(pid) ?? null;
+      }
+
+      for (const v of pvariants) {
+        if (!group.variants.find((gv: any) => gv.id === v.id)) {
+          group.variants.push(v);
         }
       }
+
+      unitSecondGroups.set(p.name, group);
     } else {
-      // PRODUCT or UNIT NEW: show variants with stock > 0
+      // PRODUCT or UNIT NEW: process normally
+      const assembledVariants: PosVariantV4Row[] = [];
       for (const v of pvariants) {
         const currentStock = stockMap.get(v.id) ?? 0;
         if (currentStock > 0) {
@@ -1530,25 +1610,64 @@ export async function listPosProductsV4(
           });
         }
       }
+
+      if (assembledVariants.length === 0) continue;
+
+      result.push({
+        productId: pid,
+        name: p.name,
+        productKind: p.product_kind,
+        conditionType: p.condition_type ?? null,
+        categoryId: p.category_id ?? null,
+        categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
+        imageUrl: p.image_url ?? null,
+        fallbackUnitImageUrl: null,
+        unit: p.unit ?? "pcs",
+        appearsInPos: p.appears_in_pos,
+        variants: assembledVariants,
+      });
     }
+  }
 
-    if (assembledVariants.length === 0) continue; // skip products with no sellable variants
+  // Process Unit Second groups
+  for (const group of unitSecondGroups.values()) {
+    const useVariant = group.variants[0];
+    if (!useVariant) continue;
 
-    const productImageUrl = p.image_url ?? null;
-    const fallbackImage = isUnitSecond ? (fallbackUnitImageMap.get(pid) ?? null) : null;
+    const prices = group.unitPrices.sort((a, b) => a - b);
+    const minUnitPrice = prices.length > 0 ? prices[0]! : 0;
+    const maxUnitPrice = prices.length > 0 ? prices[prices.length - 1]! : minUnitPrice;
+
+    // Create variant: use variant name if only one variant, otherwise show range
+    const variantName = group.variants.length === 1 ? (group.variants[0]?.name ?? "") : `${group.variants.length} varian`;
+
+    const primaryId = group.productIds[0]!;
 
     result.push({
-      productId: pid,
-      name: p.name,
-      productKind: p.product_kind,
-      conditionType: p.condition_type ?? null,
-      categoryId: p.category_id ?? null,
-      categoryName: p.category_id ? (categoryNameMap.get(p.category_id) ?? null) : null,
-      imageUrl: productImageUrl,
-      fallbackUnitImageUrl: fallbackImage,
-      unit: p.unit ?? "pcs",
-      appearsInPos: p.appears_in_pos,
-      variants: assembledVariants,
+      productId: primaryId,
+      name: group.name,
+      productKind: group.productKind,
+      conditionType: group.conditionType,
+      categoryId: group.categoryId,
+      categoryName: group.categoryName,
+      imageUrl: group.imageUrl,
+      fallbackUnitImageUrl: group.fallbackImage,
+      unit: group.unit,
+      appearsInPos: group.appearsInPos,
+      productIds: group.productIds,
+      variants: [{
+        variantId: useVariant.id,
+        variantName,
+        attributes: useVariant.attributes ?? {},
+        sku: useVariant.sku ?? null,
+        barcode: useVariant.barcode ?? null,
+        imageUrl: useVariant.image_url ?? group.imageUrl ?? null,
+        costPrice: Number(useVariant.cost_price ?? 0),
+        sellingPrice: minUnitPrice || Number(useVariant.selling_price ?? 0),
+        minStock: Number(useVariant.min_stock ?? 0),
+        currentStock: group.readyCount,
+        unit: useVariant.unit ?? group.unit ?? "pcs",
+      }],
     });
   }
 
@@ -1628,7 +1747,7 @@ export async function searchUnitSecondModelsV4(
 
 export async function listPosUnitOptionsV4(
   supabase: SupabaseClientLike,
-  productId: string,
+  productIds: string[],
   branchId: string,
 ): Promise<PosUnitSecondOptionV4Row[]> {
   const { data, error } = await (supabase as any)
@@ -1639,7 +1758,7 @@ export async function listPosUnitOptionsV4(
       purchase_cost, selling_price, status,
       inv_variants!left(name)
     `)
-    .eq("product_id", productId)
+    .in("product_id", productIds)
     .eq("branch_id", branchId)
     .eq("status", "READY_STOCK")
     .order("created_at", { ascending: true });
@@ -1671,6 +1790,63 @@ export async function checkoutPosV4(
   brandId: number,
   createdBy: string,
 ): Promise<CheckoutPosV4Result> {
+  // Resolve payment account
+  // For CASH with no linked account, auto-resolve branch cash account
+  const { data: bpm, error: bpmErr } = await (supabase as any)
+    .from("branch_payment_methods")
+    .select("id, method_type, payment_account_id, mdr_percentage")
+    .eq("id", input.paymentMethodId)
+    .eq("brand_id", brandId)
+    .eq("branch_id", input.branchId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (bpmErr) throw new Error(parsePgErr(bpmErr));
+  if (!bpm) throw new Error("Metode pembayaran tidak aktif atau tidak valid.");
+
+  console.log("[pos-v4/checkout] payment method", {
+    brandId,
+    branchId: input.branchId,
+    selectedPaymentMethodId: input.paymentMethodId,
+    methodType: bpm.method_type,
+    linkedPaymentAccountId: bpm.payment_account_id,
+  });
+
+  let paymentAccountId: string | null = bpm.payment_account_id;
+
+  if (!paymentAccountId && bpm.method_type === "CASH") {
+    const { data: cashAccount, error: cashErr } = await (supabase as any)
+      .from("payment_accounts")
+      .select("id")
+      .eq("brand_id", brandId)
+      .eq("branch_id", input.branchId)
+      .eq("is_cash_account", true)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (cashErr) throw new Error(parsePgErr(cashErr));
+
+    if (cashAccount) {
+      paymentAccountId = cashAccount.id;
+      await (supabase as any)
+        .from("branch_payment_methods")
+        .update({ payment_account_id: cashAccount.id })
+        .eq("id", input.paymentMethodId);
+    }
+  }
+
+  if (!paymentAccountId) {
+    if (bpm.method_type === "CASH") {
+      throw new Error("Akun kas cabang belum tersedia.");
+    }
+    throw new Error("Akun pembayaran untuk metode ini belum ditautkan.");
+  }
+
+  console.log("[pos-v4/checkout] resolved payment account", {
+    methodType: bpm.method_type,
+    paymentAccountId,
+  });
+
   const { data, error } = await (supabase as any)
     .rpc("checkout_pos_v4", {
       p_brand_id: brandId,
@@ -1698,6 +1874,18 @@ export async function checkoutPosV4(
     });
 
   if (error) throw new Error(parsePgErr(error));
+
+  // ── Insert finance_ledger POS_REVENUE via SECURITY DEFINER RPC ──
+  const { error: ledgerError } = await (supabase as any).rpc("post_pos_revenue_ledger", {
+    p_brand_id: brandId,
+    p_branch_id: input.branchId,
+    p_transaction_id: data.transaction_id,
+    p_transaction_number: data.transaction_number,
+    p_total_amount: data.total_amount,
+    p_occurred_at: new Date().toISOString(),
+  });
+
+  if (ledgerError) throw new Error(parsePgErr(ledgerError));
 
   return {
     transactionId: data.transaction_id,
@@ -1869,7 +2057,7 @@ export async function listPosPaymentMethodsV4(
 
   const { data, error } = await (supabase as any)
     .from("branch_payment_methods")
-    .select("id, brand_id, branch_id, method_type, payment_account_id, mdr_percentage, is_active")
+    .select("id, brand_id, branch_id, method_type, payment_account_id, mdr_percentage, mdr_min_transaction, is_active")
     .eq("brand_id", brandId)
     .eq("branch_id", branchId)
     .eq("is_active", true);

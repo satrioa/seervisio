@@ -30,7 +30,6 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuSubButton,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -40,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -221,8 +220,7 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
       { href: "settings?section=brand-profile", label: "Brand Profile" },
       { href: "settings?section=appearance", label: "Appearance & Brand Theme" },
       { href: "settings?section=target-goal", label: "Target & Goal" },
-      { href: "settings?section=user-access", label: "User & Access" },
-      { href: "settings?section=system", label: "System" },
+      { href: "settings?section=system", label: "System Settings" },
     ],
   },
 ];
@@ -236,9 +234,10 @@ interface AppSidebarProps {
   activeOperatorName: string | null;
   userName: string;
   userEmail: string;
+  userAvatarUrl?: string | null;
 }
 
-export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail }: AppSidebarProps) {
+export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail, userAvatarUrl }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
@@ -547,12 +546,11 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
             />
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} />
+            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} avatarUrl={userAvatarUrl ?? null} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
 
-      <SidebarRail />
     </Sidebar>
   );
 }
@@ -576,6 +574,7 @@ function AccountSwitcher({
   activeOperatorName,
   userName,
   userEmail,
+  avatarUrl,
 }: {
   brandSlug: string;
   role: string;
@@ -584,6 +583,7 @@ function AccountSwitcher({
   activeOperatorName: string | null;
   userName: string;
   userEmail: string;
+  avatarUrl: string | null;
 }) {
   const { setActiveBranchId } = useActiveBranch();
   const [popoverOpen, setPopoverOpen] = React.useState(false);
@@ -734,6 +734,7 @@ function AccountSwitcher({
             className="rounded-xl bg-background shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-background hover:shadow-md data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
           >
             <Avatar className="size-8 rounded-lg">
+              {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} className="aspect-square h-full w-full object-cover" /> : null}
               <AvatarFallback className="rounded-lg bg-sidebar-primary/10 text-xs font-medium text-sidebar-primary">
                 {getInitials(displayName)}
               </AvatarFallback>

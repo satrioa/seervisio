@@ -59,6 +59,7 @@ export default async function PanelLayout({
         activeOperatorName={effectiveContext.activeOperatorName}
         userName={effectiveContext.name}
         userEmail={effectiveContext.email}
+        userAvatarUrl={effectiveContext.avatarUrl}
       >
         {children}
       </PanelLayoutClient>

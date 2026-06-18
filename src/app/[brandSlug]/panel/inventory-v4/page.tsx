@@ -202,7 +202,7 @@ export default function InventoryV4Page() {
   const usTotalPages = usData ? Math.max(1, Math.ceil(usData.total / MAX_PAGE)) : 1;
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6">
+    <div className="flex min-h-full flex-col gap-4 rounded-[14px] bg-card p-4 text-card-foreground sm:p-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Inventory V4</h1>

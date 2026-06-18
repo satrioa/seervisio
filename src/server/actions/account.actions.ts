@@ -3,87 +3,266 @@
 "use server";
 
 import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
-import { getAccounts, createAccount, updateAccount, setAccountActive, deleteAccount } from "@/server/repositories/account.repository";
+import {
+  getAccounts,
+  createAccount,
+  updateAccount,
+  setAccountActive,
+  countActiveMasterAdmins,
+  removeAccountFromBrand,
+  createAuthUserWithPassword,
+  resetAuthUserPassword,
+  linkExistingAuthUser,
+  type AccountRow,
+} from "@/server/repositories/account.repository";
 import { addAuditLog } from "@/repositories/service.repository";
 
-/**
- * List accounts visible to the current user.
- * Returns the same shape as the client expects.
- */
+export type { AccountRow };
+
 export async function listAccountsAction(
-  brandSlug: string
-): Promise<ActionResult<AccountRow[]>> {
+  brandSlug: string,
+): Promise<ActionResult<{ accounts: AccountRow[]; currentProfileId: string }>> {
   try {
     const session = await getSessionData(brandSlug);
-    // Only users with account management permission can view this list.
-    requireActionPermission(session.role, "payment.account.manage");
-    const accounts = await getAccounts(
-      session.brandId,
-      session.canAccessAllBranches ? null : session.defaultBranchId
-    );
-    return successResult(accounts);
+    requireActionPermission(session.role, "user.manage");
+    const accounts = await getAccounts(session.brandId);
+    return successResult({ accounts, currentProfileId: session.profileId });
   } catch (err: any) {
     console.error("[Account] listAccountsAction:", err);
-    return errorResult(err.message || "Gagal memuat akun.");
+    return errorResult(err.message || "Gagal memuat daftar akun.");
   }
 }
 
-/**
- * Create a new user account.
- */
 export async function createAccountAction(
   brandSlug: string,
-  input: { name: string; email: string; role: string; branchIds: string[] }
-): Promise<ActionResult<{ id: string }>> {
+  input: {
+    name: string;
+    email: string;
+    phone?: string | null;
+    role: string;
+    branchIds: string[];
+    password?: string;
+    shouldChangePassword?: boolean;
+  },
+): Promise<ActionResult<{ profileId: string; authUserId: string | null; authWarning: string | null }>> {
   try {
     const session = await getSessionData(brandSlug);
-    requireActionPermission(session.role, "payment.account.manage");
+    requireActionPermission(session.role, "user.manage");
 
-    const newId = await createAccount(
+    const result = await createAccount(
       session.brandId,
       input.name,
       input.email,
+      input.phone ?? null,
       input.role,
-      input.branchIds
+      input.branchIds,
     );
+
+    let authUserId: string | null = null;
+    let authWarning: string | null = null;
+
+    if (input.password) {
+      if (input.password.length < 8) {
+        return errorResult("Password minimal 8 karakter.");
+      }
+      const authResult = await createAuthUserWithPassword(
+        input.email,
+        input.password,
+        result.profileId,
+        input.name,
+        input.shouldChangePassword ?? true,
+      );
+      authUserId = authResult.authUserId || null;
+      authWarning = authResult.warning;
+
+      console.log("[Account] createAccountAction auth", {
+        email: input.email,
+        createdProfileId: result.profileId,
+        linkedAuthUserId: authUserId,
+        passwordSet: true,
+      });
+    }
 
     await addAuditLog({
       brand_id: session.brandId,
       action: "account.create",
       target_type: "user",
-      target_id: newId,
+      target_id: result.profileId,
+      target_label: input.name,
       actor_id: session.profileId,
-      description: `Membuat akun ${input.name}`,
+      description: `Membuat akun ${input.name} (${input.email}) dengan role ${input.role}${authUserId ? " (auth terhubung)" : ""}`,
     });
 
-    return successResult({ id: newId });
+    return successResult({ profileId: result.profileId, authUserId, authWarning });
   } catch (err: any) {
     console.error("[Account] createAccountAction:", err);
     return errorResult(err.message || "Gagal membuat akun.");
   }
 }
 
-/**
- * Update an existing account.
- */
-export async function updateAccountAction(
+export async function resetPasswordAction(
   brandSlug: string,
-  accountId: string,
-  updates: { name?: string; email?: string; role?: string; branchIds?: string[] }
+  profileId: string,
+  newPassword: string,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(brandSlug);
-    requireActionPermission(session.role, "payment.account.manage");
+    requireActionPermission(session.role, "user.manage");
 
-    await updateAccount(accountId, updates, session.brandId);
+    if (newPassword.length < 8) {
+      return errorResult("Password minimal 8 karakter.");
+    }
+
+    /* Get auth_user_id from profiles table */
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    const { data: profile, error: profErr } = await db
+      .from("profiles")
+      .select("auth_user_id")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (profErr || !profile?.auth_user_id) {
+      return errorResult("Akun login tidak ditemukan untuk pengguna ini.");
+    }
+
+    await resetAuthUserPassword(profile.auth_user_id, newPassword);
+
+    await addAuditLog({
+      brand_id: session.brandId,
+      action: "account.reset_password",
+      target_type: "user",
+      target_id: profileId,
+      actor_id: session.profileId,
+      description: `Merest password akun`,
+    });
+
+    return successResult(undefined);
+  } catch (err: any) {
+    console.error("[Account] resetPasswordAction:", err);
+    return errorResult(err.message || "Gagal mereset password.");
+  }
+}
+
+export async function deleteAccountFromBrandAction(
+  brandSlug: string,
+  profileId: string,
+  membershipId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "user.manage");
+
+    /* Verify membership belongs to this brand */
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    const { data: membership, error: memCheckErr } = await db
+      .from("user_brand_memberships")
+      .select("id, profile_id, role, is_active")
+      .eq("id", membershipId)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (memCheckErr || !membership) {
+      return errorResult("Akses tidak ditemukan untuk brand ini.");
+    }
+
+    /* Prevent deleting own active access */
+    if (membership.profile_id === session.profileId) {
+      return errorResult("Tidak dapat menghapus akses Anda sendiri.");
+    }
+
+    /* Prevent removing last active MASTER_ADMIN */
+    if (membership.role === "MASTER_ADMIN" && membership.is_active) {
+      const activeMasterCount = await countActiveMasterAdmins(session.brandId);
+      if (activeMasterCount <= 1) {
+        return errorResult("Tidak dapat menghapus Master Admin terakhir.");
+      }
+    }
+
+    await removeAccountFromBrand(membershipId);
+
+    await addAuditLog({
+      brand_id: session.brandId,
+      action: "account.delete_from_brand",
+      target_type: "user",
+      target_id: profileId,
+      target_label: "",
+      actor_id: session.profileId,
+      description: "Hapus akses akun dari brand",
+    });
+
+    return successResult(undefined);
+  } catch (err: any) {
+    console.error("[Account] deleteAccountFromBrandAction:", err);
+    return errorResult(err.message || "Gagal menghapus akses.");
+  }
+}
+
+export async function linkAccountAction(
+  brandSlug: string,
+  profileId: string,
+  email: string,
+): Promise<ActionResult<{ authUserId: string | null; warning: string | null }>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "user.manage");
+
+    const result = await linkExistingAuthUser(email, profileId);
+
+    if (result.authUserId) {
+      await addAuditLog({
+        brand_id: session.brandId,
+        action: "account.link_auth",
+        target_type: "user",
+        target_id: profileId,
+        actor_id: session.profileId,
+        description: `Menghubungkan akun login untuk ${email}`,
+      });
+    }
+
+    return successResult(result);
+  } catch (err: any) {
+    console.error("[Account] linkAccountAction:", err);
+    return errorResult(err.message || "Gagal menghubungkan akun login.");
+  }
+}
+
+export async function updateAccountAction(
+  brandSlug: string,
+  profileId: string,
+  updates: {
+    name?: string;
+    phone?: string | null;
+    role?: string;
+    branchIds?: string[];
+    isActive?: boolean;
+  },
+): Promise<ActionResult<void>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "user.manage");
+
+    if (updates.role !== undefined || updates.isActive === false) {
+      const activeMasterCount = await countActiveMasterAdmins(session.brandId);
+      const accounts = await getAccounts(session.brandId);
+      const target = accounts.find((a) => a.profileId === profileId);
+      if (target && target.role === "MASTER_ADMIN" && activeMasterCount <= 1) {
+        if (updates.role !== undefined && updates.role !== "MASTER_ADMIN") {
+          return errorResult("Tidak dapat menurunkan role Master Admin terakhir.");
+        }
+        if (updates.isActive === false) {
+          return errorResult("Tidak dapat menonaktifkan Master Admin terakhir.");
+        }
+      }
+    }
+
+    await updateAccount(profileId, session.brandId, updates);
 
     await addAuditLog({
       brand_id: session.brandId,
       action: "account.update",
       target_type: "user",
-      target_id: accountId,
+      target_id: profileId,
       actor_id: session.profileId,
-      description: `Update akun ${accountId}`,
+      description: `Mengubah akun ${profileId}`,
     });
 
     return successResult(undefined);
@@ -93,28 +272,35 @@ export async function updateAccountAction(
   }
 }
 
-/**
- * Activate / deactivate an account.
- */
 export async function toggleAccountActiveAction(
   brandSlug: string,
-  accountId: string,
-  active: boolean
+  profileId: string,
+  active: boolean,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(brandSlug);
-    requireActionPermission(session.role, "payment.account.manage");
+    requireActionPermission(session.role, "user.manage");
 
-    await setAccountActive(accountId, active);
+    if (!active) {
+      const activeMasterCount = await countActiveMasterAdmins(session.brandId);
+      const accounts = await getAccounts(session.brandId);
+      const target = accounts.find((a) => a.profileId === profileId);
+      if (target && target.role === "MASTER_ADMIN" && activeMasterCount <= 1) {
+        return errorResult("Tidak dapat menonaktifkan Master Admin terakhir.");
+      }
+    }
+
+    await setAccountActive(profileId, session.brandId, active);
 
     await addAuditLog({
       brand_id: session.brandId,
       action: active ? "account.activate" : "account.deactivate",
       target_type: "user",
-      target_id: accountId,
+      target_id: profileId,
       actor_id: session.profileId,
-      description: `${active ? "Aktifkan" : "Nonaktifkan"} akun ${accountId}`,
+      description: `${active ? "Mengaktifkan" : "Menonaktifkan"} akun ${profileId}`,
     });
+
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] toggleAccountActiveAction:", err);
@@ -122,44 +308,26 @@ export async function toggleAccountActiveAction(
   }
 }
 
-/**
- * Soft‑delete an account (just deactivate).
- */
-export async function deleteAccountAction(
+export async function updateAccountAvatarAction(
   brandSlug: string,
-  accountId: string
+  profileId: string,
+  avatarUrl: string | null,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getSessionData(brandSlug);
-    requireActionPermission(session.role, "payment.account.manage");
+    requireActionPermission(session.role, "user.manage");
 
-    await deleteAccount(accountId);
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    const { error } = await db
+      .from("profiles")
+      .update({ avatar_url: avatarUrl })
+      .eq("id", profileId);
 
-    await addAuditLog({
-      brand_id: session.brandId,
-      action: "account.delete",
-      target_type: "user",
-      target_id: accountId,
-      actor_id: session.profileId,
-      description: `Hapus akun ${accountId}`,
-    });
+    if (error) throw new Error(`Gagal memperbarui avatar: ${error.message}`);
 
     return successResult(undefined);
   } catch (err: any) {
-    console.error("[Account] deleteAccountAction:", err);
-    return errorResult(err.message || "Gagal menghapus akun.");
+    console.error("[Account] updateAccountAvatarAction:", err);
+    return errorResult(err.message || "Gagal memperbarui foto profil.");
   }
-}
-
-/**
- * Shape of account row returned to the client.
- */
-export interface AccountRow {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  branchIds: string[];
-  isActive: boolean;
-  authUserId?: string | null;
 }

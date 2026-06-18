@@ -48,6 +48,7 @@ interface PaymentMethodOption {
   mdrPercentage: number;
   mdrMinTransaction: number;
   accountName: string | null;
+  accountBranchId: string | null;
 }
 
 /* ── Props ── */

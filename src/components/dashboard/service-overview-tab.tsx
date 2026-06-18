@@ -234,10 +234,12 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
               needAttention.map((item) => {
                 const b = sevBadge(item.severity);
                 return (
-                  <div key={item.device} className="flex items-start justify-between gap-2">
+                  <div key={`${item.customer}-${item.device}-${item.reason}`} className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-foreground">{item.device}</p>
-                      <p className="truncate text-[10px] text-muted-foreground">{item.reason}</p>
+                      <p className="truncate text-xs font-medium text-foreground">{item.customer}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {item.reason} · {item.device}
+                      </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <Badge variant={b.variant} className="h-5 rounded-full px-2 text-[10px] font-normal">{b.label}</Badge>

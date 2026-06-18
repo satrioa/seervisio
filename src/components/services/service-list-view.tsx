@@ -36,8 +36,9 @@ import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
+import { AssignTechnicianDialog } from "@/components/services/assign-technician-dialog";
 import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
-import { XCircle, RotateCcw, ArrowRightCircle } from "lucide-react";
+import { XCircle, RotateCcw, ArrowRightCircle, UserPlus } from "lucide-react";
 import { StatusTransitionDialog, type PendingStatusTransition } from "@/components/services/status-transition-dialog";
 import { updateServiceStatusAction } from "@/server/actions/service-workflow.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
@@ -404,6 +405,7 @@ export function ServiceListView({
   // ── Workflow state ──
   const [cancelTarget, setCancelTarget] = React.useState<ServiceRecord | null>(null);
   const [reopenTarget, setReopenTarget] = React.useState<ServiceRecord | null>(null);
+  const [assignTarget, setAssignTarget] = React.useState<ServiceRecord | null>(null);
   const workflow = useServiceWorkflow((role ?? "MASTER_ADMIN") as any);
 
   const pagination = (
@@ -678,6 +680,19 @@ export function ServiceListView({
                             className="h-7 gap-1 text-[10px]"
                             onClick={(e) => {
                               e.stopPropagation();
+                              setAssignTarget(service);
+                            }}
+                          >
+                            <UserPlus className="size-3" />
+                            {service.technicianName ? "Ubah Teknisi" : "Tugaskan Teknisi"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-[10px]"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               console.log("[services:quick-action] sparepart click", {
                                 serviceId: service.id,
                                 serviceNumber: service.serviceNumber,
@@ -904,6 +919,15 @@ export function ServiceListView({
                       </Button>
                     )}
                     <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 text-[10px]"
+                      onClick={() => setAssignTarget(service)}
+                    >
+                      <UserPlus className="size-3" />
+                      {service.technicianName ? "Ubah Teknisi" : "Tugaskan Teknisi"}
+                    </Button>
+                    <Button
                       type="button"
                       variant="outline"
                       size="sm"
@@ -968,6 +992,20 @@ export function ServiceListView({
           role={role as any}
           onConfirm={() => {
             setReopenTarget(null);
+            onServiceUpdated?.();
+          }}
+        />
+      )}
+
+      {/* Assign technician dialog */}
+      {assignTarget && (
+        <AssignTechnicianDialog
+          open={assignTarget !== null}
+          onOpenChange={(open) => { if (!open) setAssignTarget(null); }}
+          service={assignTarget}
+          brandSlug={brandSlug}
+          onConfirm={() => {
+            setAssignTarget(null);
             onServiceUpdated?.();
           }}
         />

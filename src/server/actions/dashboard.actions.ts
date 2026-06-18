@@ -114,6 +114,7 @@ export interface RecentServiceItem {
 }
 
 export interface NeedAttentionItem {
+  customer: string;
   device: string;
   reason: string;
   severity: "high" | "medium" | "low";
@@ -213,6 +214,7 @@ export async function getDashboardOverviewAction(
       completedServicesResult,
       customersResult,
       profilesResult,
+      financeLedgerResult,
     ] = await Promise.all([
       (supabase as any)
         .from("payment_account_movements")
@@ -243,7 +245,7 @@ export async function getDashboardOverviewAction(
 
       (supabase as any)
         .from("services")
-        .select("id, branch_id, final_cost, current_status, service_number, customer_name, device_type, device_brand, device_model, assigned_technician_id, intake_at, created_at")
+        .select("id, branch_id, final_cost, current_status, service_number, customer_id, device_type, device_brand, device_model, assigned_technician_id, intake_at, created_at")
         .eq("brand_id", session.brandId)
         .in("branch_id", branchFilter)
         .gte("created_at", dateFromStr)
@@ -327,6 +329,15 @@ export async function getDashboardOverviewAction(
       (supabase as any)
         .from("profiles")
         .select("id, name"),
+
+      /* Finance ledger */
+      (supabase as any)
+        .from("finance_ledger")
+        .select("entry_type, direction, amount, branch_id, ledger_date")
+        .eq("brand_id", session.brandId)
+        .in("branch_id", branchFilter)
+        .gte("ledger_date", dateFromStr)
+        .lte("ledger_date", dateToStr),
     ]);
     
     const movements = (movementsResult.data ?? []) as any[];
@@ -345,6 +356,7 @@ export async function getDashboardOverviewAction(
     const completedServices = (completedServicesResult.data ?? []) as any[];
     const customers = (customersResult.data ?? []) as any[];
     const profiles = (profilesResult.data ?? []) as any[];
+    const ledgerRows = (financeLedgerResult.data ?? []) as any[];
 
     const customerMap = new Map(customers.map((c: any) => [c.id, c.name]));
     const profileMap = new Map(profiles.map((p: any) => [p.id, p.name]));
@@ -352,7 +364,9 @@ export async function getDashboardOverviewAction(
     const branchMap = new Map(allBranches.map((b: any) => [b.id, b.name || b.id]));
 
     /* ── Revenue ── */
-    const serviceRevenue = servicePayments.reduce((s: number, p: any) => s + Number(p.gross_amount || 0), 0);
+    const serviceRevenue = ledgerRows
+      .filter((r: any) => r.entry_type === "SERVICE_REVENUE" && r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
     const posRevenue = posSales.reduce((s: number, p: any) => s + Math.max(0, Number(p.paid_amount || p.gross_amount || 0) - Number(p.change_amount || 0)), 0);
     const otherIncome = movements
       .filter((m: any) => m.movement_type === "OTHER_INCOME" && m.direction === "IN")
@@ -369,6 +383,17 @@ export async function getDashboardOverviewAction(
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0) + mdrFromPayments;
     const netProfit = totalRevenue - totalExpense;
 
+    /* ── Finance ledger KPIs (V4 data) ── */
+    const ledgerCreditTotal = ledgerRows
+      .filter((r: any) => r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const ledgerMdr = ledgerRows
+      .filter((r: any) => r.entry_type === "MDR_EXPENSE" && r.direction === "DEBIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const effectiveRevenue = Math.max(totalRevenue, ledgerCreditTotal);
+    const effectiveMdr = Math.max(totalMdr, ledgerMdr);
+    const effectiveNetProfit = effectiveRevenue - totalExpense;
+
     /* ── Total activity count ── */
     const totalActivity =
       servicesHeatmap.length +
@@ -377,33 +402,25 @@ export async function getDashboardOverviewAction(
       movements.length +
       auditLogs.length;
 
-    /* ── Revenue trend (grouped by date) ── */
+    /* ── Revenue trend (grouped by date from finance_ledger) ── */
     const revMap = new Map<string, { svc: number; pos: number; oi: number; co: number }>();
-    for (const p of servicePayments) {
-      const d = (p.paid_at || "").split("T")[0];
+    for (const r of ledgerRows) {
+      if (r.direction !== "CREDIT") continue;
+      if (r.entry_type === "COGS" || r.entry_type === "MDR_EXPENSE") continue;
+      const d = (r.ledger_date || "").split("T")[0];
       if (!d) continue;
       const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
-      e.svc += Number(p.gross_amount || 0);
-      e.co += Number(p.mdr_amount || 0);
-      revMap.set(d, e);
-    }
-    for (const s of posSales) {
-      const d = (s.sold_at || "").split("T")[0];
-      if (!d) continue;
-      const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
-      e.pos += Number(s.gross_amount || 0);
-      e.co += Number(s.mdr_amount || 0);
+      if (r.entry_type === "SERVICE_REVENUE") e.svc += Number(r.amount || 0);
+      else if (r.entry_type === "POS_REVENUE") e.pos += Number(r.amount || 0);
+      else e.oi += Number(r.amount || 0);
       revMap.set(d, e);
     }
     for (const m of movements) {
+      if (m.direction !== "OUT") continue;
       const d = (m.created_at || "").split("T")[0];
       if (!d) continue;
       const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
-      if (m.movement_type === "OTHER_INCOME" && m.direction === "IN") {
-        e.oi += Number(m.amount || 0);
-      } else if (m.direction === "OUT") {
-        e.co += Number(m.amount || 0);
-      }
+      e.co += Number(m.amount || 0);
       revMap.set(d, e);
     }
     const sortedDates = Array.from(revMap.keys()).sort();
@@ -411,7 +428,7 @@ export async function getDashboardOverviewAction(
       const e = revMap.get(d)!;
       return {
         date: d,
-        label: new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
+        label: new Date(d + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
         serviceRevenue: e.svc,
         posRevenue: e.pos,
         otherIncome: e.oi,
@@ -420,21 +437,16 @@ export async function getDashboardOverviewAction(
       };
     });
 
-    /* ── Branch revenue trend ── */
+    /* ── Branch revenue trend from finance_ledger ── */
     const brMap = new Map<string, Map<string, number>>();
-    for (const p of servicePayments) {
-      const d = (p.paid_at || "").split("T")[0];
+    for (const r of ledgerRows) {
+      if (r.direction !== "CREDIT") continue;
+      if (r.entry_type === "COGS" || r.entry_type === "MDR_EXPENSE") continue;
+      const d = (r.ledger_date || "").split("T")[0];
       if (!d) continue;
       if (!brMap.has(d)) brMap.set(d, new Map());
       const m = brMap.get(d)!;
-      m.set(p.branch_id, (m.get(p.branch_id) || 0) + Number(p.gross_amount || 0));
-    }
-    for (const s of posSales) {
-      const d = (s.sold_at || "").split("T")[0];
-      if (!d) continue;
-      if (!brMap.has(d)) brMap.set(d, new Map());
-      const m = brMap.get(d)!;
-      m.set(s.branch_id, (m.get(s.branch_id) || 0) + Number(s.gross_amount || 0));
+      m.set(r.branch_id, (m.get(r.branch_id) || 0) + Number(r.amount || 0));
     }
     const sortedBrDates = Array.from(brMap.keys()).sort();
     const branchRevenueTrend: BranchRevenueTrendPoint[] = [];
@@ -449,6 +461,17 @@ export async function getDashboardOverviewAction(
         });
       }
     }
+
+    console.log("[dashboard-chart-check]", {
+      brandId: session.brandId,
+      branchId,
+      startDate: dateFromStr,
+      endDate: dateToStr,
+      sqlRows: ledgerRows.filter((r: any) => r.direction === "CREDIT").length,
+      chartDataPoints: revenueTrend.length,
+      chartTotal: revenueTrend.reduce((s: number, p: any) => s + p.totalRevenue, 0),
+      cardTotalRevenue: effectiveRevenue,
+    });
 
     /* ── Payment method breakdown ── */
     const paymentMethodsMap = new Map(paymentMethods.map((pm: any) => [pm.id, pm]));
@@ -727,6 +750,7 @@ export async function getDashboardOverviewAction(
       const categoryLabel = (categoryLabels as any)[status] || "Perlu perhatian";
       const severity: "high" | "medium" | "low" = threshold <= 2 ? "high" : threshold <= 24 ? "medium" : "low";
       needAttention.push({
+        customer: customerMap.get(s.customer_id) || "Tanpa nama",
         device: deviceName,
         reason: `${categoryLabel} (${Math.round(ageHours)} jam)`,
         severity,
@@ -755,6 +779,19 @@ export async function getDashboardOverviewAction(
         proses,
         rating: total > 0 ? Math.round((selesai / total) * 100) : 0,
       };
+    });
+
+    console.log("[dashboard-service]", {
+      brandId: session.brandId,
+      branchId,
+      startDate: dateFromStr,
+      endDate: dateToStr,
+      serviceRevenue,
+      serviceInCount,
+      serviceDoneCount,
+      recentServicesCount: recentServices.length,
+      statusFieldUsed: "current_status",
+      servicesQueryResultCount: services.length,
     });
 
     /* ══ FINANCE TAB ══ */
@@ -801,9 +838,9 @@ export async function getDashboardOverviewAction(
 
     const result: DashboardData = {
       general: {
-        revenue: totalRevenue,
+        revenue: effectiveRevenue,
         totalActivity,
-        netProfit,
+        netProfit: effectiveNetProfit,
         revenueTrend,
         branchRevenueTrend,
         recentActivity: actLog.slice(0, 30),
@@ -845,11 +882,11 @@ export async function getDashboardOverviewAction(
       },
       finance: {
         revenueTrend,
-        totalRevenue,
+        totalRevenue: effectiveRevenue,
         cashIn: effectiveCashIn,
         cashOut: effectiveCashOut,
         netCashflow: effectiveCashIn - effectiveCashOut,
-        mdrAmount: totalMdr,
+        mdrAmount: effectiveMdr,
         expenseCategoryRadar,
         paymentMethodRadar,
       },
@@ -863,10 +900,10 @@ export async function getDashboardOverviewAction(
     };
 
     console.log("[dashboard] summary", {
-      revenue: totalRevenue,
+      revenue: effectiveRevenue,
       posRevenue, serviceRevenue, otherIncome,
       totalActivity,
-      netProfit,
+      netProfit: effectiveNetProfit,
       expenseCount: expenseCategoryRadar.length,
       paymentMethodCount: paymentMethodRadar.length,
       serviceCount: services.length,

@@ -21,6 +21,8 @@ export interface AppContext {
   name: string;
   /** User's email */
   email: string;
+  /** User's avatar URL */
+  avatarUrl: string | null;
   /** User's role within the current brand */
   role: Role;
   /** Current brand ID */

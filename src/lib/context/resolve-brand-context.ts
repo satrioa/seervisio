@@ -84,12 +84,21 @@ export async function resolveBrandContext(
   const activeOperatorId = activeOperator ? activeOperator.profileId : null;
   const activeOperatorName = activeOperator ? activeOperator.name : null;
 
-  // Step 7: Build and return the AppContext
+  // Step 7: Get avatar URL
+  const { data: profileRow } = await (supabase as any)
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", session.profileId)
+    .maybeSingle();
+  const avatarUrl = profileRow?.avatar_url ?? null;
+
+  // Step 8: Build and return the AppContext
   return {
     profileId: session.profileId,
     authUserId: session.authUserId,
     name: session.name,
     email: session.email,
+    avatarUrl,
     role: effectiveRole,
     brandId: brand.id,
     brandSlug: brand.slug,

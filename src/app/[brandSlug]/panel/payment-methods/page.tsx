@@ -141,15 +141,16 @@ export default function PaymentMethodsPage() {
     }
   };
 
-  const handleSaveMdr = useCallback(async (methodCode: string, config: { enabled: boolean; ratePercent: number; fixedFee: number; minAmount: number }) => {
-    const result = await updateMethodMdrAction(brandSlug, methodCode, config);
+  const handleSaveMdr = useCallback(async (methodCode: string, percentage: number, minTransaction?: number) => {
+    if (!resolvedBranchId) return;
+    const result = await updateMethodMdrAction(brandSlug, resolvedBranchId, methodCode, percentage, minTransaction);
     if (result.success) {
       setExpandedMdr(null);
       void fetchMethods();
     } else {
       setError(result.error);
     }
-  }, [brandSlug, fetchMethods]);
+  }, [brandSlug, resolvedBranchId, fetchMethods]);
 
   const handleLinkClose = useCallback(() => {
     setLinkMethod(null);
@@ -266,9 +267,11 @@ export default function PaymentMethodsPage() {
 
                         {hasMdr && method.mdrEnabled && (
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-muted-foreground">MDR: {method.mdrRatePercent}%</span>
-                            {method.mdrMinAmount > 0 && (
-                              <span className="text-[10px] text-muted-foreground">| Min: Rp {method.mdrMinAmount.toLocaleString("id-ID")}</span>
+                            <span className="text-[10px] text-muted-foreground">Potongan: {method.mdrRatePercent}%</span>
+                            {method.mdrMinTransaction > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Min: Rp {method.mdrMinTransaction.toLocaleString("id-ID")}
+                              </span>
                             )}
                           </div>
                         )}
@@ -315,7 +318,7 @@ export default function PaymentMethodsPage() {
                   {isMdrOpen && (
                     <MdrSettingsForm
                       method={method}
-                      onSave={(config) => handleSaveMdr(method.methodCode, config)}
+                      onSave={(pct, minTx) => handleSaveMdr(method.methodCode, pct, minTx)}
                       onCancel={() => setExpandedMdr(null)}
                     />
                   )}
@@ -329,6 +332,7 @@ export default function PaymentMethodsPage() {
       {/* Link Account Modal */}
       <LinkAccountModal
         method={linkMethod}
+        branchId={resolvedBranchId}
         activateAfterLink={!!pendingActiveMethod}
         onOpenChange={handleLinkClose}
         brandSlug={brandSlug}
@@ -342,39 +346,47 @@ export default function PaymentMethodsPage() {
 /* ── Link Account Modal ── */
 
 function LinkAccountModal({
-  method, onOpenChange, brandSlug, onLinked, onError, activateAfterLink,
+  method, branchId, onOpenChange, brandSlug, onLinked, onError, activateAfterLink,
 }: {
   method: BranchPaymentMethodRow | null;
+  branchId: string | null;
   onOpenChange: (o: boolean) => void;
   brandSlug: string;
   onLinked: () => void;
   onError: (err: string) => void;
   activateAfterLink: boolean;
 }) {
-  const [accounts, setAccounts] = useState<{ id: string; accountName: string; type: string; bankName: string | null }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; accountName: string; bankName: string | null }[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveBranchId = branchId || method?.branchId || null;
+
   useEffect(() => {
     if (!method) return;
     setLoading(true);
     setSelectedId(method.linkedAccountId ?? "");
-    setIsActive(activateAfterLink ? true : method.isActive);
-    listCompatibleAccountsAction(brandSlug, method.branchId, method.methodCode).then((result) => {
+    setIsActive(activateAfterLink ? true : method.linkedAccountId ? method.isActive : true);
+    listCompatibleAccountsAction(brandSlug, effectiveBranchId ?? "", method.methodCode).then((result) => {
       if (result.success) {
         setAccounts(result.data);
       }
       setLoading(false);
     });
-  }, [method, brandSlug, activateAfterLink]);
+  }, [method, brandSlug, activateAfterLink, effectiveBranchId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!method) return;
     setError(null);
+
+    if (!effectiveBranchId) {
+      setError("Cabang belum dipilih.");
+      return;
+    }
 
     if (isActive && !selectedId) {
       setError("Pilih akun pembayaran atau nonaktifkan metode.");
@@ -383,7 +395,7 @@ function LinkAccountModal({
 
     setSubmitting(true);
     const result = await linkPaymentMethodAccountAction(brandSlug, {
-      branchId: method.branchId,
+      branchId: effectiveBranchId,
       methodCode: method.methodCode,
       paymentAccountId: selectedId,
       isActive,
@@ -478,84 +490,85 @@ function MdrSettingsForm({
   method, onSave, onCancel,
 }: {
   method: BranchPaymentMethodRow;
-  onSave: (config: { enabled: boolean; ratePercent: number; fixedFee: number; minAmount: number }) => void;
+  onSave: (percentage: number, minTransaction: number) => void;
   onCancel: () => void;
 }) {
-  const [enabled, setEnabled] = useState(method.mdrEnabled);
   const [ratePercent, setRatePercent] = useState(String(method.mdrRatePercent));
-  const [fixedFee, setFixedFee] = useState(String(method.mdrFixedFee));
-  const [minAmount, setMinAmount] = useState(String(method.mdrMinAmount));
+  const [minTransactionStr, setMinTransactionStr] = useState(String(method.mdrMinTransaction || ""));
   const [saving, setSaving] = useState(false);
+
+  const pct = Number(ratePercent.replace(",", ".")) || 0;
+  const minTransaction = Number(minTransactionStr.replace(/\./g, "")) || 0;
+  const sampleAmount = 100000;
+  const shouldApplyMdr = minTransaction <= 0 || sampleAmount >= minTransaction;
+  const mdrFee = shouldApplyMdr ? Math.round(sampleAmount * pct / 100) : 0;
+  const netAmount = sampleAmount - mdrFee;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    onSave({
-      enabled,
-      ratePercent: Number(ratePercent.replace(",", ".")) || 0,
-      fixedFee: Number(fixedFee.replace(/[^0-9]/g, "")) || 0,
-      minAmount: Number(minAmount.replace(/[^0-9]/g, "")) || 0,
-    });
+    onSave(pct, minTransaction);
     setSaving(false);
   };
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 border-t pt-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">Konfigurasi MDR</span>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground">Aktifkan MDR</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
+      <div className="space-y-1">
+        <span className="text-xs font-medium">Potongan Payment Gateway</span>
+        <p className="text-[10px] text-muted-foreground">
+          Biaya ini otomatis dipotong dari pembayaran non-tunai seperti QRIS, Debit, atau E-Wallet.
+        </p>
+      </div>
+
+      <div className="flex gap-4 flex-wrap">
+        <div className="space-y-1">
+          <Label className="text-[10px]">Persentase potongan (%)</Label>
+          <Input
+            value={ratePercent}
+            onChange={(e) => setRatePercent(e.target.value)}
+            placeholder="0.7"
+            className="h-8 text-xs max-w-[140px]"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px]">Minimal transaksi kena potongan</Label>
+          <Input
+            value={minTransactionStr}
+            onChange={(e) => setMinTransactionStr(e.target.value)}
+            placeholder="100000"
+            className="h-8 text-xs max-w-[160px]"
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Isi 0 jika semua transaksi dikenakan potongan.
+          </p>
         </div>
       </div>
 
-      {enabled && (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1">
-            <Label className="text-[10px]">Persentase (%)</Label>
-            <Input
-              value={ratePercent}
-              onChange={(e) => setRatePercent(e.target.value)}
-              placeholder="0.7"
-              className="h-8 text-xs"
-            />
+      {pct > 0 && (
+        <div className="rounded border bg-muted/20 px-3 py-2 space-y-1">
+          <span className="text-[10px] font-medium">Simulasi potongan</span>
+          <div className="text-[10px] text-muted-foreground space-y-0.5">
+            <p>Nominal transaksi: Rp {sampleAmount.toLocaleString("id-ID")}</p>
+            {minTransaction > 0 && (
+              <p>Minimal kena potongan: Rp {minTransaction.toLocaleString("id-ID")}</p>
+            )}
+            {shouldApplyMdr ? (
+              <>
+                <p>Potongan ({pct}%): Rp {mdrFee.toLocaleString("id-ID")}</p>
+                <p className="font-medium text-foreground">Dana masuk bersih: Rp {netAmount.toLocaleString("id-ID")}</p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                Potongan belum dikenakan karena nominal transaksi di bawah minimal.
+              </p>
+            )}
           </div>
-          <div className="space-y-1">
-            <Label className="text-[10px]">Biaya tetap</Label>
-            <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Rp</span>
-              <Input
-                value={fixedFee}
-                onChange={(e) => setFixedFee(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="0"
-                className="h-8 text-xs pl-7"
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px]">Min. transaksi</Label>
-            <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Rp</span>
-              <Input
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="0"
-                className="h-8 text-xs pl-7"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {enabled && method.mdrMinAmount > 0 && (
-        <div className="rounded bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground">
-          Contoh: transaksi Rp 100.000 dengan MDR {method.mdrRatePercent}% = potongan Rp {Math.round(100000 * method.mdrRatePercent / 100).toLocaleString("id-ID")}
         </div>
       )}
 
       <div className="flex justify-end gap-2">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={saving}>Batal</Button>
-        <Button type="submit" size="sm" disabled={saving}>Simpan MDR</Button>
+        <Button type="submit" size="sm" disabled={saving}>Simpan Potongan</Button>
       </div>
     </form>
   );

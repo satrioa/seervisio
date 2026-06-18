@@ -1,6 +1,8 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { addServiceTimelineEntry, addAuditLog } from "@/repositories/service.repository";
 import {
   getSessionData,
   successResult,
@@ -901,6 +903,58 @@ export async function useSparepartForServiceV4Action(
     const supabase = await createServerSupabase();
     const result = await repoUseSparepart(supabase as any, input, session.brandId, session.profileId);
 
+    /* Record timeline and audit for sparepart usage */
+    try {
+      const adminDb = createServiceRoleSupabaseClient();
+      const { data: service } = await (adminDb as any)
+        .from("services")
+        .select("service_number, current_status")
+        .eq("id", input.serviceId)
+        .maybeSingle();
+
+      const itemNames: string[] = [];
+      const { data: usageRows } = await (adminDb as any)
+        .from("inv_sparepart_usage")
+        .select("item_name_snapshot, quantity, selling_price_snapshot")
+        .in("id", result.usageIds);
+
+      const totalCost = (usageRows ?? []).reduce(
+        (sum: number, u: any) => sum + Number(u.selling_price_snapshot ?? 0) * Number(u.quantity ?? 1),
+        0,
+      );
+      (usageRows ?? []).forEach((u: any) => { if (u.item_name_snapshot) itemNames.push(u.item_name_snapshot); });
+      const itemSummary = itemNames.length > 0 ? itemNames.slice(0, 3).join(", ") + (itemNames.length > 3 ? "..." : "") : `${input.items.length} item`;
+
+      await addServiceTimelineEntry({
+        brand_id: session.brandId,
+        branch_id: input.branchId,
+        service_id: input.serviceId,
+        from_status: null,
+        to_status: service?.current_status ?? "REPAIRING",
+        reason: `Sparepart ditambahkan: ${itemSummary} — Rp ${totalCost.toLocaleString("id-ID")}`,
+        metadata: { items: input.items as any, usage_ids: result.usageIds, total_sparepart_cost: totalCost, source: "V4" },
+        changed_by: session.profileId,
+      });
+
+      await addAuditLog({
+        brand_id: session.brandId,
+        action: "SERVICE_SPAREPART_ADDED",
+        target_type: "service",
+        target_id: input.serviceId,
+        target_label: service?.service_number ?? input.serviceId,
+        actor_id: session.profileId,
+        description: `Sparepart ditambahkan (V4): ${itemSummary} — Rp ${totalCost.toLocaleString("id-ID")}`,
+        details: {
+          usage_ids: result.usageIds,
+          movement_ids: result.movementIds,
+          total_sparepart_cost: totalCost,
+          source: "V4",
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[useSparepartForServiceV4Action] audit/timeline error:", auditErr.message);
+    }
+
     return successResult(result);
   } catch (err: any) {
     console.error("[useSparepartForServiceV4Action]", err);
@@ -987,16 +1041,17 @@ export async function listPosProductsV4Action(
 
 export async function listPosUnitOptionsV4Action(
   brandSlug: string,
-  productId: string,
+  productIds: string[],
   branchId: string,
 ) {
   try {
+    if (!productIds || productIds.length === 0) return errorResult("ID produk tidak valid.");
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_VIEW);
 
     const supabase = await createServerSupabase();
-    const result = await repoListPosUnitOptions(supabase as any, productId, branchId);
+    const result = await repoListPosUnitOptions(supabase as any, productIds, branchId);
     return successResult(result);
   } catch (err: any) {
     console.error("[listPosUnitOptionsV4Action]", err);

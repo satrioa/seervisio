@@ -351,6 +351,8 @@ export interface PurchaseVariantSearchRow {
   sellingPrice: number;
   minStock: number;
   currentStock: number;
+  reservedStock: number;
+  stockAvailable: number;
   attributes: Record<string, string>;
   categoryId: string | null;
 }
@@ -504,6 +506,7 @@ export interface PosProductV4Row {
   unit: string;
   appearsInPos: boolean;
   variants: PosVariantV4Row[];
+  productIds?: string[];
 }
 
 export interface PosVariantV4Row {

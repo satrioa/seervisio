@@ -100,17 +100,20 @@ async function enrichReferenceLabels(
   movements: CashflowMovementRow[],
 ): Promise<CashflowMovementRow[]> {
   const posIds: string[] = [];
+  const posTransIds: string[] = [];
   const payIds: string[] = [];
   const srvIds: string[] = [];
 
   for (const m of movements) {
     if (!m.referenceType || !m.referenceId) continue;
     if (m.referenceType === "pos_sale") posIds.push(m.referenceId);
+    else if (m.referenceType === "pos_transaction") posTransIds.push(m.referenceId);
     else if (m.referenceType === "service_payment") payIds.push(m.referenceId);
     else if (m.referenceType === "service") srvIds.push(m.referenceId);
   }
 
   const posMap = await batchFetchLabels(supabase, "pos_sales", posIds, "sale_number");
+  const posTransMap = await batchFetchLabels(supabase, "pos_transactions", posTransIds, "transaction_number");
   const payMap = await batchFetchLabels(supabase, "service_payments", payIds, "payment_number");
   const srvMap = await batchFetchLabels(supabase, "services", srvIds, "service_number");
 
@@ -118,6 +121,7 @@ async function enrichReferenceLabels(
     if (!m.referenceType || !m.referenceId) return m;
     let label: string | undefined;
     if (m.referenceType === "pos_sale") label = posMap.get(m.referenceId);
+    else if (m.referenceType === "pos_transaction") label = posTransMap.get(m.referenceId);
     else if (m.referenceType === "service_payment") label = payMap.get(m.referenceId);
     else if (m.referenceType === "service") label = srvMap.get(m.referenceId);
     if (!label) return m;
@@ -184,7 +188,7 @@ export async function listCashflowMovementsAction(
     }
 
     if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
+      query = query.lt("created_at", filters.dateTo);
     }
 
     if (filters.search) {
@@ -212,6 +216,22 @@ export async function listCashflowMovementsAction(
     const totalMdr = movements
       .filter((m) => MDR_RELATED_TYPES.has(m.movementType))
       .reduce((s, m) => s + m.amount, 0);
+
+    console.log("[mutasi-kas-bank]", {
+      brandId: session.brandId,
+      selectedBranch: filters.branchId,
+      branchId: filters.branchId,
+      accountId: filters.accountId,
+      startDate: filters.dateFrom,
+      endDateExclusive: filters.dateTo
+        ? (() => { const d = new Date(filters.dateTo + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()
+        : null,
+      typeFilter: filters.movementType,
+      totalRows: movements.length,
+      movementTypes: [...new Set(movements.map((r) => r.movementType))],
+      totalMasuk: totalIn,
+      totalKeluar: totalOut,
+    });
 
     return successResult({
       movements,

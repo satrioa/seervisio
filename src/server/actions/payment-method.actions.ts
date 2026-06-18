@@ -1,11 +1,13 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import {
   getSessionData,
   successResult,
   errorResult,
   requireActionPermission,
+  requireBranchAccess,
   type ActionResult,
 } from "./action-helper";
 
@@ -21,13 +23,13 @@ export interface BranchPaymentMethodRow {
   isActive: boolean;
   linkedAccountId: string | null;
   linkedAccountName: string | null;
-  linkedAccountType: string | null;
   isSystem: boolean;
   branchName?: string;
   mdrEnabled: boolean;
   mdrRatePercent: number;
   mdrFixedFee: number;
   mdrMinAmount: number;
+  mdrMinTransaction: number;
 }
 
 /* ── Configuration ── */
@@ -40,14 +42,6 @@ const SYSTEM_METHODS = [
   { code: "EWALLET", label: "E-Wallet", type: "EWALLET", description: "Pembayaran e-wallet" },
 ];
 
-const METHOD_TYPE_ACCOUNT_TYPE: Record<string, string> = {
-  CASH: "CASH",
-  QRIS: "QRIS",
-  TRANSFER: "BANK",
-  DEBIT: "DEBIT",
-  EWALLET: "EWALLET",
-};
-
 function methodCodeToType(code: string): string {
   const map: Record<string, string> = {
     "PM-CASH": "CASH", "PM-QRIS": "QRIS", "PM-TRF": "TRANSFER", "PM-DEBIT": "DEBIT",
@@ -58,17 +52,17 @@ function methodCodeToType(code: string): string {
 
 /* ── Helpers ── */
 
-function parseMdrConfig(methodsRow: any | null) {
-  const mdr = methodsRow?.metadata?.mdr ?? {};
+function parseMdrFromRow(row: any | null) {
   return {
-    mdrEnabled: mdr.enabled ?? false,
-    mdrRatePercent: mdr.ratePercent ?? methodsRow?.mdr_percentage ?? 0,
-    mdrFixedFee: mdr.fixedFee ?? 0,
-    mdrMinAmount: mdr.minAmount ?? 0,
+    mdrEnabled: (row?.mdr_percentage ?? 0) > 0,
+    mdrRatePercent: row?.mdr_percentage ?? 0,
+    mdrFixedFee: 0,
+    mdrMinAmount: 0,
+    mdrMinTransaction: row?.mdr_min_transaction ?? 0,
   };
 }
 
-function mapBranchMethodRow(row: any, methodDef: typeof SYSTEM_METHODS[0], branchName: string, mdr?: { mdrEnabled?: boolean; mdrRatePercent?: number; mdrFixedFee?: number; mdrMinAmount?: number }): BranchPaymentMethodRow {
+function mapBranchMethodRow(row: any, methodDef: typeof SYSTEM_METHODS[0], branchName: string, mdr?: { mdrEnabled?: boolean; mdrRatePercent?: number; mdrFixedFee?: number; mdrMinAmount?: number; mdrMinTransaction?: number }): BranchPaymentMethodRow {
   return {
     id: row?.id ?? null,
     brandId: row?.brand_id ?? 0,
@@ -79,13 +73,13 @@ function mapBranchMethodRow(row: any, methodDef: typeof SYSTEM_METHODS[0], branc
     isActive: row?.is_active ?? false,
     linkedAccountId: row?.payment_account_id ?? null,
     linkedAccountName: row?.payment_account?.account_name ?? null,
-    linkedAccountType: row?.payment_account?.type ?? null,
     isSystem: true,
     branchName,
     mdrEnabled: mdr?.mdrEnabled ?? false,
     mdrRatePercent: mdr?.mdrRatePercent ?? 0,
     mdrFixedFee: mdr?.mdrFixedFee ?? 0,
     mdrMinAmount: mdr?.mdrMinAmount ?? 0,
+    mdrMinTransaction: mdr?.mdrMinTransaction ?? 0,
   };
 }
 
@@ -137,8 +131,7 @@ export async function listBranchPaymentMethodsAction(
 
     const results: BranchPaymentMethodRow[] = SYSTEM_METHODS.map((def) => {
       const row = mappingMap.get(def.type);
-      const brandMethodRow = methodMdrMap.get(def.type);
-      const mdr = parseMdrConfig(brandMethodRow ?? null);
+      const mdr = parseMdrFromRow(row ?? null);
       return mapBranchMethodRow(row ?? null, def, branchName, mdr);
     });
 
@@ -166,11 +159,15 @@ export async function linkPaymentMethodAccountAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.link_account");
 
-    const supabase = await createServerSupabase();
+    if (!input.branchId) {
+      return errorResult("Cabang belum dipilih.");
+    }
+    requireBranchAccess(session, input.branchId, "link-account");
+
     const methodType = methodCodeToType(input.methodCode);
 
-    if (!input.paymentAccountId) {
-      return errorResult("Akun pembayaran wajib dipilih.");
+    if (input.isActive && !input.paymentAccountId) {
+      return errorResult("Akun pembayaran wajib dipilih untuk metode aktif.");
     }
 
     if (methodType === "CASH") {
@@ -185,9 +182,12 @@ export async function linkPaymentMethodAccountAction(
       isActive: input.isActive,
     });
 
+    /* ── Validate payment account ── */
+    const supabase = await createServerSupabase();
+
     const { data: account, error: accountErr } = await (supabase as any)
       .from("payment_accounts")
-      .select("id, branch_id, is_active")
+      .select("id, branch_id, brand_id, is_active")
       .eq("id", input.paymentAccountId)
       .eq("brand_id", session.brandId)
       .maybeSingle();
@@ -198,10 +198,12 @@ export async function linkPaymentMethodAccountAction(
     }
     if (!account) return errorResult("Akun pembayaran tidak ditemukan.");
     if (!account.is_active) return errorResult("Akun pembayaran tidak aktif.");
-    if (account.branch_id && account.branch_id !== input.branchId) {
-      return errorResult("Akun pembayaran tidak valid untuk cabang ini.");
+    if (account.brand_id !== session.brandId) return errorResult("Akun pembayaran bukan milik brand ini.");
+    if (account.branch_id !== null && account.branch_id !== input.branchId) {
+      return errorResult("Akun pembayaran cabang lain tidak bisa digunakan.");
     }
 
+    /* ── Get or create the branch_payment_methods row ── */
     const { data: existing } = await (supabase as any)
       .from("branch_payment_methods")
       .select("*")
@@ -210,26 +212,42 @@ export async function linkPaymentMethodAccountAction(
       .eq("method_type", methodType)
       .maybeSingle();
 
+    /* ── Use service-role client for mutation to bypass RLS (app-level auth already checked) ── */
+    const admin = createServiceRoleSupabaseClient();
+
     let updatedRow: any;
 
     if (existing) {
-      const { data, error: updError } = await (supabase as any)
+      const updatePayload: Record<string, any> = {
+        payment_account_id: input.paymentAccountId,
+        is_active: input.isActive,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error: updError } = await (admin as any)
         .from("branch_payment_methods")
-        .update({
-          payment_account_id: input.paymentAccountId,
-          is_active: input.isActive,
-        })
+        .update(updatePayload)
         .eq("id", existing.id)
+        .eq("brand_id", session.brandId)
+        .eq("branch_id", input.branchId)
         .select("*, payment_account:payment_accounts(id, account_name, type)")
         .single();
 
       if (updError) {
-        console.error("[payment-methods/link-account] update error", updError);
-        return errorResult("Gagal menautkan akun.");
+        console.error("[payment-methods/link-account] update error", {
+          brandId: session.brandId,
+          branchId: input.branchId,
+          methodType,
+          branchPaymentMethodId: existing.id,
+          paymentAccountId: input.paymentAccountId,
+          isActive: input.isActive,
+          error: updError,
+        });
+        return errorResult("Gagal menautkan akun. " + updError.message);
       }
       updatedRow = data;
     } else {
-      const { data, error: insError } = await (supabase as any)
+      const { data, error: insError } = await (admin as any)
         .from("branch_payment_methods")
         .insert({
           brand_id: session.brandId,
@@ -242,8 +260,15 @@ export async function linkPaymentMethodAccountAction(
         .single();
 
       if (insError) {
-        console.error("[payment-methods/link-account] insert error", insError);
-        return errorResult("Gagal menautkan akun.");
+        console.error("[payment-methods/link-account] insert error", {
+          brandId: session.brandId,
+          branchId: input.branchId,
+          methodType,
+          paymentAccountId: input.paymentAccountId,
+          isActive: input.isActive,
+          error: insError,
+        });
+        return errorResult("Gagal menautkan akun. " + insError.message);
       }
       updatedRow = data;
     }
@@ -257,7 +282,7 @@ export async function linkPaymentMethodAccountAction(
     const def = SYSTEM_METHODS.find((m) => m.type === methodType) || SYSTEM_METHODS[0];
     const result = mapBranchMethodRow(updatedRow, def, branch?.name ?? "");
 
-    await (supabase as any).from("audit_logs").insert({
+    await (admin as any).from("audit_logs").insert({
       brand_id: session.brandId,
       action: "PAYMENT_METHOD_LINKED",
       target_type: "branch_payment_method",
@@ -273,8 +298,16 @@ export async function linkPaymentMethodAccountAction(
 
     return successResult(result);
   } catch (err: any) {
-    console.error("[payment-methods/link-account] error", err);
-    return errorResult("Gagal menautkan akun.");
+    console.error("[payment-methods/link-account] error", {
+      brandSlug,
+      branchId: input?.branchId,
+      methodCode: input?.methodCode,
+      paymentAccountId: input?.paymentAccountId,
+      isActive: input?.isActive,
+      error: err.message,
+      stack: err.stack,
+    });
+    return errorResult(err.message || "Gagal menautkan akun.");
   }
 }
 
@@ -327,8 +360,8 @@ export async function togglePaymentMethodActiveAction(
           id: null, brandId: session.brandId, branchId,
           methodCode: def?.code ?? methodType, methodType,
           label: def?.label ?? methodType, isActive: false,
-          linkedAccountId: null, linkedAccountName: null, linkedAccountType: null,
-          isSystem: true, mdrEnabled: false, mdrRatePercent: 0, mdrFixedFee: 0, mdrMinAmount: 0,
+          linkedAccountId: null, linkedAccountName: null,
+          isSystem: true, mdrEnabled: false, mdrRatePercent: 0, mdrFixedFee: 0, mdrMinAmount: 0, mdrMinTransaction: 0,
         };
         return successResult(result);
       }
@@ -424,7 +457,6 @@ export async function ensureSystemPaymentMethodsAction(
     for (const def of SYSTEM_METHODS) {
       if (existingTypes.has(def.type)) continue;
 
-      const accountType = METHOD_TYPE_ACCOUNT_TYPE[def.type];
       let paymentAccountId: string | null = null;
 
       if (def.type === "CASH") {
@@ -434,8 +466,8 @@ export async function ensureSystemPaymentMethodsAction(
           .from("payment_accounts")
           .select("id")
           .eq("brand_id", session.brandId)
-          .eq("branch_id", branchId)
-          .eq("type", accountType)
+          .or(`branch_id.eq.${branchId},branch_id.is.null`)
+          .eq("is_cash_account", false)
           .eq("is_active", true)
           .limit(1)
           .maybeSingle();
@@ -473,27 +505,29 @@ export async function ensureSystemPaymentMethodsAction(
 export async function listCompatibleAccountsAction(
   brandSlug: string,
   branchId: string,
-  _methodCode: string,
-): Promise<ActionResult<{ id: string; accountName: string; type: string; bankName: string | null }[]>> {
+  methodCode: string,
+): Promise<ActionResult<{ id: string; accountName: string; bankName: string | null }[]>> {
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.view");
 
     const supabase = await createServerSupabase();
+    const methodType = methodCodeToType(methodCode);
+    const cashOnly = methodType === "CASH";
 
-    // Debug log parameters
     console.log("[payment-methods/list-compatible]", {
       brandId: session.brandId,
       branchId,
-      methodCode: _methodCode,
+      methodType,
+      cashOnly,
     });
 
     const { data, error } = await (supabase as any)
       .from("payment_accounts")
-      .select("id, account_name, type, bank_name, branch_id")
+      .select("id, account_name, bank_name, branch_id")
       .eq("brand_id", session.brandId)
       .eq("is_active", true)
-      .neq("is_cash_account", true)
+      .eq("is_cash_account", cashOnly)
       .order("branch_id", { ascending: false, nullsFirst: true })
       .order("account_name", { ascending: true });
 
@@ -510,7 +544,6 @@ export async function listCompatibleAccountsAction(
       filtered.map((a: any) => ({
         id: a.id,
         accountName: a.account_name,
-        type: a.type,
         bankName: a.bank_name ?? null,
       }))
     );
@@ -624,69 +657,66 @@ export async function repairBranchCashMethodAction(
   }
 }
 
-/* ── Update MDR config for a payment method ── */
-
-export interface MdrConfigInput {
-  enabled: boolean;
-  ratePercent: number;
-  fixedFee: number;
-  minAmount: number;
-}
+/* ── Update MDR percentage for a branch payment method ── */
 
 export async function updateMethodMdrAction(
   brandSlug: string,
+  branchId: string,
   methodType: string,
-  config: MdrConfigInput,
+  percentage: number,
+  minTransaction?: number,
 ): Promise<ActionResult<null>> {
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.manage_mdr");
 
-    const supabase = await createServerSupabase();
+    if (!branchId) return errorResult("Cabang belum dipilih.");
+
     const normalizedType = methodCodeToType(methodType);
 
-    const { data: existing } = await (supabase as any)
-      .from("payment_methods")
-      .select("id, metadata")
-      .eq("brand_id", session.brandId)
-      .eq("type", normalizedType)
-      .maybeSingle();
+    if (percentage < 0) return errorResult("Persentase tidak boleh negatif.");
+    if (minTransaction != null && minTransaction < 0) return errorResult("Minimal transaksi tidak boleh negatif.");
 
-    const mdrPayload = {
-      mdr: {
-        enabled: config.enabled,
-        ratePercent: config.ratePercent,
-        fixedFee: config.fixedFee,
-        minAmount: config.minAmount,
-        borneBy: "MERCHANT",
-      },
+    const admin = createServiceRoleSupabaseClient();
+
+    const updatePayload: Record<string, any> = {
+      mdr_percentage: percentage,
+      updated_at: new Date().toISOString(),
     };
+    if (minTransaction != null) {
+      updatePayload.mdr_min_transaction = minTransaction;
+    }
 
-    if (existing) {
-      const metadata = { ...(existing.metadata ?? {}), ...mdrPayload };
-      const { error: updErr } = await (supabase as any)
-        .from("payment_methods")
-        .update({ metadata })
-        .eq("id", existing.id);
+    const { error } = await (admin as any)
+      .from("branch_payment_methods")
+      .update(updatePayload)
+      .eq("brand_id", session.brandId)
+      .eq("branch_id", branchId)
+      .eq("method_type", normalizedType);
 
-      if (updErr) return errorResult("Gagal menyimpan konfigurasi MDR.");
-    } else {
-      const { error: insErr } = await (supabase as any)
-        .from("payment_methods")
-        .insert({
-          brand_id: session.brandId,
-          type: normalizedType,
-          name: normalizedType,
-          is_active: true,
-          metadata: mdrPayload,
-        });
-
-      if (insErr) return errorResult("Gagal menyimpan konfigurasi MDR.");
+    if (error) {
+      console.error("[payment-methods/save-mdr]", {
+        brandSlug,
+        brandId: session.brandId,
+        branchId,
+        methodType: normalizedType,
+        percentage,
+        minTransaction,
+        error,
+      });
+      return errorResult("Gagal menyimpan potongan. " + error.message);
     }
 
     return successResult(null);
   } catch (err: any) {
-    console.error("[PaymentMethods] updateMethodMdrAction:", err.message);
-    return errorResult(err.message || "Gagal menyimpan konfigurasi MDR.");
+    console.error("[payment-methods/save-mdr]", {
+      brandSlug,
+      branchId,
+      methodType,
+      percentage,
+      minTransaction,
+      error: err.message,
+    });
+    return errorResult(err.message || "Gagal menyimpan potongan.");
   }
 }

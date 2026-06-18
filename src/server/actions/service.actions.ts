@@ -5,12 +5,14 @@
 
 import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { fromDbStatus } from "@/domain/service/service-workflow";
 import {
   getServicesByBranch,
   getServicesByBrand,
   getServiceById,
   insertService,
+  updateServiceTechnician,
   addServiceTimelineEntry,
   addAuditLog,
 } from "@/repositories/service.repository";
@@ -21,6 +23,7 @@ import { getServiceStatusHistory } from "@/repositories/service.repository";
 import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
 import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
 import { getServicesPaymentSummary } from "@/server/domain/service-payment-summary";
+import { sendOperationalNotification } from "@/server/notifications/notification.service";
 
 /* ─── List Services ─── */
 
@@ -142,6 +145,40 @@ export async function listServicesAction(
     if (error) throw error;
 
     const services: ServiceRecord[] = (data ?? []).map(mapServiceRowToUiItem);
+
+    // Post-fetch technician profiles for any services with assigned_technician_id
+    // but no technicianName (handles missing FK constraint gracefully)
+    const technicianIds = [...new Set(
+      services
+        .filter((s) => s.assignedTechnicianId && !s.technicianName)
+        .map((s) => s.assignedTechnicianId!)
+    )];
+
+    if (technicianIds.length > 0) {
+      const { data: techProfiles } = await (supabase as any)
+        .from("profiles")
+        .select("id, name")
+        .in("id", technicianIds);
+
+      const profileMap = new Map<string, string>(
+        (techProfiles ?? []).map((p: any) => [p.id as string, p.name ?? "Teknisi tidak ditemukan"])
+      );
+      for (const s of services) {
+        if (s.assignedTechnicianId && !s.technicianName) {
+          const name = profileMap.get(s.assignedTechnicianId);
+          if (name) {
+            s.technicianName = name;
+            s.technician = name;
+          }
+        }
+      }
+    }
+
+    console.log("[services/list technicians]", services.map((s) => ({
+      service_number: s.serviceNumber,
+      assigned_technician_id: s.assignedTechnicianId,
+      technicianName: s.technicianName,
+    })));
 
     const serviceIds = services.map((s) => s.id);
     const chargesMap: Record<string, number> = {};
@@ -521,6 +558,7 @@ export interface CreateServiceInput {
   diagnosisResult?: string;
   estimatedCost?: number;
   branchId?: string;
+  assignedTechnicianId?: string;
   dpAmount?: number;
   dpPaymentMethodId?: string;
   dpPaymentAccountId?: string;
@@ -575,6 +613,37 @@ export async function createServiceAction(
       address: input.customerAddress?.trim() || null,
     });
 
+    /* Validate assigned technician if provided */
+    let validatedTechnicianId: string | null | undefined = input.assignedTechnicianId;
+    if (validatedTechnicianId) {
+      const adminDb = createServiceRoleSupabaseClient();
+      const { data: techMembership } = await (adminDb as any)
+        .from("user_brand_memberships")
+        .select("id, role, is_active")
+        .eq("profile_id", validatedTechnicianId)
+        .eq("brand_id", brandId)
+        .eq("role", "TECHNICIAN")
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (!techMembership) {
+        return errorResult("Teknisi tidak ditemukan atau tidak aktif di brand ini.");
+      }
+
+      const { data: branchAccess } = await (adminDb as any)
+        .from("user_branch_access")
+        .select("id")
+        .eq("membership_id", techMembership.id)
+        .eq("branch_id", branchId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!branchAccess) {
+        return errorResult("Teknisi tidak memiliki akses ke cabang yang dipilih.");
+      }
+    }
+
     const serviceNumber = await callGenerateServiceNumber(brandId);
 
     console.log("[service:create] generated service number", { serviceNumber });
@@ -593,6 +662,7 @@ export async function createServiceAction(
       reported_issue: input.reportedIssue.trim(),
       diagnosis_result: input.diagnosisResult?.trim() || null,
       estimated_cost: input.estimatedCost ?? 0,
+      assigned_technician_id: validatedTechnicianId ?? null,
       created_by: session.profileId,
     });
 
@@ -605,6 +675,24 @@ export async function createServiceAction(
       reason: "Servis baru dibuat",
       changed_by: session.profileId,
     });
+
+    if (validatedTechnicianId) {
+      const { data: techProfile } = await ((createServiceRoleSupabaseClient()) as any)
+        .from("profiles")
+        .select("name")
+        .eq("id", validatedTechnicianId)
+        .maybeSingle();
+
+      await addServiceTimelineEntry({
+        brand_id: brandId,
+        branch_id: branchId,
+        service_id: service.id,
+        from_status: null,
+        to_status: "INTAKE",
+        reason: `Teknisi ditugaskan: ${techProfile?.name ?? "—"}`,
+        changed_by: session.profileId,
+      });
+    }
 
     try {
       await addAuditLog({
@@ -626,6 +714,24 @@ export async function createServiceAction(
       });
     } catch (auditErr: any) {
       console.warn("[service:create] failed to write audit log", auditErr);
+    }
+
+    try {
+      await sendOperationalNotification({
+        brandId: brandId,
+        branchId: branchId,
+        eventType: "SERVICE_CREATED",
+        actorProfileId: session.profileId,
+        payload: {
+          serviceNumber: serviceNumber,
+          customerName: input.customerName?.trim() ?? "",
+          deviceType: input.deviceType?.trim() ?? "",
+          deviceBrand: input.deviceBrand?.trim() ?? "",
+          deviceModel: input.deviceModel?.trim() ?? "",
+        },
+      });
+    } catch (notifErr: any) {
+      console.warn("[service:create] notification error:", notifErr.message);
     }
 
     if (input.dpAmount && input.dpAmount > 0 && input.dpPaymentMethodId) {
@@ -700,6 +806,189 @@ export async function createServiceAction(
   } catch (err: any) {
     console.error("[createServiceAction]", err);
     return errorResult(err.message ?? "Gagal membuat servis.");
+  }
+}
+
+/* ─── List Technicians ─── */
+
+export interface TechnicianOption {
+  profileId: string;
+  name: string;
+}
+
+export async function listTechniciansAction(
+  brandSlug: string,
+  branchId?: string,
+): Promise<ActionResult<TechnicianOption[]>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    const adminDb = createServiceRoleSupabaseClient();
+
+    let query = (adminDb as any)
+      .from("user_brand_memberships")
+      .select("id, profile_id, role, profiles!inner(id, name)")
+      .eq("brand_id", session.brandId)
+      .eq("role", "TECHNICIAN")
+      .eq("is_active", true)
+      .is("deleted_at", null);
+
+    const { data: memberships, error: memErr } = await query;
+    if (memErr) throw memErr;
+    if (!memberships || memberships.length === 0) {
+      console.log("[listTechniciansAction] no technicians found for brand", session.brandId);
+      return successResult([]);
+    }
+
+    let profiles = memberships.map((m: any) => ({
+      profileId: m.profile_id,
+      name: m.profiles?.name ?? "—",
+    }));
+
+    let allowedMembershipIds = new Set<string>();
+    if (branchId) {
+      const membershipIds = memberships.map((m: any) => m.id);
+      const { data: branchAccess } = await (adminDb as any)
+        .from("user_branch_access")
+        .select("membership_id")
+        .in("membership_id", membershipIds)
+        .eq("branch_id", branchId)
+        .eq("is_active", true);
+
+      allowedMembershipIds = new Set((branchAccess ?? []).map((ba: any) => ba.membership_id));
+      profiles = profiles.filter((_: any, i: number) => allowedMembershipIds.has(memberships[i].id));
+    }
+
+    console.log("[assign-technician/options]", {
+      brandId: session.brandId,
+      serviceBranchId: branchId ?? null,
+      totalTechnicians: memberships.length,
+      technicians: memberships.map((m: any) => ({
+        id: m.id,
+        profileId: m.profile_id,
+        name: m.profiles?.name ?? "—",
+        role: m.role,
+        hasBranchAccess: branchId ? allowedMembershipIds?.has(m.id) ?? false : true,
+      })),
+    });
+
+    return successResult(profiles);
+  } catch (err: any) {
+    console.error("[listTechniciansAction]", err);
+    return errorResult(err.message ?? "Gagal memuat daftar teknisi.");
+  }
+}
+
+/* ─── Assign Technician ─── */
+
+export async function assignServiceTechnicianAction(
+  brandSlug: string,
+  serviceId: string,
+  technicianProfileId: string | null,
+): Promise<ActionResult<{ technicianName: string | null }>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "service.update");
+
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const { data: service } = await (adminDb as any)
+      .from("services")
+      .select("id, service_number, brand_id, branch_id, assigned_technician_id, current_status")
+      .eq("id", serviceId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (!service) return errorResult("Servis tidak ditemukan.");
+    if (service.brand_id !== session.brandId) return errorResult("Servis bukan milik brand ini.");
+
+    if (technicianProfileId) {
+      const { data: techMembership } = await (adminDb as any)
+        .from("user_brand_memberships")
+        .select("id, role, is_active")
+        .eq("profile_id", technicianProfileId)
+        .eq("brand_id", session.brandId)
+        .eq("role", "TECHNICIAN")
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (!techMembership) {
+        return errorResult("Teknisi tidak ditemukan atau tidak aktif di brand ini.");
+      }
+
+      const { data: branchAccess } = await (adminDb as any)
+        .from("user_branch_access")
+        .select("id")
+        .eq("membership_id", techMembership.id)
+        .eq("branch_id", service.branch_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!branchAccess) {
+        return errorResult("Teknisi tidak memiliki akses ke cabang servis ini.");
+      }
+    }
+
+    const oldTechnicianId = service.assigned_technician_id;
+    await updateServiceTechnician(serviceId, technicianProfileId, session.profileId);
+
+    const { data: techProfile } = technicianProfileId
+      ? await (adminDb as any).from("profiles").select("name").eq("id", technicianProfileId).maybeSingle()
+      : { data: null };
+
+    const technicianName = techProfile?.name ?? null;
+
+    const isUnassign = !technicianProfileId;
+    const isChange = oldTechnicianId && oldTechnicianId !== technicianProfileId;
+
+    let reason: string;
+    if (isUnassign) {
+      reason = "Teknisi dihapus dari servis";
+    } else if (isChange) {
+      const { data: oldProfile } = await (adminDb as any)
+        .from("profiles")
+        .select("name")
+        .eq("id", oldTechnicianId)
+        .maybeSingle();
+      reason = `Teknisi berubah: ${oldProfile?.name ?? "—"} → ${technicianName}`;
+    } else {
+      reason = `Teknisi ditugaskan: ${technicianName}`;
+    }
+
+    await addServiceTimelineEntry({
+      brand_id: session.brandId,
+      branch_id: service.branch_id,
+      service_id: serviceId,
+      from_status: null,
+      to_status: service.current_status ?? "INTAKE",
+      reason,
+      changed_by: session.profileId,
+    });
+
+    try {
+      await addAuditLog({
+        brand_id: session.brandId,
+        action: "SERVICE_TECHNICIAN_ASSIGNED",
+        target_type: "service",
+        target_id: serviceId,
+        target_label: service.service_number,
+        actor_id: session.profileId,
+        description: reason,
+        details: {
+          service_id: serviceId,
+          service_number: service.service_number,
+          old_technician_id: oldTechnicianId,
+          new_technician_id: technicianProfileId,
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[assignServiceTechnicianAction] audit log failed", auditErr);
+    }
+
+    return successResult({ technicianName });
+  } catch (err: any) {
+    console.error("[assignServiceTechnicianAction]", err);
+    return errorResult(err.message ?? "Gagal menugaskan teknisi.");
   }
 }
 

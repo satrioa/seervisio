@@ -140,4 +140,13 @@
   .width-before-scroll-bar {
     margin-right: 0 !important;
   }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
