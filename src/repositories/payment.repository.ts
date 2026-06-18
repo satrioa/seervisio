@@ -84,8 +84,7 @@ export async function getBranchPaymentMethods(
     .eq("branch_id", branchId)
     .eq("is_active", true)
     .not("payment_account_id", "is", null)
-    .eq("payment_method.is_active", true)
-    .order("payment_method.name", { ascending: true });
+    .eq("payment_method.is_active", true);
 
   if (bpmErr) throw bpmErr;
 
@@ -134,6 +133,15 @@ export async function getBranchPaymentMethods(
       mdrMinTransaction: Number(row.mdr_min_transaction ?? 0),
     });
   }
+
+  // Step 4: Sort manually in TypeScript (PostgREST doesn't support nested order)
+  const methodTypeOrder: Record<string, number> = { CASH: 0, QRIS: 1, TRANSFER: 2, DEBIT: 3, EWALLET: 4 };
+  methods.sort((a, b) => {
+    const orderA = methodTypeOrder[a.methodType] ?? 99;
+    const orderB = methodTypeOrder[b.methodType] ?? 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.methodName.localeCompare(b.methodName);
+  });
 
   console.log("[service-payment/method-options/final]", {
     brandId,
