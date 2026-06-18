@@ -5,6 +5,7 @@
 
 import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
 import { hasPermission } from "@/lib/permissions/require-permission";
+import { PERMISSIONS } from "@/lib/permissions/permissions";
 import {
   normalizeServiceStatus,
   validateServiceStatusTransition,
@@ -25,9 +26,10 @@ import {
   callRecordServicePayment,
   callRecordServicePaymentFinanceEntries,
   callCalculateServicePaymentSummary,
-  getPaymentMethodsByBrand,
+  getBranchPaymentMethods,
 } from "@/repositories/payment.repository";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { sendOperationalNotification } from "@/server/notifications/notification.service";
 
 /* ─── Update Service Status ─── */
 
@@ -310,6 +312,38 @@ export async function updateServiceStatusAction(
           }
         }
       }
+
+      try {
+        const { data: svc } = await (supabase as any)
+          .from("services")
+          .select("customer_id, device_type, device_brand, device_model")
+          .eq("id", service.id)
+          .single();
+        let customerName = "";
+        if (svc?.customer_id) {
+          const { data: cust } = await (supabase as any)
+            .from("customers")
+            .select("name")
+            .eq("id", svc.customer_id)
+            .maybeSingle();
+          customerName = cust?.name ?? "";
+        }
+        await sendOperationalNotification({
+          brandId: service.brand_id,
+          branchId: service.branch_id,
+          eventType: "SERVICE_COMPLETED",
+          actorProfileId: session.profileId,
+          payload: {
+            serviceNumber: service.service_number,
+            customerName,
+            deviceType: svc?.device_type ?? "",
+            deviceBrand: svc?.device_brand ?? "",
+            deviceModel: svc?.device_model ?? "",
+          },
+        });
+      } catch (notifErr: any) {
+        console.warn("[updateServiceStatusAction] notification error:", notifErr.message);
+      }
     }
 
     await addAuditLog({
@@ -486,6 +520,9 @@ export async function addServiceSparepartAction(
     }
 
     const usageIds: string[] = [];
+    let totalSparepartCost = 0;
+    const itemNames: string[] = [];
+
     for (const item of input.items) {
       const { createServerSupabase } = await import("@/lib/supabase/server");
       const supabase = await createServerSupabase();
@@ -509,7 +546,7 @@ export async function addServiceSparepartAction(
         // Quantity item: validate stock
         const { data: stockRow } = await (supabase as any)
           .from("branch_inventory_stocks")
-          .select("current_stock, item:inventory_items(selling_price)")
+          .select("current_stock, item:inventory_items(selling_price, name)")
           .eq("branch_id", service.branch_id)
           .eq("item_id", item.inventoryItemId)
           .maybeSingle();
@@ -518,9 +555,11 @@ export async function addServiceSparepartAction(
         if (stockRow.current_stock < item.quantity) {
           return errorResult(`Stok sparepart tidak mencukupi. Tersedia: ${stockRow.current_stock}`);
         }
+        if (stockRow.item?.name) itemNames.push(stockRow.item.name);
       }
 
       const sellingPrice = item.sellingPrice ?? 0;
+      totalSparepartCost += item.quantity * sellingPrice;
       try {
         const usageId = await callAddServiceSparepartUsage(
           service.id,
@@ -538,14 +577,16 @@ export async function addServiceSparepartAction(
       }
     }
 
+    const itemSummary = itemNames.length > 0 ? itemNames.slice(0, 3).join(", ") + (itemNames.length > 3 ? "..." : "") : `${input.items.length} item`;
+
     await addServiceTimelineEntry({
       brand_id: service.brand_id,
       branch_id: service.branch_id,
       service_id: service.id,
       from_status: null,
       to_status: service.current_status,
-      reason: `Sparepart ditambahkan: ${input.items.length} item`,
-      metadata: { items: input.items as any, usage_ids: usageIds },
+      reason: `Sparepart ditambahkan: ${itemSummary} — Rp ${totalSparepartCost.toLocaleString("id-ID")}`,
+      metadata: { items: input.items as any, usage_ids: usageIds, total_sparepart_cost: totalSparepartCost },
       changed_by: session.profileId,
     });
 
@@ -556,8 +597,13 @@ export async function addServiceSparepartAction(
       target_id: service.id,
       target_label: service.service_number,
       actor_id: session.profileId,
-      description: `Sparepart ditambahkan: ${input.items.length} item`,
-      details: { items: input.items as any, usage_ids: usageIds, note: input.note },
+      description: `Sparepart ditambahkan: ${itemSummary} — Rp ${totalSparepartCost.toLocaleString("id-ID")}`,
+      details: {
+        items: input.items as any,
+        usage_ids: usageIds,
+        note: input.note,
+        total_sparepart_cost: totalSparepartCost,
+      },
     });
 
     return successResult({ usageIds });
@@ -567,23 +613,46 @@ export async function addServiceSparepartAction(
   }
 }
 
-/* ─── Get Payment Methods ─── */
+/* ─── Get Payment Methods for Service Branch ─── */
 
 export async function getServicePaymentMethodsAction(
   brandSlug: string,
-): Promise<ActionResult<Array<{ id: string; name: string; type: string; mdrPercentage: number; defaultPaymentAccountId: string | null }>>> {
+  branchId: string,
+): Promise<ActionResult<Array<{ id: string; name: string; type: string; mdrPercentage: number; mdrMinTransaction: number; accountName: string | null }>>> {
   try {
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
+    requireActionPermission(session.role, PERMISSIONS.PAYMENT_METHOD_VIEW);
 
-    const methods = await getPaymentMethodsByBrand(session.brandId);
+    const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
+    const { canAccessBranch } = await import("@/domain/access/branch-access");
+    if (!canAccessBranch(ctx, branchId)) {
+      return errorResult("Anda tidak memiliki akses ke cabang ini.");
+    }
+
+    const methods = await getBranchPaymentMethods(session.brandId, branchId);
+
+    console.log("[service-payment/options]", {
+      brandSlug,
+      brandId: session.brandId,
+      branchId,
+      methods: methods.map((m) => ({
+        branchPaymentMethodId: m.branchPaymentMethodId,
+        methodType: m.methodType,
+        paymentAccountId: m.paymentAccountId,
+        accountName: m.accountName,
+        isActive: true,
+      })),
+    });
+
     return successResult(
-      methods.map((method: any) => ({
-        id: method.id,
-        name: method.name,
-        type: method.type,
-        mdrPercentage: method.mdr_percentage,
-        defaultPaymentAccountId: method.default_payment_account_id,
+      methods.map((m) => ({
+        id: m.branchPaymentMethodId,
+        name: m.methodName,
+        type: m.methodType,
+        mdrPercentage: m.mdrPercentage,
+        mdrMinTransaction: m.mdrMinTransaction,
+        accountName: m.accountName,
       })),
     );
   } catch (err: any) {
@@ -601,7 +670,7 @@ function isUuid(value: string): boolean {
 export interface ReceivePaymentInput {
   brandSlug: string;
   serviceId: string;
-  paymentMethodId: string;
+  branchPaymentMethodId: string;
   amount: number;
   note?: string;
   paymentType?: "DOWN_PAYMENT" | "PARTIAL_PAYMENT" | "FINAL_PAYMENT";
@@ -615,17 +684,45 @@ export async function receiveServicePaymentAction(
     if (session.role === "TECHNICIAN") {
       return errorResult("Role Anda tidak memiliki akses untuk menerima pembayaran.");
     }
-    requireActionPermission(session.role, "service.payment.create");
-    if (!isUuid(input.paymentMethodId)) {
+    requireActionPermission(session.role, PERMISSIONS.SERVICE_PAYMENT_CREATE);
+    if (!isUuid(input.branchPaymentMethodId)) {
       return errorResult("Metode pembayaran tidak valid. Pilih ulang metode pembayaran.");
     }
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "receiveServicePaymentAction");
-    if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
 
     const { createServerSupabase } = await import("@/lib/supabase/server");
     const supabase = await createServerSupabase();
+
+    // Validate branch_payment_method belongs to service branch
+    const { data: bpm, error: bpmErr } = await (supabase as any)
+      .from("branch_payment_methods")
+      .select("id, payment_method_id, method_type, payment_account_id, is_active")
+      .eq("id", input.branchPaymentMethodId)
+      .eq("brand_id", session.brandId)
+      .eq("branch_id", service.branch_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (bpmErr) {
+      console.error("[service-payment/error]", { error: bpmErr, branchPaymentMethodId: input.branchPaymentMethodId });
+      return errorResult("Gagal memvalidasi metode pembayaran.");
+    }
+
+    if (!bpm) {
+      return errorResult("Metode pembayaran belum aktif atau belum terhubung untuk cabang servis ini.");
+    }
+
+    if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
+
+    console.log("[service-payment/submit]", {
+      serviceId: input.serviceId,
+      serviceBranchId: service.branch_id,
+      branchPaymentMethodId: input.branchPaymentMethodId,
+      amount: input.amount,
+    });
+
     const { data: summary } = await (supabase as any).rpc("calculate_service_payment_summary", { p_service_id: service.id });
 
     if (summary) {
@@ -638,13 +735,17 @@ export async function receiveServicePaymentAction(
       source: "service_payment",
     };
 
+    // Generate idempotency key to prevent duplicate on retry
+    const idempotencyKey = `service:${service.id}:${input.branchPaymentMethodId}:${Date.now()}`;
+
     const paymentResult = await callRecordServicePayment(
       service.id,
-      input.paymentMethodId,
+      bpm.payment_method_id,
       input.amount,
       session.profileId,
       input.note ?? null,
-      paymentMeta
+      paymentMeta,
+      idempotencyKey
     );
 
     if (paymentResult?.service_payment_id) {
@@ -676,6 +777,22 @@ export async function receiveServicePaymentAction(
       description: `Pembayaran diterima: ${paymentResult?.payment_number ?? ""}`,
       details: { service_id: service.id, amount: input.amount, payment_number: paymentResult?.payment_number, payment_type: input.paymentType },
     });
+
+    try {
+      await sendOperationalNotification({
+        brandId: service.brand_id,
+        branchId: service.branch_id,
+        eventType: "PAYMENT_RECEIVED",
+        actorProfileId: session.profileId,
+        payload: {
+          serviceNumber: service.service_number,
+          amount: input.amount,
+          paymentType: input.paymentType,
+        },
+      });
+    } catch (notifErr: any) {
+      console.warn("[receiveServicePaymentAction] notification error:", notifErr.message);
+    }
 
     return successResult(paymentResult);
   } catch (err: any) {

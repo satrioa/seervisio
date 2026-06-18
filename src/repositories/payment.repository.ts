@@ -51,6 +51,55 @@ export async function getPaymentMethodsByBrand(brandId: number): Promise<any[]> 
   return data ?? [];
 }
 
+export interface BranchPaymentMethodOption {
+  branchPaymentMethodId: string;
+  paymentMethodId: string;
+  methodType: string;
+  methodName: string;
+  paymentAccountId: string;
+  accountName: string;
+  mdrPercentage: number;
+  mdrMinTransaction: number;
+}
+
+export async function getBranchPaymentMethods(
+  brandId: number,
+  branchId: string,
+): Promise<BranchPaymentMethodOption[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await (supabase as any)
+    .from("branch_payment_methods")
+    .select(`
+      id,
+      method_type,
+      mdr_percentage,
+      mdr_min_transaction,
+      payment_account_id,
+      payment_account:payment_accounts!inner(id, name, is_active),
+      payment_method:payment_methods!inner(id, name, type, is_active)
+    `)
+    .eq("brand_id", brandId)
+    .eq("branch_id", branchId)
+    .eq("is_active", true)
+    .not("payment_account_id", "is", null)
+    .eq("payment_account.is_active", true)
+    .eq("payment_method.is_active", true)
+    .order("payment_method.name", { ascending: true });
+
+  if (error) throw error;
+
+  return ((data as any[]) ?? []).map((row: any) => ({
+    branchPaymentMethodId: row.id,
+    paymentMethodId: row.payment_method.id,
+    methodType: row.method_type,
+    methodName: row.payment_method.name,
+    paymentAccountId: row.payment_account_id,
+    accountName: row.payment_account.name,
+    mdrPercentage: Number(row.mdr_percentage ?? 0),
+    mdrMinTransaction: Number(row.mdr_min_transaction ?? 0),
+  }));
+}
+
 export async function getPaymentAccountsByBranch(branchId: string): Promise<any[]> {
   const supabase = await createServerSupabase();
   const { data, error } = await (supabase as any)
@@ -69,7 +118,8 @@ export async function callRecordServicePayment(
   amount: number,
   createdBy: string,
   notes?: string | null,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  idempotencyKey?: string | null,
 ): Promise<any> {
   const supabase = await createServerSupabase();
   const { data, error } = await (supabase as any).rpc("record_service_payment", {
@@ -79,6 +129,7 @@ export async function callRecordServicePayment(
     p_notes: notes ?? null,
     p_metadata: metadata ?? {},
     p_created_by: createdBy,
+    p_idempotency_key: idempotencyKey ?? null,
   });
   if (error) throw error;
   return data;

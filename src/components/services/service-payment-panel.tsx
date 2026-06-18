@@ -46,6 +46,8 @@ interface PaymentMethodOption {
   name: string;
   type: string;
   mdrPercentage: number;
+  mdrMinTransaction: number;
+  accountName: string | null;
 }
 
 /* ── Props ── */
@@ -82,7 +84,7 @@ export function ServicePaymentPanel({
     if (!open) return;
     setMethodsLoading(true);
     setMethodsError(null);
-    getServicePaymentMethodsAction(brandSlug).then((result) => {
+    getServicePaymentMethodsAction(brandSlug, service.branchId).then((result) => {
       if (result.success) {
         setMethods(result.data);
       } else {
@@ -93,7 +95,7 @@ export function ServicePaymentPanel({
     }).finally(() => {
       setMethodsLoading(false);
     });
-  }, [open, brandSlug]);
+  }, [open, brandSlug, service.branchId]);
 
   // Reset form when panel opens
   useEffect(() => {
@@ -108,12 +110,9 @@ export function ServicePaymentPanel({
   }, [open]);
 
   const totalDue = useMemo(() => {
-    const sparepartCost = service.spareparts.reduce(
-      (sum, sp) => sum + sp.price * sp.qty, 0
-    );
     const estimatedCost = Number(service.estimatedCost || 0);
     const finalCost = Number(service.finalCost || 0);
-    return finalCost || estimatedCost || sparepartCost;
+    return finalCost || estimatedCost || 0;
   }, [service]);
 
   const summary: ServicePaymentSummary = useMemo(() => {
@@ -176,7 +175,7 @@ export function ServicePaymentPanel({
         brandSlug,
         serviceId: service.id,
         amount: amountNum,
-        paymentMethodId: methodId,
+        branchPaymentMethodId: methodId,
         note: note || undefined,
       });
 
@@ -246,10 +245,10 @@ export function ServicePaymentPanel({
           <div className="mt-6 flex flex-col items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
             <AlertTriangle className="size-8 text-destructive/60" />
             <p className="text-sm font-medium text-destructive">
-              Metode pembayaran belum dikonfigurasi.
+              Belum ada metode pembayaran aktif untuk cabang ini.
             </p>
             <p className="text-xs text-muted-foreground">
-              Hubungi administrator untuk mengatur metode pembayaran.
+              Hubungkan akun pembayaran di menu Payment Methods terlebih dahulu.
             </p>
           </div>
         ) : methodsLoading ? (
@@ -352,12 +351,14 @@ export function ServicePaymentPanel({
                   <SelectContent className="z-[1001]">
                     {methods.map((method) => (
                       <SelectItem key={method.id} value={method.id} className="text-sm">
-                        {method.name}
-                        {method.mdrPercentage > 0 && (
-                          <span className="ml-1 text-[10px] text-muted-foreground">
-                            (MDR {method.mdrPercentage}%)
-                          </span>
-                        )}
+                        <div className="flex flex-col">
+                          <span>{method.name}</span>
+                          {method.accountName && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {method.accountName}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
