@@ -58,6 +58,7 @@ export interface BranchPaymentMethodOption {
   methodName: string;
   paymentAccountId: string;
   accountName: string;
+  accountBranchId: string | null;
   mdrPercentage: number;
   mdrMinTransaction: number;
 }
@@ -67,7 +68,9 @@ export async function getBranchPaymentMethods(
   branchId: string,
 ): Promise<BranchPaymentMethodOption[]> {
   const supabase = await createServerSupabase();
-  const { data, error } = await (supabase as any)
+
+  // Step 1: Load branch_payment_methods with active status and linked account
+  const { data: bpmRows, error: bpmErr } = await (supabase as any)
     .from("branch_payment_methods")
     .select(`
       id,
@@ -75,29 +78,78 @@ export async function getBranchPaymentMethods(
       mdr_percentage,
       mdr_min_transaction,
       payment_account_id,
-      payment_account:payment_accounts!inner(id, name, is_active),
       payment_method:payment_methods!inner(id, name, type, is_active)
     `)
     .eq("brand_id", brandId)
     .eq("branch_id", branchId)
     .eq("is_active", true)
     .not("payment_account_id", "is", null)
-    .eq("payment_account.is_active", true)
     .eq("payment_method.is_active", true)
     .order("payment_method.name", { ascending: true });
 
-  if (error) throw error;
+  if (bpmErr) throw bpmErr;
 
-  return ((data as any[]) ?? []).map((row: any) => ({
-    branchPaymentMethodId: row.id,
-    paymentMethodId: row.payment_method.id,
-    methodType: row.method_type,
-    methodName: row.payment_method.name,
-    paymentAccountId: row.payment_account_id,
-    accountName: row.payment_account.name,
-    mdrPercentage: Number(row.mdr_percentage ?? 0),
-    mdrMinTransaction: Number(row.mdr_min_transaction ?? 0),
-  }));
+  // Step 2: Load payment_accounts that are valid (active + global or branch-specific)
+  const accountIds = [...new Set((bpmRows as any[] ?? []).map(r => r.payment_account_id).filter(Boolean))];
+  if (accountIds.length === 0) {
+    console.log("[service-payment/method-options/final]", {
+      brandId,
+      branchId,
+      count: 0,
+      methods: [],
+    });
+    return [];
+  }
+
+  const { data: paRows, error: paErr } = await (supabase as any)
+    .from("payment_accounts")
+    .select("id, name, branch_id, is_active")
+    .in("id", accountIds)
+    .eq("brand_id", brandId)
+    .eq("is_active", true)
+    .or(`branch_id.is.null,branch_id.eq.${branchId}`);
+
+  if (paErr) throw paErr;
+
+  // Step 3: Build valid account lookup and merge
+  const validAccountIds = new Set((paRows as any[] ?? []).map((r: any) => r.id));
+  const accountById = new Map<string, any>();
+  for (const pa of (paRows as any[] ?? [])) {
+    accountById.set(pa.id, pa);
+  }
+
+  const methods: BranchPaymentMethodOption[] = [];
+  for (const row of (bpmRows as any[] ?? [])) {
+    if (!validAccountIds.has(row.payment_account_id)) continue;
+    const account = accountById.get(row.payment_account_id);
+    methods.push({
+      branchPaymentMethodId: row.id,
+      paymentMethodId: row.payment_method.id,
+      methodType: row.method_type,
+      methodName: row.payment_method.name,
+      paymentAccountId: row.payment_account_id,
+      accountName: account.name,
+      accountBranchId: account.branch_id,
+      mdrPercentage: Number(row.mdr_percentage ?? 0),
+      mdrMinTransaction: Number(row.mdr_min_transaction ?? 0),
+    });
+  }
+
+  console.log("[service-payment/method-options/final]", {
+    brandId,
+    branchId,
+    count: methods.length,
+    methods: methods.map(m => ({
+      branchPaymentMethodId: m.branchPaymentMethodId,
+      methodType: m.methodType,
+      paymentAccountId: m.paymentAccountId,
+      accountName: m.accountName,
+      accountBranchId: m.accountBranchId,
+      isGlobalAccount: m.accountBranchId === null,
+    })),
+  });
+
+  return methods;
 }
 
 export async function getPaymentAccountsByBranch(branchId: string): Promise<any[]> {

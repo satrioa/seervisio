@@ -618,7 +618,7 @@ export async function addServiceSparepartAction(
 export async function getServicePaymentMethodsAction(
   brandSlug: string,
   branchId: string,
-): Promise<ActionResult<Array<{ id: string; name: string; type: string; mdrPercentage: number; mdrMinTransaction: number; accountName: string | null }>>> {
+): Promise<ActionResult<Array<{ id: string; name: string; type: string; mdrPercentage: number; mdrMinTransaction: number; accountName: string | null; accountBranchId: string | null }>>> {
   try {
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
@@ -641,7 +641,8 @@ export async function getServicePaymentMethodsAction(
         methodType: m.methodType,
         paymentAccountId: m.paymentAccountId,
         accountName: m.accountName,
-        isActive: true,
+        accountBranchId: m.accountBranchId,
+        isGlobalAccount: m.accountBranchId === null,
       })),
     });
 
@@ -653,6 +654,7 @@ export async function getServicePaymentMethodsAction(
         mdrPercentage: m.mdrPercentage,
         mdrMinTransaction: m.mdrMinTransaction,
         accountName: m.accountName,
+        accountBranchId: m.accountBranchId,
       })),
     );
   } catch (err: any) {
