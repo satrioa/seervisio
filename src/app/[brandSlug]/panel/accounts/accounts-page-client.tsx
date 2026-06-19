@@ -683,6 +683,20 @@ export function AccountsPageClient({ brandSlug }: { brandSlug: string }) {
           { label: "Beranda", href: `/${brandSlug}/panel/dashboard` },
           { label: "Accounts" },
         ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={fetchAccounts} disabled={loading}>
+              <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            {canManage && (
+              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setForm(INIT_FORM); setActionError(null); setCreateOpen(true); }}>
+                <Plus className="size-3" />
+                Tambah User
+              </Button>
+            )}
+          </div>
+        }
       />
 
       {error && (
@@ -700,9 +714,9 @@ export function AccountsPageClient({ brandSlug }: { brandSlug: string }) {
         </Alert>
       )}
 
-      {/* ── Actions bar ── */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-muted-foreground">
+      {/* ── Search & Filters ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+        <div className="text-sm text-muted-foreground shrink-0">
           {!loading && (
             searchQuery || roleFilter !== FILTER_SENTINELS.ROLE_ALL || branchFilter !== FILTER_SENTINELS.BRANCH_ALL ||
             statusFilter !== FILTER_SENTINELS.STATUS_ALL || authFilter !== FILTER_SENTINELS.AUTH_ALL
@@ -710,20 +724,6 @@ export function AccountsPageClient({ brandSlug }: { brandSlug: string }) {
               : `${accounts.length} pengguna`
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={fetchAccounts} disabled={loading}>
-            <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setForm(INIT_FORM); setActionError(null); setCreateOpen(true); }}>
-            <Plus className="size-3" />
-            Tambah User
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Search & Filters ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
         <div className="relative flex-1">
           <Input
             placeholder="Cari nama, email, role, cabang..."
