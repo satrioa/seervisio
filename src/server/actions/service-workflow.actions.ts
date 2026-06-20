@@ -719,10 +719,42 @@ export async function receiveServicePaymentAction(
 
     if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
 
+    // Validate linked payment_account is active and branch-valid
+    const { data: pa, error: paErr } = await (supabase as any)
+      .from("payment_accounts")
+      .select("id, branch_id, is_active")
+      .eq("id", bpm.payment_account_id)
+      .eq("brand_id", session.brandId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (paErr || !pa) {
+      return errorResult("Akun pembayaran tidak aktif atau tidak ditemukan.");
+    }
+
+    if (pa.branch_id !== null && pa.branch_id !== service.branch_id) {
+      return errorResult("Akun pembayaran tidak terhubung ke cabang servis ini.");
+    }
+
+    // Resolve the global payment_methods.id from branch_payment_methods.method_type
+    // The RPC record_service_payment validates against global payment_methods.id
+    const { data: globalPm, error: pmErr } = await (supabase as any)
+      .from("payment_methods")
+      .select("id")
+      .eq("type", bpm.method_type)
+      .eq("brand_id", session.brandId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (pmErr || !globalPm) {
+      return errorResult("Metode pembayaran global tidak ditemukan.");
+    }
+
     console.log("[service-payment/submit]", {
       serviceId: input.serviceId,
       serviceBranchId: service.branch_id,
       branchPaymentMethodId: input.branchPaymentMethodId,
+      globalPaymentMethodId: globalPm.id,
       amount: input.amount,
     });
 
@@ -736,6 +768,7 @@ export async function receiveServicePaymentAction(
     const paymentMeta: Record<string, unknown> = {
       payment_type: input.paymentType ?? "FINAL_PAYMENT",
       source: "service_payment",
+      branch_payment_method_id: input.branchPaymentMethodId,
     };
 
     // Generate idempotency key to prevent duplicate on retry
@@ -743,12 +776,13 @@ export async function receiveServicePaymentAction(
 
     const paymentResult = await callRecordServicePayment(
       service.id,
-      bpm.payment_method_id,
+      globalPm.id, // RPC expects global payment_methods.id (validates against payment_methods table)
       input.amount,
       session.profileId,
       input.note ?? null,
       paymentMeta,
-      idempotencyKey
+      idempotencyKey,
+      new Date().toISOString(),
     );
 
     if (paymentResult?.service_payment_id) {

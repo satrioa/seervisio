@@ -198,9 +198,10 @@ export async function callRecordServicePayment(
   notes?: string | null,
   metadata?: Record<string, unknown>,
   idempotencyKey?: string | null,
+  paidAt?: string | null,
 ): Promise<any> {
   const supabase = await createServerSupabase();
-  const { data, error } = await (supabase as any).rpc("record_service_payment", {
+  const params: Record<string, unknown> = {
     p_service_id: serviceId,
     p_payment_method_id: paymentMethodId,
     p_amount: amount,
@@ -208,7 +209,19 @@ export async function callRecordServicePayment(
     p_metadata: metadata ?? {},
     p_created_by: createdBy,
     p_idempotency_key: idempotencyKey ?? null,
+    p_paid_at: paidAt ?? null,
+  };
+
+  console.log("[callRecordServicePayment/rpc-params]", {
+    p_service_id: params.p_service_id,
+    p_amount: params.p_amount,
+    p_payment_method_id: params.p_payment_method_id,
+    p_paid_at: params.p_paid_at,
+    p_created_by: params.p_created_by,
+    hasIdempotencyKey: Boolean(params.p_idempotency_key),
   });
+
+  const { data, error } = await (supabase as any).rpc("record_service_payment", params);
   if (error) throw error;
   return data;
 }
