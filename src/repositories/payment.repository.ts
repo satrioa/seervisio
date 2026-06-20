@@ -34,6 +34,7 @@ export async function getServicePayments(
       payment_account:payment_accounts(id, name, account_type)
     `)
     .eq("service_id", serviceId)
+    .in("payment_status", ["COMPLETED", "PAID", "SUCCESS"])
     .order("paid_at", { ascending: true });
   if (error) throw error;
   return data ?? [];

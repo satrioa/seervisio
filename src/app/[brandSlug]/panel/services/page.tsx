@@ -259,7 +259,8 @@ function ServicesPageContent() {
         showDetail(result.data);
       }
     }
-  }, [brandSlug, selectedServiceId, fetchServices, showDetail]);
+    router.refresh();
+  }, [brandSlug, selectedServiceId, fetchServices, showDetail, router]);
 
   // Wire refresh callback into right sidebar context so sidebar mutations refresh the page
   React.useEffect(() => {

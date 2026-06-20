@@ -719,19 +719,34 @@ export async function receiveServicePaymentAction(
 
     if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
 
+    const { data: summary } = await (supabase as any).rpc("calculate_service_payment_summary", { p_service_id: service.id });
+
+    const totalPaid = Number(summary?.total_paid ?? 0);
+    const totalBill = Number(summary?.total_charged ?? service.final_cost ?? service.estimated_cost ?? 0);
+    const remaining = Number(summary?.remaining_balance ?? 0);
+
+    console.log("[service-payment/summary]", {
+      serviceId: input.serviceId,
+      totalBill,
+      totalPaid,
+      remainingAmount: remaining,
+      paymentStatus: summary?.payment_status ?? "UNPAID",
+    });
+
+    if (totalBill > 0 && remaining <= 0) {
+      return errorResult("Servis ini sudah lunas.");
+    }
+
+    if (input.amount > remaining) {
+      return errorResult("Nominal pembayaran melebihi sisa tagihan.");
+    }
+
     console.log("[service-payment/submit]", {
       serviceId: input.serviceId,
       serviceBranchId: service.branch_id,
       branchPaymentMethodId: input.branchPaymentMethodId,
       amount: input.amount,
     });
-
-    const { data: summary } = await (supabase as any).rpc("calculate_service_payment_summary", { p_service_id: service.id });
-
-    if (summary) {
-      const remaining = summary.remaining_balance ?? 0;
-      if (input.amount > remaining) return errorResult("Nominal pembayaran melebihi sisa tagihan.");
-    }
 
     const paymentMeta: Record<string, unknown> = {
       payment_type: input.paymentType ?? "FINAL_PAYMENT",
@@ -755,6 +770,12 @@ export async function receiveServicePaymentAction(
       idempotencyKey,
       new Date().toISOString(),
     );
+
+    console.log("[service-payment/after-success-refresh]", {
+      serviceId: input.serviceId,
+      paymentId: paymentResult?.service_payment_id,
+      shouldRefresh: true,
+    });
 
     if (paymentResult?.service_payment_id) {
       try {

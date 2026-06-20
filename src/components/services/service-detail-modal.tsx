@@ -38,7 +38,6 @@ import {
   STATUS_ORDER,
   formatCurrency,
   getTotalSparepartCost,
-  getTotalPayment,
   calculateServicePaymentSummary,
   getPaymentStatusLabel,
   getPaymentRecordTypeLabel,
@@ -63,11 +62,11 @@ export function ServiceDetailModal({
   open,
   onOpenChange,
   brandSlug,
-}: ServiceDetailModalProps) {
+  onServiceUpdated,
+}: ServiceDetailModalProps & { onServiceUpdated?: () => void }) {
   if (!service) return null;
 
   const [paymentOpen, setPaymentOpen] = React.useState(false);
-  const [debugUpdateOpen, setDebugUpdateOpen] = React.useState(false);
   const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(
     service.status,
   );
@@ -87,16 +86,13 @@ export function ServiceDetailModal({
 
   const statusIndex = STATUS_ORDER.indexOf(localStatus);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
-  const totalPaid = getTotalPayment(service.payments);
-  const isPaid =
-    service.payments.length > 0 &&
-    service.payments.every((p) => p.status === "lunas");
-  const isCancelled = localStatus === "cancelled";
   const totalDueVal = Number(service.finalCost || service.estimatedCost || 0);
   const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
     totalDueVal,
     enrichedPayments,
   );
+  const isPaid = totalDueVal > 0 && paymentSummary.remainingBalance <= 0;
+  const isCancelled = localStatus === "cancelled";
   const paymentStatusLabel = getPaymentStatusLabel(
     paymentSummary.paymentStatus,
   );
@@ -517,37 +513,7 @@ export function ServiceDetailModal({
                       Tambah Sparepart
                     </Button>
                   </div>
-                  {/* DEBUG: Hardcoded Update Status test */}
-                  <div className="mt-1 space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full border-2 border-amber-500 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                      onClick={() => {
-                        console.log("[HARDCODED UPDATE STATUS] clicked");
-                        console.log("[HARDCODED] displayService.status:", displayService.status);
-                        console.log("[HARDCODED] localStatus:", localStatus);
-                        setDebugUpdateOpen((prev) => !prev);
-                      }}
-                    >
-                      {debugUpdateOpen ? "▼ Hardcoded Update Status (open)" : "▶ Hardcoded Update Status"}
-                    </Button>
 
-                    {debugUpdateOpen ? (
-                      <div className="rounded-xl border bg-card p-4 text-sm shadow-sm">
-                        <p className="font-semibold text-foreground">Hardcoded Update Status Panel</p>
-                        <p className="mt-1 text-muted-foreground">
-                          If this appears, button click and parent state work.
-                        </p>
-                        <div className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground">
-                          <p>displayService.status: {String(displayService.status)}</p>
-                          <p>localStatus: {String(localStatus)}</p>
-                          <p>isPaid: {String(isPaid)}</p>
-                          <p>isCancelled: {String(isCancelled)}</p>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
                   {!isPaid && paymentSummary.remainingBalance > 0 && (
                     <Button
                       size="sm"
@@ -576,6 +542,7 @@ export function ServiceDetailModal({
           service={service}
           brandSlug={brandSlug ?? ""}
           onPaymentRecorded={() => {
+            onServiceUpdated?.();
           }}
         />
       </DialogContent>
