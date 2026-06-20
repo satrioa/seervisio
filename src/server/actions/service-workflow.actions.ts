@@ -719,42 +719,10 @@ export async function receiveServicePaymentAction(
 
     if (input.amount <= 0) return errorResult("Nominal pembayaran tidak valid.");
 
-    // Validate linked payment_account is active and branch-valid
-    const { data: pa, error: paErr } = await (supabase as any)
-      .from("payment_accounts")
-      .select("id, branch_id, is_active")
-      .eq("id", bpm.payment_account_id)
-      .eq("brand_id", session.brandId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (paErr || !pa) {
-      return errorResult("Akun pembayaran tidak aktif atau tidak ditemukan.");
-    }
-
-    if (pa.branch_id !== null && pa.branch_id !== service.branch_id) {
-      return errorResult("Akun pembayaran tidak terhubung ke cabang servis ini.");
-    }
-
-    // Resolve the global payment_methods.id from branch_payment_methods.method_type
-    // The RPC record_service_payment validates against global payment_methods.id
-    const { data: globalPm, error: pmErr } = await (supabase as any)
-      .from("payment_methods")
-      .select("id")
-      .eq("type", bpm.method_type)
-      .eq("brand_id", session.brandId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (pmErr || !globalPm) {
-      return errorResult("Metode pembayaran global tidak ditemukan.");
-    }
-
     console.log("[service-payment/submit]", {
       serviceId: input.serviceId,
       serviceBranchId: service.branch_id,
       branchPaymentMethodId: input.branchPaymentMethodId,
-      globalPaymentMethodId: globalPm.id,
       amount: input.amount,
     });
 
@@ -774,9 +742,12 @@ export async function receiveServicePaymentAction(
     // Generate idempotency key to prevent duplicate on retry
     const idempotencyKey = `service:${service.id}:${input.branchPaymentMethodId}:${Date.now()}`;
 
+    // The RPC validates branch_payment_methods, resolves global payment_methods.id,
+    // and calculates MDR internally. We pass branch_payment_methods.id as
+    // p_payment_method_id (legacy parameter name).
     const paymentResult = await callRecordServicePayment(
       service.id,
-      globalPm.id, // RPC expects global payment_methods.id (validates against payment_methods table)
+      input.branchPaymentMethodId,
       input.amount,
       session.profileId,
       input.note ?? null,
