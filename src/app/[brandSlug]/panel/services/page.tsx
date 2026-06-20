@@ -253,22 +253,24 @@ function ServicesPageContent() {
     [updateUrlParam]
   );
 
-  const handleServiceUpdated = useCallback(async () => {
-    const sid = selectedServiceIdRef.current;
+  const handleServiceUpdated = useCallback(async (serviceId?: string) => {
+    const sid = serviceId ?? selectedServiceIdRef.current;
     if (sid) {
       const result = await getServiceDetailAction(brandSlug, sid);
       if (result.success) {
         const fresh = result.data;
-        console.log("[service-payment/local-state-update]", {
+        console.log("[services/table-payment-summary]", {
           serviceId: fresh.id,
           serviceNumber: fresh.serviceNumber,
-          paymentState: fresh.paymentSummary?.paymentStatus,
+          paymentsCount: fresh.payments?.length ?? 0,
           totalPaid: fresh.paymentSummary?.totalPaid,
           remainingAmount: fresh.paymentSummary?.remainingBalance,
-          paymentsCount: fresh.payments?.length ?? 0,
+          paymentState: fresh.paymentSummary?.paymentStatus,
         });
         setServices(prev => prev.map(s => s.id === sid ? fresh : s));
-        showDetail(fresh);
+        if (serviceId || selectedServiceIdRef.current === sid) {
+          showDetail(fresh);
+        }
       }
     }
     fetchServices().then(() => router.refresh());
@@ -592,8 +594,9 @@ function ServicesPageContent() {
           onOpenChange={(open) => { if (!open) setPaymentServiceId(null); }}
           brandSlug={brandSlug}
           onPaymentRecorded={() => {
+            const paidServiceId = paymentService.id;
             setPaymentServiceId(null);
-            handleServiceUpdated();
+            handleServiceUpdated(paidServiceId);
           }}
         />
       )}

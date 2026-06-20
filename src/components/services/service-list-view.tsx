@@ -30,6 +30,7 @@ import {
   getPickupStatus,
   getPickupLabel,
   getPickupColor,
+  getPaymentStatusLabel,
 } from "@/components/services/service-data";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
@@ -382,6 +383,14 @@ export function ServiceListView({
     });
   }, [services.length, pickupFilteredServices.length, pickupFilter]);
 
+  console.log("[services/table-payment-summary]", pickupFilteredServices.map(s => ({
+    serviceNumber: s.serviceNumber ?? s.serviceNumber,
+    paymentsCount: s.payments?.length ?? 0,
+    totalPaid: s.paymentSummary?.totalPaid,
+    remainingAmount: s.paymentSummary?.remainingBalance,
+    paymentState: s.paymentSummary?.paymentStatus,
+  })));
+
   const totalItems = pickupFilteredServices.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -530,7 +539,7 @@ export function ServiceListView({
                     )}
                     {service.paymentSummary?.paymentStatus === "PARTIAL" && (
                       <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">
-                        Dibayar {formatCurrency(service.paymentSummary.totalPaid)}
+                        Sisa {formatCurrency(service.paymentSummary.remainingBalance)}
                       </span>
                     )}
                     {(!service.paymentSummary || service.paymentSummary.paymentStatus === "UNPAID") && (
@@ -604,7 +613,9 @@ export function ServiceListView({
                         {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                              {service.paymentSummary.paymentStatus === "PAID" ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(service.paymentSummary.totalPaid)}
+                              {service.paymentSummary.paymentStatus === "PAID"
+                                ? "Sudah lunas"
+                                : `Dibayar ${formatCurrency(service.paymentSummary.totalPaid)}`}
                             </span>
                             {service.paymentSummary.paymentStatus === "PARTIAL" && (
                               <span className="text-[10px] text-muted-foreground">
@@ -715,9 +726,7 @@ export function ServiceListView({
                             <Wrench className="size-3" />
                             Sparepart
                           </Button>
-                          {role !== "TECHNICIAN" && service.payments.every(
-                            (p) => p.status === "belum"
-                          ) && (
+                          {(role !== "TECHNICIAN" && (service.paymentSummary?.remainingBalance ?? 0) > 0) && (
                             <Button
                               type="button"
                               variant="outline"
@@ -877,7 +886,9 @@ export function ServiceListView({
                     {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
                       <div className="flex flex-col gap-0.5">
                         <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          {service.paymentSummary.paymentStatus === "PAID" ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(service.paymentSummary.totalPaid)}
+                          {service.paymentSummary.paymentStatus === "PAID"
+                            ? "Sudah lunas"
+                            : `Dibayar ${formatCurrency(service.paymentSummary.totalPaid)}`}
                         </span>
                         {service.paymentSummary.paymentStatus === "PARTIAL" && (
                           <span className="text-[10px] text-muted-foreground">
