@@ -326,7 +326,7 @@ function PageSkeleton() {
             <Skeleton className="h-32 w-full" />
           </CardContent>
         </Card>
-        <div className="flex h-full min-h-[520px] gap-4 overflow-hidden">
+        <div className="-m-3 flex h-full min-h-[520px] gap-4 overflow-visible p-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} className="h-full shrink-0 border-border/70 shadow-sm" style={{ width: CARD_WIDTH, minWidth: CARD_WIDTH }}>
               <CardContent className="p-5 space-y-4">
@@ -449,7 +449,7 @@ export default function TechnicianPerformancePage() {
   }
 
   return (
-    <div className="space-y-5">
+      <div className="flex min-h-full flex-1 flex-col gap-5">
       {/* ═══ Header ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -534,13 +534,13 @@ export default function TechnicianPerformancePage() {
           <TeamSummaryPanel data={data} />
 
           {/* Right: horizontal technician cards */}
-          <div className="h-full min-w-0">
+          <div className="h-full min-w-0 overflow-visible">
             {displayedTechnicians.length === 0 ? (
               <div className="flex h-full min-h-[520px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
                 Tidak ada teknisi yang cocok dengan filter.
               </div>
             ) : (
-              <div className="flex h-full min-h-[520px] items-stretch gap-4 overflow-x-auto hide-scrollbar scroll-smooth pb-2">
+              <div className="-m-3 flex h-full min-h-[520px] items-stretch gap-4 overflow-x-auto overflow-y-visible hide-scrollbar scroll-smooth p-3">
                 {visibleTechnicians.map((tech, idx) => (
                   <TechnicianCardWrapper
                     key={tech.profileId}

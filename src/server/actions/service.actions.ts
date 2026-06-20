@@ -188,17 +188,16 @@ export async function listServicesAction(
     const paymentSummaries = await getServicesPaymentSummary(serviceIds, chargesMap);
     for (const s of services) {
       const summary = paymentSummaries[s.id];
-      if (summary) {
-        s.payments = summary.payments;
-        (s as any).__paymentRecords = summary.paymentRecords;
-        s.paymentSummary = {
-          totalCharged: summary.totalCharged,
-          totalPaid: summary.totalPaid,
-          remainingBalance: summary.remainingBalance,
-          dpAmount: 0,
-          paymentStatus: summary.paymentStatus,
-        };
-      }
+      s.payments = summary?.payments ?? [];
+      (s as any).__paymentRecords = summary?.paymentRecords ?? [];
+      const totalCharged = chargesMap[s.id] ?? 0;
+      s.paymentSummary = {
+        totalCharged,
+        totalPaid: summary?.totalPaid ?? 0,
+        remainingBalance: summary?.remainingBalance ?? totalCharged,
+        dpAmount: 0,
+        paymentStatus: summary?.paymentStatus ?? "UNPAID",
+      };
     }
 
     console.log("[services/list-payment-summary]", services.map(s => ({
@@ -530,9 +529,13 @@ export async function getServiceDetailAction(
       pickedUpBy: row.picked_up_by_profile_id ?? undefined,
     };
     (service as any).__paymentRecords = mappedPaymentRecords;
-    if (paymentSummary) {
-      service.paymentSummary = paymentSummary;
-    }
+    service.paymentSummary = paymentSummary ?? {
+      totalCharged: 0,
+      totalPaid: 0,
+      remainingBalance: 0,
+      dpAmount: 0,
+      paymentStatus: "UNPAID",
+    };
     
     return successResult(service);
   } catch (err: any) {

@@ -13,7 +13,7 @@ export interface ServicePaymentSummaryResult {
 /**
  * Fetch payment summaries for multiple service IDs using service_payments table.
  * Uses gross_amount (customer paid) — MDR does not reduce customer paid amount.
- * Only COMPLETED payments are included.
+ * Only COMPLETED/PAID/SUCCESS payments are included.
  */
 export async function getServicesPaymentSummary(
   serviceIds: string[],
@@ -39,7 +39,7 @@ export async function getServicesPaymentSummary(
       payment_account:payment_accounts(id, name, account_type)
     `)
     .in("service_id", serviceIds)
-    .eq("payment_status", "COMPLETED")
+    .in("payment_status", ["COMPLETED", "PAID", "SUCCESS"])
     .order("paid_at", { ascending: true });
 
   if (error) {
