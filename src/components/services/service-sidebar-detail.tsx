@@ -154,7 +154,17 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
   const totalSparepart = getTotalSparepartCost(service.spareparts);
   const totalCost = Number(service.finalCost || service.estimatedCost || 0);
 
-  const summary = paymentData ?? (() => {
+  const summary = React.useMemo(() => {
+    if (paymentData) return paymentData;
+    if (service.paymentSummary) {
+      return {
+        totalBill: service.paymentSummary.totalCharged,
+        totalPaid: service.paymentSummary.totalPaid,
+        remainingAmount: service.paymentSummary.remainingBalance,
+        paymentState: service.paymentSummary.paymentStatus as ServicePaymentSummaryResult["paymentState"],
+        successfulPayments: [] as PaymentSummaryRow[],
+      };
+    }
     const totalPaidFromRecords = enrichedPayments.length > 0
       ? enrichedPayments.reduce((sum, payment) => sum + payment.amount, 0)
       : getTotalPayment(service.payments);
@@ -164,7 +174,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
     else if (rem > 0) ps = "PARTIAL";
     else ps = "PAID";
     return { totalBill: totalCost, totalPaid: totalPaidFromRecords, remainingAmount: rem, paymentState: ps, successfulPayments: [] };
-  })();
+  }, [paymentData, service.paymentSummary, enrichedPayments, service.payments, totalCost]);
 
   const isPaid = summary.paymentState === "PAID";
   const isCancelled = service.status === "cancelled";

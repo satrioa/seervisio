@@ -164,6 +164,7 @@ export interface ServiceRecord extends ServiceUiItem {
   pickupRelation?: string;
   pickupNote?: string;
   pickedUpBy?: string;
+  paymentSummary?: ServicePaymentSummary;
 }
 
 export type PickupStatus = "NOT_READY" | "READY" | "PICKED_UP";

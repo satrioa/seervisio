@@ -134,6 +134,8 @@ function ServicesPageContent() {
   }, [hasActiveFilters]);
 
   const [selectedServiceId, setSelectedServiceId] = React.useState<string | null>(null);
+  const selectedServiceIdRef = React.useRef(selectedServiceId);
+  React.useEffect(() => { selectedServiceIdRef.current = selectedServiceId; }, [selectedServiceId]);
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -252,15 +254,25 @@ function ServicesPageContent() {
   );
 
   const handleServiceUpdated = useCallback(async () => {
-    await fetchServices();
-    if (selectedServiceId) {
-      const result = await getServiceDetailAction(brandSlug, selectedServiceId);
+    const sid = selectedServiceIdRef.current;
+    if (sid) {
+      const result = await getServiceDetailAction(brandSlug, sid);
       if (result.success) {
-        showDetail(result.data);
+        const fresh = result.data;
+        console.log("[service-payment/local-state-update]", {
+          serviceId: fresh.id,
+          serviceNumber: fresh.serviceNumber,
+          paymentState: fresh.paymentSummary?.paymentStatus,
+          totalPaid: fresh.paymentSummary?.totalPaid,
+          remainingAmount: fresh.paymentSummary?.remainingBalance,
+          paymentsCount: fresh.payments?.length ?? 0,
+        });
+        setServices(prev => prev.map(s => s.id === sid ? fresh : s));
+        showDetail(fresh);
       }
     }
-    router.refresh();
-  }, [brandSlug, selectedServiceId, fetchServices, showDetail, router]);
+    fetchServices().then(() => router.refresh());
+  }, [brandSlug, fetchServices, showDetail, router]);
 
   // Wire refresh callback into right sidebar context so sidebar mutations refresh the page
   React.useEffect(() => {

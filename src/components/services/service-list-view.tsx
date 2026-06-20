@@ -27,7 +27,6 @@ import {
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
-  getTotalPayment,
   getPickupStatus,
   getPickupLabel,
   getPickupColor,
@@ -451,7 +450,6 @@ export function ServiceListView({
             paginatedServices.map((service) => {
             const isExpanded = expandedId === service.id;
             const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
-            const totalDibayar = getTotalPayment(service.payments);
 
             return (
               <div key={service.id} className="flex flex-col">
@@ -525,9 +523,19 @@ export function ServiceListView({
                     <span className="truncate text-xs font-medium tabular-nums text-foreground">
                       {formatCurrency(totalBiaya)}
                     </span>
-                    {totalDibayar > 0 && (
-                      <span className="text-[9px] text-muted-foreground">
-                        Dibayar: {formatCurrency(totalDibayar)}
+                    {service.paymentSummary?.paymentStatus === "PAID" && (
+                      <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+                        LUNAS
+                      </span>
+                    )}
+                    {service.paymentSummary?.paymentStatus === "PARTIAL" && (
+                      <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">
+                        Dibayar {formatCurrency(service.paymentSummary.totalPaid)}
+                      </span>
+                    )}
+                    {(!service.paymentSummary || service.paymentSummary.paymentStatus === "UNPAID") && (
+                      <span className="text-[9px] text-muted-foreground/50">
+                        Belum dibayar
                       </span>
                     )}
                   </div>
@@ -593,11 +601,16 @@ export function ServiceListView({
                         <span className="text-[10px] font-medium text-muted-foreground">
                           Pembayaran
                         </span>
-                        {totalDibayar > 0 ? (
+                        {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                              {totalDibayar >= totalBiaya ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(totalDibayar)}
+                              {service.paymentSummary.paymentStatus === "PAID" ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(service.paymentSummary.totalPaid)}
                             </span>
+                            {service.paymentSummary.paymentStatus === "PARTIAL" && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Sisa: {formatCurrency(service.paymentSummary.remainingBalance)}
+                              </span>
+                            )}
                             {service.payments.map((p, i) => (
                               <span
                                 key={i}
@@ -757,7 +770,6 @@ export function ServiceListView({
         ) : paginatedServices.length > 0 ? (
           paginatedServices.map((service) => {
           const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
-          const totalDibayar = getTotalPayment(service.payments);
           const isExpanded = expandedId === service.id;
 
           return (
@@ -862,11 +874,16 @@ export function ServiceListView({
                     <span className="text-[10px] font-medium text-muted-foreground">
                       Pembayaran
                     </span>
-                    {totalDibayar > 0 ? (
+                    {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
                       <div className="flex flex-col gap-0.5">
                         <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          {totalDibayar >= totalBiaya ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(totalDibayar)}
+                          {service.paymentSummary.paymentStatus === "PAID" ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(service.paymentSummary.totalPaid)}
                         </span>
+                        {service.paymentSummary.paymentStatus === "PARTIAL" && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Sisa: {formatCurrency(service.paymentSummary.remainingBalance)}
+                          </span>
+                        )}
                         {service.payments.map((p, i) => (
                           <span key={i} className="text-[10px] text-muted-foreground">
                             {p.method}: {formatCurrency(p.amount)}
