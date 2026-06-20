@@ -514,16 +514,14 @@ export function ServiceDetailModal({
                     </Button>
                   </div>
 
-                  {!isPaid && paymentSummary.remainingBalance > 0 && (
-                    <Button
-                      size="sm"
-                      className="w-full gap-1.5 text-xs"
-                      onClick={() => setPaymentOpen(true)}
-                    >
-                      <Wallet className="size-3.5" />
-                      Terima Pembayaran
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    className="w-full gap-1.5 text-xs"
+                    onClick={() => setPaymentOpen(true)}
+                  >
+                    <Wallet className="size-3.5" />
+                    {isPaid ? "Detail Pembayaran" : "Terima Pembayaran"}
+                  </Button>
                 </>
               )}
               <DialogClose asChild>

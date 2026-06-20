@@ -480,14 +480,14 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
               Buka Ulang
             </Button>
           )}
-          {!isPaid && remainingBalance > 0 && !isCancelled && resolvedRole !== "TECHNICIAN" && (
+          {!isCancelled && resolvedRole !== "TECHNICIAN" && (
             <Button
               size="sm"
               className="w-full gap-1.5 text-xs"
               onClick={() => setPaymentOpen(true)}
             >
               <Wallet className="size-3.5" />
-              Terima Pembayaran
+              {isPaid ? "Detail Pembayaran" : "Terima Pembayaran"}
             </Button>
           )}
           <Button

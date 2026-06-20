@@ -585,14 +585,14 @@ export function ServiceDetailContent({
                   </Button>
                 </div>
 
-                {!isPaid && remainingBalance > 0 && role !== "TECHNICIAN" && (
+                {role !== "TECHNICIAN" && (
                   <Button
                     size="sm"
                     className="w-full gap-1.5 text-xs"
                     onClick={() => setPaymentOpen(true)}
                   >
                     <Wallet className="size-3.5" />
-                    Terima Pembayaran
+                    {isPaid ? "Detail Pembayaran" : "Terima Pembayaran"}
                   </Button>
                 )}
               </>
