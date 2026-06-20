@@ -831,6 +831,146 @@ export async function receiveServicePaymentAction(
   }
 }
 
+/* ─── Get Service Payment Panel Data ─── */
+/* Direct query from service_payments so the panel always has fresh data. */
+
+export interface PaymentPanelPaymentRow {
+  id: string;
+  paymentNumber: string;
+  paymentStatus: string;
+  grossAmount: number;
+  mdrAmount: number;
+  netAmount: number;
+  paidAt: string | null;
+  createdAt: string;
+  notes: string | null;
+  methodType: string | null;
+  accountName: string | null;
+}
+
+export async function getServicePaymentPanelDataAction(
+  brandSlug: string,
+  serviceId: string,
+): Promise<ActionResult<{
+  totalPaid: number;
+  totalBill: number;
+  remainingAmount: number;
+  paymentState: string;
+  payments: PaymentPanelPaymentRow[];
+}>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "service.view");
+
+    const supabase = await createServerSupabase();
+
+    // 1. Get service cost
+    const { data: serviceRow } = await (supabase as any)
+      .from("services")
+      .select("id, final_cost, estimated_cost")
+      .eq("id", serviceId)
+      .is("deleted_at", null)
+      .single();
+    if (!serviceRow) return errorResult("Servis tidak ditemukan.");
+    const totalBill = Number(serviceRow.final_cost ?? serviceRow.estimated_cost ?? 0);
+
+    // 2. Get COMPLETED/PAID/SUCCESS payments directly
+    const { data: paymentRows, error: payErr } = await (supabase as any)
+      .from("service_payments")
+      .select(`
+        id,
+        payment_number,
+        payment_status,
+        gross_amount,
+        mdr_amount,
+        net_amount,
+        paid_at,
+        created_at,
+        notes,
+        branch_payment_method_id,
+        payment_method_id,
+        payment_account_id
+      `)
+      .eq("service_id", serviceId)
+      .in("payment_status", ["COMPLETED", "PAID", "SUCCESS"])
+      .order("paid_at", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (payErr) {
+      console.error("[getServicePaymentPanelDataAction] query error:", payErr);
+      return errorResult("Gagal memuat data pembayaran.");
+    }
+
+    const rows = paymentRows ?? [];
+    const totalPaid = rows.reduce((sum: number, r: any) => sum + Number(r.gross_amount ?? 0), 0);
+    const remainingAmount = Math.max(0, totalBill - totalPaid);
+
+    let paymentState = "UNPAID";
+    if (totalPaid <= 0) paymentState = "UNPAID";
+    else if (totalPaid < totalBill) paymentState = "PARTIAL";
+    else paymentState = "PAID";
+
+    // 3. Optionally resolve method labels in a separate fetch
+    const bpmIds = [...new Set(rows.map((r: any) => r.branch_payment_method_id).filter(Boolean))];
+    const bpmMap: Record<string, { method_type: string }> = {};
+    if (bpmIds.length > 0) {
+      const { data: bpmRows } = await (supabase as any)
+        .from("branch_payment_methods")
+        .select("id, method_type")
+        .in("id", bpmIds);
+      if (bpmRows) {
+        for (const b of bpmRows) bpmMap[b.id] = { method_type: b.method_type };
+      }
+    }
+
+    const paIds = [...new Set(rows.map((r: any) => r.payment_account_id).filter(Boolean))];
+    const paMap: Record<string, { name: string }> = {};
+    if (paIds.length > 0) {
+      const { data: paRows } = await (supabase as any)
+        .from("payment_accounts")
+        .select("id, name")
+        .in("id", paIds);
+      if (paRows) {
+        for (const a of paRows) paMap[a.id] = { name: a.name };
+      }
+    }
+
+    const payments: PaymentPanelPaymentRow[] = rows.map((r: any) => ({
+      id: r.id,
+      paymentNumber: r.payment_number,
+      paymentStatus: r.payment_status,
+      grossAmount: Number(r.gross_amount ?? 0),
+      mdrAmount: Number(r.mdr_amount ?? 0),
+      netAmount: Number(r.net_amount ?? 0),
+      paidAt: r.paid_at,
+      createdAt: r.created_at,
+      notes: r.notes,
+      methodType: bpmMap[r.branch_payment_method_id]?.method_type ?? null,
+      accountName: paMap[r.payment_account_id]?.name ?? null,
+    }));
+
+    console.log("[getServicePaymentPanelDataAction/summary]", {
+      serviceId,
+      totalBill,
+      totalPaid,
+      remainingAmount,
+      paymentState,
+      payments: payments.map((p) => ({
+        id: p.id,
+        paymentNumber: p.paymentNumber,
+        status: p.paymentStatus,
+        grossAmount: p.grossAmount,
+        paidAt: p.paidAt,
+      })),
+    });
+
+    return successResult({ totalPaid, totalBill, remainingAmount, paymentState, payments });
+  } catch (err: any) {
+    console.error("[getServicePaymentPanelDataAction]", err);
+    return errorResult(err.message ?? "Gagal memuat data pembayaran.");
+  }
+}
+
 /* ─── Verify Service Pickup ─── */
 
 export interface VerifyPickupInput {
