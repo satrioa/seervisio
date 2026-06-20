@@ -121,6 +121,11 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
     });
   }, [role, brandSlug]);
 
+  React.useEffect(() => {
+    setEnrichedPayments((service as any).__paymentRecords ?? []);
+    setEnrichedSpareparts((service as any).__spareparts ?? service.spareparts ?? []);
+  }, [service]);
+
   const statusIndex = STATUS_ORDER.indexOf(service.status);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
   const totalCost = Number(service.finalCost || service.estimatedCost || 0);
