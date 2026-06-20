@@ -11,11 +11,9 @@ import {
   FileText,
   MessageSquare,
   X,
-  Circle,
-  Wallet,
   PiggyBank,
   CheckCircle,
-  Coins,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -33,18 +31,23 @@ import {
   type ServiceRecord,
   type ServiceStatus,
   type ServicePaymentRecord,
-  type ServicePaymentSummary,
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
   getTotalSparepartCost,
   calculateServicePaymentSummary,
   getPaymentStatusLabel,
-  getPaymentRecordTypeLabel,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
 import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
+import { verifyServicePickupAction, getServicePaymentPanelDataAction } from "@/server/actions/service-workflow.actions";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
+import {
+  buildServicePaymentSummary,
+  type PaymentSummaryRow,
+  type ServicePaymentSummaryResult,
+} from "@/lib/services/payment-summary";
 
 /* ══════════════════════════════════════════════
    COMPONENT
@@ -79,6 +82,25 @@ export function ServiceDetailModal({
     setEnrichedPayments((service as any).__paymentRecords ?? []);
   }, [service]);
 
+  const [paymentData, setPaymentData] = React.useState<ServicePaymentSummaryResult | null>(null);
+
+  React.useEffect(() => {
+    if (!service?.id || !brandSlug) return;
+    getServicePaymentPanelDataAction(brandSlug, service.id).then((result) => {
+      if (result.success) {
+        setPaymentData({
+          totalBill: Number(result.data.totalBill),
+          totalPaid: Number(result.data.totalPaid),
+          remainingAmount: Number(result.data.remainingAmount),
+          paymentState: result.data.paymentState as ServicePaymentSummaryResult["paymentState"],
+          successfulPayments: result.data.payments as PaymentSummaryRow[],
+        });
+      } else {
+        setPaymentData(null);
+      }
+    });
+  }, [service, brandSlug]);
+
   const displayService = React.useMemo(
     () => ({ ...service, status: localStatus }),
     [localStatus, service],
@@ -87,15 +109,21 @@ export function ServiceDetailModal({
   const statusIndex = STATUS_ORDER.indexOf(localStatus);
   const totalSparepart = getTotalSparepartCost(service.spareparts);
   const totalDueVal = Number(service.finalCost || service.estimatedCost || 0);
-  const paymentSummary: ServicePaymentSummary = calculateServicePaymentSummary(
-    totalDueVal,
-    enrichedPayments,
-  );
-  const isPaid = totalDueVal > 0 && paymentSummary.remainingBalance <= 0;
+
+  const summary = paymentData ?? (() => {
+    const fallback = calculateServicePaymentSummary(totalDueVal, enrichedPayments);
+    return {
+      totalBill: fallback.totalCharged,
+      totalPaid: fallback.totalPaid,
+      remainingAmount: fallback.remainingBalance,
+      paymentState: fallback.paymentStatus as ServicePaymentSummaryResult["paymentState"],
+      successfulPayments: [] as PaymentSummaryRow[],
+    };
+  })();
+
+  const isPaid = summary.paymentState === "PAID";
   const isCancelled = localStatus === "cancelled";
-  const paymentStatusLabel = getPaymentStatusLabel(
-    paymentSummary.paymentStatus,
-  );
+  const paymentStatusLabel = getPaymentStatusLabel(summary.paymentState);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -226,7 +254,7 @@ export function ServiceDetailModal({
                       Sudah Dibayar
                     </span>
                     <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(paymentSummary.totalPaid)}
+                      {formatCurrency(summary.totalPaid)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-sm">
@@ -234,7 +262,7 @@ export function ServiceDetailModal({
                       Sisa Tagihan
                     </span>
                     <span className="font-bold text-foreground">
-                      {formatCurrency(paymentSummary.remainingBalance)}
+                      {formatCurrency(summary.remainingAmount)}
                     </span>
                   </div>
                   <div className="mt-1">
@@ -248,39 +276,31 @@ export function ServiceDetailModal({
                 </div>
 
                 {/* Payment History */}
-                {enrichedPayments.length > 0 && (
+                {summary.successfulPayments.length > 0 && (
                   <>
                     <Separator />
                     <div className="flex flex-col gap-2">
                       <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                         Riwayat Pembayaran
                       </span>
-                      {enrichedPayments.map((p) => (
+                      {summary.successfulPayments.map((p) => (
                         <div
                           key={p.id}
                           className="flex items-center justify-between rounded-md bg-muted/30 px-2 py-1.5"
                         >
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1.5">
-                              {p.paymentType === "DOWN_PAYMENT" && (
-                                <PiggyBank className="size-3 text-amber-500" />
-                              )}
-                              {p.paymentType === "FINAL_PAYMENT" && (
-                                <CheckCircle className="size-3 text-emerald-500" />
-                              )}
-                              {p.paymentType === "PARTIAL_PAYMENT" && (
-                                <Coins className="size-3 text-blue-500" />
-                              )}
+                              <CheckCircle className="size-3 text-emerald-500" />
                               <span className="text-[10px] font-medium text-foreground">
-                                {getPaymentRecordTypeLabel(p.paymentType)}
+                                {p.paymentNumber}
                               </span>
                             </div>
                             <span className="text-[9px] text-muted-foreground">
-                              {p.method} · {p.accountName}
+                              {[p.methodType, p.accountName].filter(Boolean).join(" · ") || p.paymentStatus}
                             </span>
                           </div>
                           <span className="text-[10px] font-medium tabular-nums text-foreground">
-                            {formatCurrency(p.amount)}
+                            {formatCurrency(p.grossAmount)}
                           </span>
                         </div>
                       ))}
@@ -288,12 +308,11 @@ export function ServiceDetailModal({
                   </>
                 )}
 
-                {enrichedPayments.length === 0 &&
-                  service.payments.length === 0 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      Belum ada pembayaran
-                    </span>
-                  )}
+                {summary.successfulPayments.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Belum ada pembayaran
+                  </span>
+                )}
 
 
               </div>

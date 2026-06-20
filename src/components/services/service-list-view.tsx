@@ -593,19 +593,17 @@ export function ServiceListView({
                         <span className="text-[10px] font-medium text-muted-foreground">
                           Pembayaran
                         </span>
-                        {service.payments.length > 0 ? (
+                        {totalDibayar > 0 ? (
                           <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                              {totalDibayar >= totalBiaya ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(totalDibayar)}
+                            </span>
                             {service.payments.map((p, i) => (
                               <span
                                 key={i}
-                                className="text-xs text-foreground"
+                                className="text-[10px] text-muted-foreground"
                               >
                                 {p.method}: {formatCurrency(p.amount)}
-                                {p.status === "lunas"
-                                  ? " ✅"
-                                  : p.status === "sebagian"
-                                    ? " (DP)"
-                                    : ""}
                               </span>
                             ))}
                           </div>
@@ -759,6 +757,7 @@ export function ServiceListView({
         ) : paginatedServices.length > 0 ? (
           paginatedServices.map((service) => {
           const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
+          const totalDibayar = getTotalPayment(service.payments);
           const isExpanded = expandedId === service.id;
 
           return (
@@ -863,12 +862,17 @@ export function ServiceListView({
                     <span className="text-[10px] font-medium text-muted-foreground">
                       Pembayaran
                     </span>
-                    {service.payments.length > 0 ? (
-                      service.payments.map((p, i) => (
-                        <span key={i} className="text-xs text-foreground">
-                          {p.method}: {formatCurrency(p.amount)}
+                    {totalDibayar > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                          {totalDibayar >= totalBiaya ? "LUNAS" : "Dibayar sebagian"}: {formatCurrency(totalDibayar)}
                         </span>
-                      ))
+                        {service.payments.map((p, i) => (
+                          <span key={i} className="text-[10px] text-muted-foreground">
+                            {p.method}: {formatCurrency(p.amount)}
+                          </span>
+                        ))}
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground/50">
                         Belum dibayar
