@@ -632,13 +632,14 @@ export async function getServicePaymentMethodsAction(
 
     const methods = await getBranchPaymentMethods(session.brandId, branchId);
 
-    console.log("[service-payment/options]", {
+    console.log("[service-payment/method-options/final]", {
       brandSlug,
       brandId: session.brandId,
       branchId,
-      methods: methods.map((m) => ({
+      options: methods.map((m) => ({
         branchPaymentMethodId: m.branchPaymentMethodId,
         methodType: m.methodType,
+        label: m.label,
         paymentAccountId: m.paymentAccountId,
         accountName: m.accountName,
         accountBranchId: m.accountBranchId,
@@ -649,7 +650,7 @@ export async function getServicePaymentMethodsAction(
     return successResult(
       methods.map((m) => ({
         id: m.branchPaymentMethodId,
-        name: m.methodName,
+        name: m.label,
         type: m.methodType,
         mdrPercentage: m.mdrPercentage,
         mdrMinTransaction: m.mdrMinTransaction,
@@ -700,7 +701,7 @@ export async function receiveServicePaymentAction(
     // Validate branch_payment_method belongs to service branch
     const { data: bpm, error: bpmErr } = await (supabase as any)
       .from("branch_payment_methods")
-      .select("id, payment_method_id, method_type, payment_account_id, is_active")
+      .select("id, method_type, payment_account_id, is_active")
       .eq("id", input.branchPaymentMethodId)
       .eq("brand_id", session.brandId)
       .eq("branch_id", service.branch_id)

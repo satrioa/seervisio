@@ -51,11 +51,27 @@ export async function getPaymentMethodsByBrand(brandId: number): Promise<any[]> 
   return data ?? [];
 }
 
+const METHOD_LABELS: Record<string, string> = {
+  CASH: "Tunai",
+  QRIS: "QRIS",
+  TRANSFER: "Transfer",
+  DEBIT: "Debit",
+  EWALLET: "E-Wallet",
+  E_WALLET: "E-Wallet",
+};
+
+function buildMethodLabel(methodType: string, mdrPercentage: number): string {
+  const base = METHOD_LABELS[methodType] ?? methodType;
+  if (mdrPercentage > 0) {
+    return `${base} (MDR ${mdrPercentage}%)`;
+  }
+  return base;
+}
+
 export interface BranchPaymentMethodOption {
   branchPaymentMethodId: string;
-  paymentMethodId: string;
   methodType: string;
-  methodName: string;
+  label: string;
   paymentAccountId: string;
   accountName: string;
   accountBranchId: string | null;
@@ -69,7 +85,9 @@ export async function getBranchPaymentMethods(
 ): Promise<BranchPaymentMethodOption[]> {
   const supabase = await createServerSupabase();
 
-  // Step 1: Load branch_payment_methods with active status and linked account
+  // Step 1: Load branch_payment_methods with active status and linked account.
+  // No FK relationship between branch_payment_methods and payment_methods exists,
+  // so we only query branch_payment_methods + payment_accounts.
   const { data: bpmRows, error: bpmErr } = await (supabase as any)
     .from("branch_payment_methods")
     .select(`
@@ -78,13 +96,12 @@ export async function getBranchPaymentMethods(
       mdr_percentage,
       mdr_min_transaction,
       payment_account_id,
-      payment_method:payment_methods!inner(id, name, type, is_active)
+      is_active
     `)
     .eq("brand_id", brandId)
     .eq("branch_id", branchId)
     .eq("is_active", true)
-    .not("payment_account_id", "is", null)
-    .eq("payment_method.is_active", true);
+    .not("payment_account_id", "is", null);
 
   if (bpmErr) throw bpmErr;
 
@@ -95,14 +112,14 @@ export async function getBranchPaymentMethods(
       brandId,
       branchId,
       count: 0,
-      methods: [],
+      options: [],
     });
     return [];
   }
 
   const { data: paRows, error: paErr } = await (supabase as any)
     .from("payment_accounts")
-    .select("id, name, branch_id, is_active")
+    .select("id, account_name, branch_id, is_active, is_cash_account")
     .in("id", accountIds)
     .eq("brand_id", brandId)
     .eq("is_active", true)
@@ -117,47 +134,48 @@ export async function getBranchPaymentMethods(
     accountById.set(pa.id, pa);
   }
 
-  const methods: BranchPaymentMethodOption[] = [];
+  const options: BranchPaymentMethodOption[] = [];
   for (const row of (bpmRows as any[] ?? [])) {
     if (!validAccountIds.has(row.payment_account_id)) continue;
     const account = accountById.get(row.payment_account_id);
-    methods.push({
+    const mdrPct = Number(row.mdr_percentage ?? 0);
+    options.push({
       branchPaymentMethodId: row.id,
-      paymentMethodId: row.payment_method.id,
       methodType: row.method_type,
-      methodName: row.payment_method.name,
+      label: buildMethodLabel(row.method_type, mdrPct),
       paymentAccountId: row.payment_account_id,
-      accountName: account.name,
+      accountName: account.account_name,
       accountBranchId: account.branch_id,
-      mdrPercentage: Number(row.mdr_percentage ?? 0),
+      mdrPercentage: mdrPct,
       mdrMinTransaction: Number(row.mdr_min_transaction ?? 0),
     });
   }
 
-  // Step 4: Sort manually in TypeScript (PostgREST doesn't support nested order)
+  // Step 4: Sort manually in TypeScript
   const methodTypeOrder: Record<string, number> = { CASH: 0, QRIS: 1, TRANSFER: 2, DEBIT: 3, EWALLET: 4 };
-  methods.sort((a, b) => {
+  options.sort((a, b) => {
     const orderA = methodTypeOrder[a.methodType] ?? 99;
     const orderB = methodTypeOrder[b.methodType] ?? 99;
     if (orderA !== orderB) return orderA - orderB;
-    return a.methodName.localeCompare(b.methodName);
+    return a.label.localeCompare(b.label);
   });
 
   console.log("[service-payment/method-options/final]", {
     brandId,
     branchId,
-    count: methods.length,
-    methods: methods.map(m => ({
-      branchPaymentMethodId: m.branchPaymentMethodId,
-      methodType: m.methodType,
-      paymentAccountId: m.paymentAccountId,
-      accountName: m.accountName,
-      accountBranchId: m.accountBranchId,
-      isGlobalAccount: m.accountBranchId === null,
+    count: options.length,
+    options: options.map(o => ({
+      branchPaymentMethodId: o.branchPaymentMethodId,
+      methodType: o.methodType,
+      label: o.label,
+      paymentAccountId: o.paymentAccountId,
+      accountName: o.accountName,
+      accountBranchId: o.accountBranchId,
+      isGlobalAccount: o.accountBranchId === null,
     })),
   });
 
-  return methods;
+  return options;
 }
 
 export async function getPaymentAccountsByBranch(branchId: string): Promise<any[]> {
