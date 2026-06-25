@@ -9,6 +9,7 @@ import {
   type ActionResult,
 } from "./action-helper";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
+import { getBrandTarget } from "@/repositories/brand-target.repository";
 
 /* ── Types ── */
 
@@ -22,6 +23,7 @@ export interface DashboardGeneral {
   activityHeatmap?: { date: string; count: number; intensity: number }[];
   operationalHeatmap?: { hour: string; count: number }[];
   revenue: number;
+  revenueTarget: number;
   totalActivity: number;
   netProfit: number;
   revenueTrend: RevenueTrendPoint[];
@@ -836,8 +838,11 @@ export async function getDashboardOverviewAction(
     const unpickedUnitsCount = serviceUncollectedCount;
     const unpaidInvoicesCount = serviceUnpaidCount;
 
+    const brandTarget = await getBrandTarget(supabase as any, session.brandId);
+
     const result: DashboardData = {
       general: {
+        revenueTarget: brandTarget?.monthlyAmount ?? 0,
         revenue: effectiveRevenue,
         totalActivity,
         netProfit: effectiveNetProfit,

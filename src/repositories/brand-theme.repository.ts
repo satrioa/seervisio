@@ -28,21 +28,19 @@ export interface BrandThemeInput {
 /* ─── Repository ─── */
 
 /**
- * Fetch brand theme settings from the brands table.
- * Columns are asserted because migration 015 adds them to the DB schema
- * but generated types haven't been refreshed yet.
+ * Fetch brand theme settings from the brand_settings table.
  */
 export async function getBrandTheme(
   supabase: SupabaseClient<Database>,
   brandId: number
 ): Promise<BrandThemeData | null> {
   const { data, error } = await supabase
-    .from("brands")
+    .from("brand_settings")
     .select(
       "theme_primary_color, theme_accent_color, theme_mode, theme_tokens"
     )
-    .eq("id", brandId)
-    .single() as any;
+    .eq("brand_id", brandId)
+    .maybeSingle() as any;
 
   if (error || !data) return null;
 
@@ -55,24 +53,48 @@ export async function getBrandTheme(
 }
 
 /**
- * Save brand theme settings to the brands table.
+ * Save brand theme settings to the brand_settings table.
+ * Uses upsert (update if exists, insert if not).
  */
 export async function saveBrandTheme(
   supabase: SupabaseClient<Database>,
   brandId: number,
   input: BrandThemeInput
 ): Promise<void> {
-  const { error } = await supabase
-    .from("brands")
-    .update({
-      theme_primary_color: input.primaryColor,
-      theme_accent_color: input.accentColor,
-      theme_mode: input.mode,
-      theme_tokens: input.tokens,
-    } as any)
-    .eq("id", brandId);
+  const { data: existing } = await supabase
+    .from("brand_settings")
+    .select("id")
+    .eq("brand_id", brandId)
+    .maybeSingle() as any;
 
-  if (error) {
-    throw new Error(`Failed to save brand theme: ${error.message}`);
+  if (existing) {
+    const { error } = await supabase
+      .from("brand_settings")
+      .update({
+        theme_primary_color: input.primaryColor,
+        theme_accent_color: input.accentColor,
+        theme_mode: input.mode,
+        theme_tokens: input.tokens,
+      } as any)
+      .eq("id", existing.id);
+
+    if (error) {
+      throw new Error(`Failed to save brand theme: ${error.message}`);
+    }
+  } else {
+    const { error } = await supabase
+      .from("brand_settings")
+      .insert({
+        brand_id: brandId,
+        store_name: "Brand",
+        theme_primary_color: input.primaryColor,
+        theme_accent_color: input.accentColor,
+        theme_mode: input.mode,
+        theme_tokens: input.tokens,
+      } as any);
+
+    if (error) {
+      throw new Error(`Failed to save brand theme: ${error.message}`);
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import type { PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, ServicePaymentStatus } from "@/components/services/service-data";
 
 export interface ServicePaymentSummaryResult {
@@ -21,7 +21,7 @@ export async function getServicesPaymentSummary(
 ): Promise<Record<string, ServicePaymentSummaryResult>> {
   if (serviceIds.length === 0) return {};
 
-  const supabase = await createServerSupabase();
+  const supabase = createServiceRoleSupabaseClient();
 
   const { data: rows, error } = await (supabase as any)
     .from("service_payments")
@@ -47,7 +47,10 @@ export async function getServicesPaymentSummary(
     return {};
   }
 
-  if (!rows || rows.length === 0) return {};
+  if (!rows || rows.length === 0) {
+    console.warn("[service-payment-summary] no payments found for serviceIds:", serviceIds.length, serviceIds.slice(0, 3), "...");
+    return {};
+  }
 
   const grouped: Record<string, any[]> = {};
   for (const row of rows) {

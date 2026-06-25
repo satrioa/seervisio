@@ -207,6 +207,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
   const todayActivityTotal = data?.todayActivityCounts?.reduce((s, a) => s + a.count, 0) ?? 0;
 
   const calculatedTarget = React.useMemo(() => {
+    if (data && data.revenueTarget > 0) return data.revenueTarget;
     if (!data) return 0;
     return data.netProfit > 0 ? data.revenue * 1.3 : data.revenue * 2;
   }, [data]);

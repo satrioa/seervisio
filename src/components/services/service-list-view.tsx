@@ -301,6 +301,108 @@ function ServiceMobileSkeletonCards() {
   );
 }
 
+type ServiceListPaymentSummary = {
+  total: number
+  paid: number
+  remaining: number
+  label: string
+  detail: string
+}
+
+function coerceServiceListPaymentNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.-]/g, ""))
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function readServiceListPaymentNumber(source: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value = coerceServiceListPaymentNumber(source[key])
+    if (value > 0) return value
+  }
+  return 0
+}
+
+function getServiceListPaymentSummary(service: ServiceRecord): ServiceListPaymentSummary {
+  const source = service as unknown as Record<string, unknown>
+  const total = readServiceListPaymentNumber(source, [
+    "totalAmount",
+    "totalCost",
+    "grandTotal",
+    "finalPrice",
+    "estimatedCost",
+    "estimatedPrice",
+    "estimated_price",
+    "amount",
+    "price",
+  ])
+
+  const directPaid = readServiceListPaymentNumber(source, [
+    "paidAmount",
+    "totalPaid",
+    "amountPaid",
+    "paid",
+    "paymentTotal",
+  ])
+
+  const payments = (
+    Array.isArray(source.payments)
+      ? source.payments
+      : Array.isArray(source.paymentHistory)
+        ? source.paymentHistory
+        : Array.isArray(source.payment_history)
+          ? source.payment_history
+          : []
+  ) as Array<Record<string, unknown>>
+
+  const historyPaid = payments.reduce(
+    (sum, payment) =>
+      sum +
+      readServiceListPaymentNumber(payment, [
+        "amount",
+        "nominal",
+        "paidAmount",
+        "value",
+        "total",
+      ]),
+    0,
+  )
+
+  const paid = Math.max(directPaid, historyPaid)
+  const remaining = Math.max(total - paid, 0)
+
+  if (total > 0 && paid > 0 && remaining <= 0) {
+    return {
+      total,
+      paid,
+      remaining,
+      label: "Sudah lunas",
+      detail: `Lunas - dibayar ${formatCurrency(paid)}`,
+    }
+  }
+
+  if (paid > 0) {
+    return {
+      total,
+      paid,
+      remaining,
+      label: `Sisa ${formatCurrency(remaining)}`,
+      detail: `Dibayar ${formatCurrency(paid)} - sisa ${formatCurrency(remaining)}`,
+    }
+  }
+
+  return {
+    total,
+    paid,
+    remaining,
+    label: "Belum dibayar",
+    detail: "Belum dibayar",
+  }
+}
+
 export function ServiceListView({
   services,
   isLoading = false,
@@ -610,7 +712,7 @@ export function ServiceListView({
                         <span className="text-[10px] font-medium text-muted-foreground">
                           Pembayaran
                         </span>
-                        {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
+                        {service.paymentSummary && service.paymentSummary.paymentStatus !== "UNPAID" ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                               {service.paymentSummary.paymentStatus === "PAID"
@@ -883,7 +985,7 @@ export function ServiceListView({
                     <span className="text-[10px] font-medium text-muted-foreground">
                       Pembayaran
                     </span>
-                    {service.paymentSummary && service.paymentSummary.totalPaid > 0 ? (
+                    {service.paymentSummary && service.paymentSummary.paymentStatus !== "UNPAID" ? (
                       <div className="flex flex-col gap-0.5">
                         <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                           {service.paymentSummary.paymentStatus === "PAID"

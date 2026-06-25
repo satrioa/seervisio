@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import {
   TrendingUp,
   Target,
@@ -10,6 +12,8 @@ import {
   Store,
   Info,
   CheckCircle2,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,36 +21,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getBrandTargetAction,
+  saveBrandTargetAction,
+} from "@/server/actions/brand-target.actions";
 
 /* ─── Types ─── */
 
 type TargetScope = "brand" | "branch";
-type TargetPeriod = "monthly" | "yearly";
-
-interface BranchTarget {
-  name: string;
-  monthly: number;
-  yearly: number;
-}
-
-/* ─── Constants ─── */
-
-const SCOPE_OPTIONS: { value: TargetScope; label: string; icon: React.ElementType }[] = [
-  { value: "brand", label: "Semua Cabang / Brand", icon: Building2 },
-  { value: "branch", label: "Per Cabang", icon: Store },
-];
-
-const PERIOD_OPTIONS: { value: TargetPeriod; label: string }[] = [
-  { value: "monthly", label: "Bulanan" },
-  { value: "yearly", label: "Tahunan" },
-];
-
-const DEFAULT_BRANCHES: BranchTarget[] = [
-  { name: "Semarang Pusat", monthly: 40_000_000, yearly: 480_000_000 },
-  { name: "Salatiga", monthly: 20_000_000, yearly: 240_000_000 },
-  { name: "Sragen", monthly: 10_000_000, yearly: 120_000_000 },
-];
 
 /* ─── Helpers ─── */
 
@@ -55,7 +39,8 @@ function formatRp(n: number) {
 }
 
 function parseNumberInput(value: string): number {
-  return parseInt(value.replace(/\D/g, ""), 10) || 0;
+  const num = parseInt(value.replace(/\D/g, ""), 10);
+  return isNaN(num) ? 0 : num;
 }
 
 /* ══════════════════════════════════════════════
@@ -63,17 +48,49 @@ function parseNumberInput(value: string): number {
    ══════════════════════════════════════════════ */
 
 export function TargetGoalSettings() {
-  const [scope, setScope] = React.useState<TargetScope>("brand");
-  const [period, setPeriod] = React.useState<TargetPeriod>("monthly");
-  const [brandMonthly, setBrandMonthly] = React.useState(70_000_000);
-  const [brandYearly, setBrandYearly] = React.useState(840_000_000);
-  const [branches, setBranches] = React.useState<BranchTarget[]>(DEFAULT_BRANCHES);
-  const [saved, setSaved] = React.useState(false);
+  const params = useParams<{ brandSlug: string }>();
+  const brandSlug = params?.brandSlug ?? "";
 
-  const previewRevenue = 42_500_000;
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [scope, setScope] = useState<TargetScope>("brand");
+  const [brandMonthly, setBrandMonthly] = useState(0);
+  const [brandYearly, setBrandYearly] = useState(0);
+  const [branches, setBranches] = useState<{ branchId: string; name: string; monthly: number; yearly: number }[]>([]);
+
+  const previewRevenue = 8_500_000;
   const previewTarget = scope === "brand" ? brandMonthly : branches.reduce((sum, b) => sum + b.monthly, 0);
-  const previewProgress = Math.round((previewRevenue / previewTarget) * 100);
-  const previewRemaining = previewTarget - previewRevenue;
+  const previewProgress = previewTarget > 0 ? Math.round((previewRevenue / previewTarget) * 100) : 0;
+  const previewRemaining = Math.max(previewTarget - previewRevenue, 0);
+
+  useEffect(() => {
+    if (!brandSlug) return;
+    setLoading(true);
+    getBrandTargetAction(brandSlug).then((result) => {
+      if (result.success) {
+        setBrandMonthly(result.data.brandMonthly);
+        setBrandYearly(result.data.brandYearly);
+        setBranches(result.data.branches.map((b) => ({
+          branchId: b.name,
+          name: b.name,
+          monthly: b.monthly,
+          yearly: b.yearly,
+        })));
+      } else {
+        setError(result.error);
+      }
+      setLoading(false);
+    });
+  }, [brandSlug]);
+
+  const handleBrandChange = (field: "monthly" | "yearly", value: string) => {
+    const num = parseNumberInput(value);
+    if (field === "monthly") setBrandMonthly(num);
+    else setBrandYearly(num);
+  };
 
   const handleBranchChange = (index: number, field: "monthly" | "yearly", value: string) => {
     setBranches((prev) => {
@@ -83,18 +100,47 @@ export function TargetGoalSettings() {
     });
   };
 
-  const handleReset = () => {
-    setScope("brand");
-    setPeriod("monthly");
-    setBrandMonthly(70_000_000);
-    setBrandYearly(840_000_000);
-    setBranches(DEFAULT_BRANCHES.map((b) => ({ ...b })));
+  const handleSave = async () => {
+    if (!brandSlug) return;
+    setSaving(true);
+    setError(null);
     setSaved(false);
+
+    const result = await saveBrandTargetAction(brandSlug, {
+      brandMonthly,
+      brandYearly,
+      branches: branches.map((b) => ({
+        branchId: b.branchId,
+        monthly: b.monthly,
+        yearly: b.yearly,
+      })),
+    });
+
+    if (result.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } else {
+      setError(result.error);
+    }
+    setSaving(false);
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleReset = () => {
+    setScope("brand");
+    if (!loading) {
+      getBrandTargetAction(brandSlug).then((result) => {
+        if (result.success) {
+          setBrandMonthly(result.data.brandMonthly);
+          setBrandYearly(result.data.brandYearly);
+          setBranches(result.data.branches.map((b) => ({
+            branchId: b.name,
+            name: b.name,
+            monthly: b.monthly,
+            yearly: b.yearly,
+          })));
+        }
+      });
+    }
   };
 
   // ── Segmented button class helper ──
@@ -104,6 +150,30 @@ export function TargetGoalSettings() {
         ? "border-primary bg-primary/5 text-primary shadow-xs"
         : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
     }`;
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-4 sm:gap-6">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+            <Target className="size-4.5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Target &amp; Goal</h2>
+            <p className="text-xs text-muted-foreground">Memuat data target...</p>
+          </div>
+        </div>
+        <Card className="shadow-xs">
+          <CardContent className="space-y-4 py-6">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-4 w-1/4" />
+            <Skeleton className="h-9 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -120,6 +190,13 @@ export function TargetGoalSettings() {
         </div>
       </div>
 
+      {error && (
+        <Alert variant="destructive" className="py-2">
+          <AlertCircle className="size-4" />
+          <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      )}
+
       <Separator />
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_360px]">
@@ -135,48 +212,22 @@ export function TargetGoalSettings() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
-                {SCOPE_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  const active = scope === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setScope(opt.value)}
-                      className={segClass(active)}
-                    >
-                      <Icon className="size-4" />
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ── Target Period ── */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">Target Period</CardTitle>
-              <CardDescription className="text-xs">
-                Periode target yang akan ditampilkan sebagai acuan di dashboard.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                {PERIOD_OPTIONS.map((opt) => {
-                  const active = period === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setPeriod(opt.value)}
-                      className={segClass(active)}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  onClick={() => setScope("brand")}
+                  className={segClass(scope === "brand")}
+                >
+                  <Building2 className="size-4" />
+                  Semua Cabang / Brand
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope("branch")}
+                  className={segClass(scope === "branch")}
+                >
+                  <Store className="size-4" />
+                  Per Cabang
+                </button>
               </div>
             </CardContent>
           </Card>
@@ -204,7 +255,7 @@ export function TargetGoalSettings() {
                       type="text"
                       inputMode="numeric"
                       value={brandMonthly.toLocaleString("id-ID")}
-                      onChange={(e) => setBrandMonthly(parseNumberInput(e.target.value))}
+                      onChange={(e) => handleBrandChange("monthly", e.target.value)}
                       className="h-9 pl-9 text-xs tabular-nums"
                     />
                   </div>
@@ -222,7 +273,7 @@ export function TargetGoalSettings() {
                       type="text"
                       inputMode="numeric"
                       value={brandYearly.toLocaleString("id-ID")}
-                      onChange={(e) => setBrandYearly(parseNumberInput(e.target.value))}
+                      onChange={(e) => handleBrandChange("yearly", e.target.value)}
                       className="h-9 pl-9 text-xs tabular-nums"
                     />
                   </div>
@@ -241,8 +292,13 @@ export function TargetGoalSettings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {branches.length === 0 && (
+                  <p className="text-xs text-muted-foreground py-4 text-center">
+                    Belum ada data cabang. Simpan target brand terlebih dahulu atau tambahkan cabang.
+                  </p>
+                )}
                 {branches.map((branch, index) => (
-                  <div key={branch.name}>
+                  <div key={branch.branchId}>
                     {index > 0 && <Separator className="mb-4" />}
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -335,7 +391,7 @@ export function TargetGoalSettings() {
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${previewProgress}%` }}
+                    style={{ width: `${Math.min(previewProgress, 100)}%` }}
                   />
                 </div>
               </div>
@@ -368,8 +424,14 @@ export function TargetGoalSettings() {
               size="sm"
               className="w-full gap-2"
               onClick={handleSave}
+              disabled={saving}
             >
-              {saved ? (
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : saved ? (
                 <>
                   <CheckCircle2 className="size-4 text-emerald-400" />
                   Tersimpan
