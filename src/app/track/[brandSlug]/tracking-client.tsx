@@ -310,11 +310,27 @@ export default function TrackingClient({ brandSlug, brandName, primaryColor, log
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
-                          <span className="text-xs font-medium">Total Biaya</span>
-                          <span className="text-sm font-bold" style={{ color: primaryColor }}>
-                            {formatCurrency(service.finalCost || service.estimatedCost)}
-                          </span>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                            <span className="text-xs font-medium">Total Biaya</span>
+                            <span className="text-sm font-bold" style={{ color: primaryColor }}>
+                              {formatCurrency(service.finalCost || service.estimatedCost)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between rounded-xl bg-white px-4 py-2.5">
+                            <span className="text-xs font-medium">Terbayar</span>
+                            <span className={`text-sm font-semibold ${service.remainingAmount <= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                              {formatCurrency(service.paidAmount)}
+                            </span>
+                          </div>
+                          {service.remainingAmount > 0 && (
+                            <div className="flex items-center justify-between rounded-xl bg-red-50 px-4 py-2.5">
+                              <span className="text-xs font-medium text-red-700">Sisa Tagihan</span>
+                              <span className="text-sm font-bold text-red-600">
+                                {formatCurrency(service.remainingAmount)}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {service.technicianName && (

@@ -26,6 +26,8 @@ import { StoreShiftProvider } from "@/features/store-shift/store-shift-provider"
 import { saveRememberedAccount, loadRememberedAccounts } from "@/lib/auth/remembered-accounts";
 import { ROLE_LABELS } from "@/lib/permissions/roles";
 import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileNav } from "@/components/layout/mobile-nav";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -126,6 +128,7 @@ function PanelLayoutShell({
   const mainScrollRef = React.useRef<HTMLElement | null>(null);
   const { activeBranchId, branches, activeBranchName } = useActiveBranch();
   const [openShiftModal, setOpenShiftModal] = React.useState(false);
+  const isMobile = useIsMobile();
 
   const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
   const resolvedBranchName = resolvedBranchId
@@ -245,11 +248,11 @@ function PanelLayoutShell({
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
       )}
-      <div className={`flex overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100vh-40px)]" : "h-screen"}`}>
+      <div className={`flex overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100dvh-40px)]" : "h-dvh"}`}>
         <SidebarProvider>
           <AppSidebar brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
 
-          <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
+          <SidebarInset className={`h-dvh min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
             {/* ── Desktop header ── */}
             <header className="relative z-40 flex h-14 items-center overflow-visible !bg-sidebar px-3 text-sidebar-foreground md:h-16 md:px-6">
               <div className="flex items-center gap-3">
@@ -319,7 +322,7 @@ function PanelLayoutShell({
             <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isInventoryV4Page ? "rounded-[14px] border-none bg-sidebar shadow-none" : isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
               <main
                 ref={mainScrollRef}
-                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"}`}
+                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"} ${isMobile ? "pb-14" : ""}`}
               >
                 {children}
               </main>
@@ -351,6 +354,7 @@ function PanelLayoutShell({
       </SidebarProvider>
           {pathname?.includes("/panel/services") && <RightSidebarPanel />}
           {pathname?.includes("/panel/pos") && <PosCartSidebar />}
+          <MobileNav brandSlug={brandSlug} />
 
       {resolvedBranchId && (
         <StoreShiftOpenModal

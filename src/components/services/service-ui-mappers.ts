@@ -170,11 +170,12 @@ export function mapPaymentSummary(
 ): ServicePaymentSummary | null {
   if (!summary) return null;
   return {
-    totalCharged: Number(summary.total_charged) || 0,
+    totalCharged: Number(summary.cost) || Number(summary.total_charged) || 0,
     totalPaid: Number(summary.total_paid) || 0,
     remainingBalance: Number(summary.remaining_balance) || 0,
     dpAmount: Number(summary.dp_amount) || 0,
     paymentStatus:
+      (summary.payment_state as ServicePaymentSummary["paymentStatus"]) ??
       (summary.payment_status as ServicePaymentSummary["paymentStatus"]) ??
       "unpaid",
   };

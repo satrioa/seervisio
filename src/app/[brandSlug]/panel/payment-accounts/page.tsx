@@ -237,7 +237,7 @@ export default function PaymentAccountsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex flex-col gap-1 p-4">
             <span className="text-xs text-muted-foreground">Total Saldo</span>
@@ -267,7 +267,7 @@ export default function PaymentAccountsPage() {
       {/* Cards / Table View */}
       {viewMode === "card" ? (
         loading ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <article key={i} className="flex min-h-[200px] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="space-y-3 bg-slate-900 p-4">
@@ -304,7 +304,7 @@ export default function PaymentAccountsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {accounts.map((acc) => (
               <PaymentAccountCard
                 key={acc.id}
@@ -695,17 +695,17 @@ function CreateAccountModal({
             <Label>Nama Akun</Label>
             <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Nama akun" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Bank / Provider</Label>
-              <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Nama bank (opsional)" />
+              <Label>Pemilik Akun</Label>
+              <Input value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Nama pemilik" />
             </div>
             <div className="space-y-1.5">
-              <Label>Nomor Akun</Label>
+              <Label>Nomor Rekening</Label>
               <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Nomor rekening (opsional)" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Atas Nama</Label>
               <Input value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Nama pemilik (opsional)" />

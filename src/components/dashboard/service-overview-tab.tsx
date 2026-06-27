@@ -145,11 +145,11 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
   });
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-3">
         {/* ── KPI Cards ── */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Penghasilan Servis" value={formatRp(data?.totalServiceRevenue ?? 0)} helper="dari pembayaran servis" icon={Wallet} />
           <SummaryCard label="Servis Diterima" value={String(data?.serviceInCount ?? 0)} helper="servis masuk" icon={ClipboardList} />
           <SummaryCard label="Servis Selesai" value={String(data?.serviceDoneCount ?? 0)} helper="selesai" icon={CheckCircle2} />
@@ -186,7 +186,7 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
             <CardTitle className="text-sm font-semibold">Recent Servis</CardTitle>
             <CardDescription className="text-xs">Aktivitas servis terbaru dari cabang terpilih</CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="overflow-x-auto p-0">
             {recentServices.length > 0 ? (
               <Table>
                 <TableHeader>

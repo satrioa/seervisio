@@ -157,7 +157,7 @@ export function ServiceDetailModal({
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col gap-5 p-6 pt-4">
             {/* ── Info Grid ── */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Customer Info */}
               <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
                 <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -523,7 +523,7 @@ export function ServiceDetailModal({
             <div className="flex flex-col gap-2">
               {!isCancelled && (
                 <>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 <UpdateServiceStatusDialog
   service={displayService}
   onStatusUpdated={setLocalStatus}

@@ -714,7 +714,7 @@ export function ServiceKanbanView({
       onMove={handleMove}
       getItemValue={(item) => item.id}
     >
-      <KanbanBoard className="flex h-[calc(100vh-14rem)] min-h-[360px] items-stretch gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <KanbanBoard className="flex h-[calc(100dvh-14rem)] min-h-[360px] items-stretch gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {STATUS_ORDER.map((status, index) => (
           <ServiceColumn
             key={status}

@@ -325,7 +325,7 @@ export default function CashflowPage() {
       </Card>
 
       {/* KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex flex-col gap-1 p-4">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -520,7 +520,7 @@ export default function CashflowPage() {
                 </div>
               </section>
 
-              <section className="grid grid-cols-2 gap-3">
+              <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground">Akun</p>
                   <p className="mt-1 text-sm font-medium">{detailMovement.accountName}</p>
@@ -544,7 +544,7 @@ export default function CashflowPage() {
                   <p className="text-xs text-muted-foreground">Deskripsi</p>
                   <p className="mt-1 text-sm">{detailMovement.description || "-"}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground">Referensi</p>
                     <p className="mt-1 text-sm font-medium">

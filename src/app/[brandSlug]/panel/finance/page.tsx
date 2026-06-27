@@ -305,7 +305,7 @@ export default function FinanceReportPage() {
       </Card>
 
       {loading && !report && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {Array.from({ length: 10 }).map((_, i) => (
             <Card key={i}>
               <CardContent className="p-4"><Skeleton className="h-10 w-full" /></CardContent>
@@ -327,14 +327,14 @@ export default function FinanceReportPage() {
         <>
           {/* ── KPI Cards ── */}
           {loading ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {Array.from({ length: 10 }).map((_, i) => (
                 <Card key={i}><CardContent className="p-4"><Skeleton className="h-10 w-full" /></CardContent></Card>
               ))}
             </div>
           ) : (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard label="Total Pendapatan" value={fmtCurrency(s.totalRevenue)} icon={TrendingUp} color="text-emerald-600" loading={false} />
                 <KpiCard label="Pendapatan Servis" value={fmtCurrency(s.serviceRevenue)} icon={WrenchIcon} color="text-blue-600" sub={`${s.serviceRevenueCount} transaksi`} loading={false} />
                 <KpiCard label="Pendapatan POS" value={fmtCurrency(s.posRevenue)} icon={ShoppingCart} color="text-violet-600" sub={`${s.posRevenueCount} transaksi`} loading={false} />
@@ -348,7 +348,7 @@ export default function FinanceReportPage() {
               </div>
 
               {/* ── Two-column layout ── */}
-              <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2">
                 {/* Revenue Breakdown */}
                 <Card>
                   <CardHeader className="pb-3">
@@ -435,7 +435,7 @@ export default function FinanceReportPage() {
                   {accountBalances.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-4 text-center">Belum ada akun aktif.</p>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {accountBalances.map((acct) => (
                         <div key={acct.accountId} className="flex flex-col gap-1.5 rounded-lg border bg-card p-3">
                           <div className="flex items-center justify-between">
@@ -513,7 +513,7 @@ export default function FinanceReportPage() {
                   <CardDescription className="text-xs">Total arus kas masuk, keluar, dan mutasi terbaru</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <ArrowUpRight className="size-3 text-emerald-600" /> Total Masuk

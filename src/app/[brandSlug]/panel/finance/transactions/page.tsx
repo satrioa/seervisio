@@ -434,7 +434,7 @@ export default function FinanceTransactionsPage() {
       </Card>
 
       {/* KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex flex-col gap-1 p-4">
             <span className="text-xs text-muted-foreground flex items-center gap-1">

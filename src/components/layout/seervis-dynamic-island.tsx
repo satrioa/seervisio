@@ -9,6 +9,7 @@ import {
 } from "react";
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DynamicIslandProvider,
   useDynamicIslandSize,
@@ -111,6 +112,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
   );
 
   const shouldReduceMotion = useReducedMotion();
+  const isMobile = useIsMobile();
 
   /* Sync active shift from provider — after welcome, set idle state */
   useEffect(() => {
@@ -315,7 +317,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
         boxShadow: islandShadow,
         x: errorShake ? [0, -4, 4, -4, 4, -2, 2, 0] : 0,
       }}
-      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow }}
+      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 371px)" }}
       transition={{
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,
@@ -394,7 +396,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
             </div>
             <Button
               size="sm"
-              className="h-7 shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
+              className="h-9 shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
               onClick={(e) => {
                 e.stopPropagation();
                 handleBukaToko();
@@ -457,7 +459,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="h-8 gap-1.5 rounded-full border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
+                className="h-9 gap-1.5 rounded-full border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleBukaToko();
@@ -493,7 +495,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
+                className="h-9 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
                 onClick={(e) => e.stopPropagation()}
               >
                 <LogOut className="size-3.5" />
@@ -501,7 +503,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
               </Button>
               <Button
                 size="sm"
-                className="h-8 gap-1.5 rounded-full border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 dark:border-black/20 dark:bg-black/10 dark:text-black dark:hover:bg-black/20"
+                className="h-9 gap-1.5 rounded-full border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 dark:border-black/20 dark:bg-black/10 dark:text-black dark:hover:bg-black/20"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Wallet className="size-3.5" />

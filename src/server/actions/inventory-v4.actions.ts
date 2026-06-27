@@ -1111,6 +1111,32 @@ export async function checkoutPosV4Action(
       if (item.sellingPrice < 0) return errorResult("Harga jual tidak boleh negatif.");
     }
     const result = await repoCheckoutPos(supabase as any, input, session.brandId, session.profileId);
+
+    try {
+      await addAuditLog({
+        brand_id: session.brandId,
+        action: "POS_CHECKOUT",
+        target_type: "pos_transaction",
+        target_id: result.transactionId,
+        target_label: result.transactionNumber,
+        actor_id: session.profileId,
+        description: `Checkout POS: ${result.transactionNumber} — Rp ${result.totalAmount.toLocaleString("id-ID")}`,
+        details: {
+          transaction_number: result.transactionNumber,
+          total_amount: result.totalAmount,
+          subtotal_amount: result.subtotalAmount,
+          discount_amount: result.discountAmount,
+          service_fee_amount: result.serviceFeeAmount,
+          paid_amount: result.paidAmount,
+          change_amount: result.changeAmount,
+          item_count: input.items.length,
+          payment_account_id: result.paymentAccountId,
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[checkoutPosV4Action] audit log error:", auditErr.message);
+    }
+
     return successResult(result);
   } catch (err: any) {
     console.error("[checkoutPosV4Action]", err);
@@ -1245,6 +1271,27 @@ export async function voidPosTransactionV4Action(
       input.transactionId,
       input.reason.trim(),
     );
+
+    try {
+      await addAuditLog({
+        brand_id: session.brandId,
+        action: "POS_VOID",
+        target_type: "pos_transaction",
+        target_id: result.transactionId,
+        target_label: result.transactionNumber,
+        actor_id: session.profileId,
+        description: `Void POS: ${result.transactionNumber} — ${input.reason.trim()}`,
+        details: {
+          transaction_number: result.transactionNumber,
+          reason: input.reason.trim(),
+          restored_item_count: result.restoredItemCount,
+          status: result.status,
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[voidPosTransactionV4Action] audit log error:", auditErr.message);
+    }
+
     return successResult(result);
   } catch (err: any) {
     console.error("[voidPosTransactionV4Action]", err);

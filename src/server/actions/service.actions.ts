@@ -395,11 +395,11 @@ export async function getServiceDetailAction(
       const summary = await callCalculateServicePaymentSummary(serviceId);
       if (summary) {
         paymentSummary = {
-          totalCharged: Number(summary.total_charged) || 0,
+          totalCharged: Number(summary.cost) || 0,
           totalPaid: Number(summary.total_paid) || 0,
           remainingBalance: Number(summary.remaining_balance) || 0,
-          dpAmount: Number(summary.dp_amount) || 0,
-          paymentStatus: (summary.payment_status as ServicePaymentSummary["paymentStatus"]) || "UNPAID",
+          dpAmount: 0,
+          paymentStatus: (summary.payment_state as ServicePaymentSummary["paymentStatus"]) || "UNPAID",
         };
       }
     } catch {

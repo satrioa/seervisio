@@ -16,6 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   MinimalCard,
@@ -28,7 +31,6 @@ import {
   FamilyDrawerOverlay,
   FamilyDrawerContent,
   FamilyDrawerAnimatedWrapper,
-  FamilyDrawerClose,
 } from "@/components/ui/family-drawer";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { can } from "@/lib/permissions/can";
@@ -776,7 +778,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             )}
 
             {!productsLoading && (
-              <div className="grid justify-start gap-4 p-4 [grid-template-columns:repeat(auto-fill,220px)]">
+              <div className="grid justify-start gap-3 p-3 sm:gap-4 sm:p-4 grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,200px)] lg:[grid-template-columns:repeat(auto-fill,220px)]">
                 {products.map((product) => {
                   const isUnitSecond = product.productKind === "UNIT" && product.conditionType === "SECOND";
                   const firstVariant = product.variants[0]!;
@@ -1013,7 +1015,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {paymentMethods.map((pm) => {
                     const selected = selectedMethod === pm.paymentMethodId;
                     const label = getPaymentMethodLabel(pm);
@@ -1030,7 +1032,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                             setPaidAmount(total);
                           }
                         }}
-                        className={`flex h-8 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${
+                        className={`flex h-9 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${
                           selected
                             ? "border-primary bg-primary text-primary-foreground shadow-sm"
                             : "border-border/70 bg-background/75 text-foreground hover:border-primary/40 hover:bg-muted/40"
@@ -1087,77 +1089,73 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             </Button>
 
             {/* Riwayat transaksi */}
-            <FamilyDrawerRoot open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
-              <FamilyDrawerPortal>
-                <FamilyDrawerOverlay />
-                <FamilyDrawerContent
-                  className="inset-x-0 bottom-0 max-w-none rounded-b-none rounded-t-[20px] !rounded-[20px] w-full max-h-[92vh]"
-                >
-                  <FamilyDrawerAnimatedWrapper className="h-[85vh] overflow-hidden px-0 pb-0 pt-0">
-                    <div className="flex h-full flex-col">
-                      {/* Handle */}
-                      <div className="flex shrink-0 justify-center pt-3 pb-2">
-                        <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
-                      </div>
+            <Sheet open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
+              <SheetContent
+                side="bottom"
+                className="mx-auto h-[85vh] max-w-none rounded-t-[20px] px-0 pb-0 pt-0 sm:max-w-lg"
+              >
+                <div className="flex h-full flex-col">
+                  {/* Handle */}
+                  <div className="flex shrink-0 justify-center pt-3 pb-2">
+                    <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+                  </div>
 
-                      {/* Header */}
-                      <div className="flex shrink-0 items-center justify-between border-b px-4 pb-3">
-                        <div>
-                          <h2 className="text-sm font-semibold">Riwayat Transaksi</h2>
-                          <p className="text-[11px] text-muted-foreground">Transaksi hari ini</p>
-                        </div>
-                        <FamilyDrawerClose>
-                          <X className="size-3.5" />
-                        </FamilyDrawerClose>
-                      </div>
-
-                      {/* Body */}
-                      <div className="flex-1 overflow-y-auto px-4 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        {txLoading ? (
-                          <div className="flex items-center justify-center py-16">
-                            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : transactions.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-                            <Receipt className="size-10 text-muted-foreground/30" />
-                            <p className="text-sm text-muted-foreground">Belum ada transaksi hari ini.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {transactions.map((tx) => (
-                              <button
-                                key={tx.id}
-                                type="button"
-                                className="flex w-full items-center justify-between rounded-xl border border-sidebar-border bg-background/75 px-3.5 py-3 text-left transition-colors hover:bg-accent"
-                                onClick={() => {
-                                  setTxDrawerOpen(false);
-                                  setTimeout(() => openDetail(tx), 200);
-                                }}
-                              >
-                                <div className="min-w-0 flex-1 space-y-0.5">
-                                  <div className="text-xs font-medium">{tx.transactionNumber}</div>
-                                  <div className="text-[10px] text-muted-foreground">{formatPrice(tx.totalAmount)}</div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  {tx.status === "VOIDED" ? (
-                                    <Badge variant="destructive" className="text-[9px] px-1.5 py-0">VOID</Badge>
-                                  ) : tx.status === "REFUNDED" ? (
-                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0">REFUND</Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[9px] px-1.5 py-0 text-emerald-700">LUNAS</Badge>
-                                  )}
-                                  <Eye className="size-3.5 text-muted-foreground" />
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                  {/* Header */}
+                  <div className="flex shrink-0 items-center justify-between border-b px-4 pb-3">
+                    <div>
+                      <SheetTitle className="text-sm font-semibold">Riwayat Transaksi</SheetTitle>
+                      <SheetDescription className="text-[11px]">Transaksi hari ini</SheetDescription>
                     </div>
-                  </FamilyDrawerAnimatedWrapper>
-                </FamilyDrawerContent>
-              </FamilyDrawerPortal>
-            </FamilyDrawerRoot>
+                    <SheetClose>
+                      <X className="size-3.5" />
+                    </SheetClose>
+                  </div>
+
+                  {/* Body */}
+                  <div className="flex-1 overflow-y-auto px-4 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {txLoading ? (
+                      <div className="flex items-center justify-center py-16">
+                        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : transactions.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                        <Receipt className="size-10 text-muted-foreground/30" />
+                        <p className="text-sm text-muted-foreground">Belum ada transaksi hari ini.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {transactions.map((tx) => (
+                          <button
+                            key={tx.id}
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-xl border border-sidebar-border bg-background/75 px-3.5 py-3 text-left transition-colors hover:bg-accent"
+                            onClick={() => {
+                              setTxDrawerOpen(false);
+                              setTimeout(() => openDetail(tx), 200);
+                            }}
+                          >
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <div className="text-xs font-medium">{tx.transactionNumber}</div>
+                              <div className="text-[10px] text-muted-foreground">{formatPrice(tx.totalAmount)}</div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {tx.status === "VOIDED" ? (
+                                <Badge variant="destructive" className="text-[9px] px-1.5 py-0">VOID</Badge>
+                              ) : tx.status === "REFUNDED" ? (
+                                <Badge variant="secondary" className="text-[9px] px-1.5 py-0">REFUND</Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[9px] px-1.5 py-0 text-emerald-700">LUNAS</Badge>
+                              )}
+                              <Eye className="size-3.5 text-muted-foreground" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </aside>
 
@@ -1688,7 +1686,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                         {paymentMethods.map((pm) => {
                           const selected = selectedMethod === pm.paymentMethodId;
                           const label = getPaymentMethodLabel(pm);
@@ -1698,11 +1696,8 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                               key={pm.paymentMethodId ?? pm.branchPaymentMethodId}
                               type="button"
                               onClick={() => { setSelectedMethod(pm.paymentMethodId!); if (!cashMethod) setPaidAmount(total); }}
-                              className={`flex h-8 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${
-                                selected
-                                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                  : "border-border/70 bg-background/75 text-foreground hover:border-primary/40 hover:bg-muted/40"
-                              }`}
+                              className={`flex h-9 min-w-0 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium transition-all ${selected ? "border-primary bg-primary text-primary-foreground shadow-sm" : "border-border/70 bg-background/75 text-foreground hover:border-primary/40 hover:bg-muted/40"}`}
+
                             >
                               <span className="min-w-0 truncate">{label}</span>
                             </button>

@@ -375,7 +375,7 @@ export function ServicePaymentPanel({
                     {/* Payment Type */}
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium">Tipe Pembayaran</Label>
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                         {([
                           { value: "DOWN_PAYMENT" as const, label: "DP", icon: PiggyBank },
                           { value: "PARTIAL_PAYMENT" as const, label: "Sebagian", icon: Coins },

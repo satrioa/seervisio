@@ -1,6 +1,7 @@
 "use server";
 
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { getServicePaymentSummary, getServicesPaymentSummary } from "@/repositories/payment-summary.repository";
 
 export type TrackedServiceData = {
   id: string;
@@ -21,6 +22,9 @@ export type TrackedServiceData = {
   estimatedCompletion: string | null;
   branchName: string | null;
   technicianName: string | null;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: "UNPAID" | "PARTIAL" | "PAID" | "OVERPAID";
   spareparts: {
     name: string;
     qty: number;
@@ -101,24 +105,27 @@ export async function trackServiceAction(
     const technicianIds = [...new Set(services.map((s: any) => s.assigned_technician_id).filter(Boolean))];
     const customerIds = [...new Set(services.map((s: any) => s.customer_id).filter(Boolean))];
 
-    const [[branches, techs, customers], sparepartMap, statusTimelineMap] = await Promise.all([
-      Promise.all([
-        branchIds.length > 0
-          ? adminDb.from("branches").select("id, name").in("id", branchIds)
-          : { data: [] },
-        technicianIds.length > 0
-          ? adminDb.from("profiles").select("id, name").in("id", technicianIds)
-          : { data: [] },
-        customerIds.length > 0
-          ? adminDb.from("customers").select("id, name, phone").in("id", customerIds)
-          : { data: [] },
-      ]) as any,
+    const [branchResult, sparepartMap, statusTimelineMap, paymentMap] = await Promise.all([
       (async () => {
-        const serviceIds = services.map((s: any) => s.id);
+        const [branches, techs, customers] = await Promise.all([
+          branchIds.length > 0
+            ? adminDb.from("branches").select("id, name").in("id", branchIds)
+            : { data: [] },
+          technicianIds.length > 0
+            ? adminDb.from("profiles").select("id, name").in("id", technicianIds)
+            : { data: [] },
+          customerIds.length > 0
+            ? adminDb.from("customers").select("id, name, phone").in("id", customerIds)
+            : { data: [] },
+        ]);
+        return { branches, techs, customers };
+      })(),
+      (async () => {
+        const ids = services.map((s: any) => s.id);
         const { data: sp } = await adminDb
           .from("service_spareparts")
           .select("service_id, name, qty, price, total_price")
-          .in("service_id", serviceIds);
+          .in("service_id", ids);
         const map: Record<string, any[]> = {};
         for (const item of sp ?? []) {
           if (!map[item.service_id]) map[item.service_id] = [];
@@ -132,11 +139,11 @@ export async function trackServiceAction(
         return map;
       })(),
       (async () => {
-        const serviceIds = services.map((s: any) => s.id);
+        const ids = services.map((s: any) => s.id);
         const { data: timeline } = await adminDb
           .from("service_status_history")
           .select("service_id, status, created_at")
-          .in("service_id", serviceIds)
+          .in("service_id", ids)
           .order("created_at", { ascending: true });
         const map: Record<string, { status: string; timestamp: string | null }[]> = {};
         for (const entry of timeline ?? []) {
@@ -148,8 +155,10 @@ export async function trackServiceAction(
         }
         return map;
       })(),
+      getServicesPaymentSummary(services.map((s: any) => s.id)),
     ]);
 
+    const { branches, techs, customers } = branchResult;
     const branchMap = Object.fromEntries((branches?.data ?? []).map((b: any) => [b.id, b.name]));
     const techMap = Object.fromEntries((techs?.data ?? []).map((t: any) => [t.id, t.name]));
     const customerMap = Object.fromEntries(
@@ -190,6 +199,8 @@ export async function trackServiceAction(
         );
       }
 
+      const paymentSummary = paymentMap[svc.id];
+
       return {
         id: svc.id,
         trackingToken: svc.tracking_token,
@@ -209,6 +220,9 @@ export async function trackServiceAction(
         estimatedCompletion: null,
         branchName: branchMap[svc.branch_id] || null,
         technicianName: techMap[svc.assigned_technician_id] || null,
+        paidAmount: paymentSummary?.totalPaid ?? 0,
+        remainingAmount: paymentSummary?.remainingBalance ?? Number(svc.final_cost || svc.estimated_cost || 0),
+        paymentStatus: paymentSummary?.paymentStatus ?? "UNPAID",
         spareparts: sparepartMap[svc.id] || [],
         statusTimeline: timelineFromHistory.length > 0 ? timelineFromHistory : buildTimeline,
       };

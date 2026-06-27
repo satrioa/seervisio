@@ -56,6 +56,10 @@
     --invert: var(--color-zinc-900);
     --invert-foreground: var(--color-zinc-50);
     --heatmap-zero: rgb(221, 221, 221);
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
   }
 
   .dark {
@@ -125,8 +129,14 @@
 
   body {
     @apply bg-background text-foreground;
-    min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
+  }
+
+  @supports not (min-height: 100dvh) {
+    body {
+      min-height: 100vh;
+    }
   }
 
   html[data-scroll-locked],

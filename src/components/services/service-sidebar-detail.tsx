@@ -231,7 +231,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
           initial="hidden"
           animate="visible"
         >
-        <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <InfoCard icon={User} label="Pelanggan">
             <p className="text-sm font-medium">{service.customerName || "Tanpa nama"}</p>
             {service.customerPhone ? <p>{service.customerPhone}</p> : <p>No. HP belum ada</p>}
@@ -492,7 +492,7 @@ export function ServiceSidebarDetail({ service, brandSlug: brandSlugProp, onServ
       <div className="sticky bottom-0 border-t bg-background/95 px-5 py-3 backdrop-blur">
         <div className="flex flex-col gap-2">
           {!isCancelled && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UpdateServiceStatusDialog
                 service={service}
                 brandSlug={brandSlug}

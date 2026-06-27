@@ -81,7 +81,7 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
   return (
     <div className="space-y-6">
       {/* ── KPI Cards ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Pendapatan"
           value={formatRp(data?.totalRevenue ?? 0)}
@@ -116,42 +116,44 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
             Perbandingan arus kas masuk dan keluar berdasarkan periode terpilih
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {cashFlowData.length > 0 ? (
-            <ChartContainer config={defaultChartConfig} className="h-64 w-full">
-              <BarChart data={cashFlowData} barGap={4}>
-                <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="period"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tick={{ fontSize: 10 }}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tick={{ fontSize: 10 }}
-                  stroke="hsl(var(--muted-foreground))"
-                  tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
-                />
-                <ChartTooltip
-                  cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
-                  content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="dot" />}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="cashIn" fill="var(--color-cashIn)" radius={[3, 3, 0, 0]} barSize={20} />
-                <Bar dataKey="cashOut" fill="var(--color-cashOut)" radius={[3, 3, 0, 0]} barSize={20} />
-              </BarChart>
-            </ChartContainer>
-          ) : (
-            <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
-              Belum ada data arus kas pada periode ini.
-            </div>
-          )}
-        </CardContent>
+        <CardContent className="overflow-x-auto">
+          <div className="h-64 min-w-[450px] sm:min-w-0">
+            {cashFlowData.length > 0 ? (
+              <ChartContainer config={defaultChartConfig} className="h-full w-full">
+                <BarChart data={cashFlowData} barGap={4}>
+                  <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="period"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10 }}
+                    stroke="hsl(var(--muted-foreground))"
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 10 }}
+                    stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+                  />
+                  <ChartTooltip
+                    cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                    content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="dot" />}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="cashIn" fill="var(--color-cashIn)" radius={[3, 3, 0, 0]} barSize={20} />
+                  <Bar dataKey="cashOut" fill="var(--color-cashOut)" radius={[3, 3, 0, 0]} barSize={20} />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                Belum ada data arus kas pada periode ini.
+              </div>
+            )}
+          </div>
+          </CardContent>
         <CardFooter className="flex flex-col items-start gap-0.5 border-t px-6 py-3">
           <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             {data && data.netCashflow >= 0 ? "Cashflow positif" : "Belum ada data cashflow"}
@@ -163,7 +165,7 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
       </Card>
 
       {/* ── Bottom Radar Charts ── */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
         {/* Metode Pembayaran */}
         <Card className="shadow-xs">
           <CardHeader className="pb-3">

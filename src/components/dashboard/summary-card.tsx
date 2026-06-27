@@ -26,7 +26,7 @@ export function SummaryCard({
         {Icon && <Icon className="size-4 text-muted-foreground/60" />}
       </CardHeader>
       <CardContent className="space-y-1">
-        <div className="text-xl font-semibold tracking-tight">{value}</div>
+        <div className="text-lg sm:text-xl font-semibold tracking-tight">{value}</div>
         {(helper || trend !== undefined) && (
           <div className="flex items-center gap-1.5">
             {trend !== undefined && trend > 0 && (

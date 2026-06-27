@@ -175,7 +175,7 @@ export async function getServicePayments(serviceId: string): Promise<{
     .from("service_payments")
     .select("payment_number, gross_amount, net_amount, payment_method_id, payment_status, paid_at, notes")
     .eq("service_id", serviceId)
-    .eq("payment_status", "SUCCEEDED")
+    .eq("payment_status", "COMPLETED")
     .order("paid_at", { ascending: true });
 
   const paymentMethodIds = [
@@ -224,7 +224,7 @@ export async function getServicePaymentSummary(serviceId: string): Promise<Porta
     .from("service_payments")
     .select("gross_amount")
     .eq("service_id", serviceId)
-    .eq("payment_status", "SUCCEEDED");
+    .eq("payment_status", "COMPLETED");
 
   const totalPaid = (payments ?? []).reduce((sum: number, p: any) => sum + Number(p.gross_amount), 0);
 

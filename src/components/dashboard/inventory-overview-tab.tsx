@@ -29,11 +29,11 @@ export function InventoryOverviewTab({ data }: InventoryOverviewTabProps) {
   const hasLowStock = lowStockItems.length > 0;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-3">
         {/* ── KPI Cards ── */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Stok Menipis"
             value={String(data?.lowStockCount ?? 0)}

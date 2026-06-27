@@ -10,6 +10,7 @@ import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { ServiceOverviewTab } from "@/components/dashboard/service-overview-tab";
 import { FinanceOverviewTab } from "@/components/dashboard/finance-overview-tab";
 import { InventoryOverviewTab } from "@/components/dashboard/inventory-overview-tab";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
 import type { DateRange } from "react-day-picker";
 import type { DateRangeMode, ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { getChartGranularity } from "@/lib/dashboard/chart-granularity";
@@ -43,6 +44,7 @@ function formatRp(n: number) {
    ══════════════════════════════════════════════ */
 
 export function DashboardContent({ brandSlug }: DashboardContentProps) {
+  const { activeBranchId } = useActiveBranch();
   const [dateRange, setDateRange] = React.useState<DateRange|undefined>(() => {
     const to = new Date();
     const from = new Date();
@@ -91,6 +93,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
         const result = await getDashboardOverviewAction(brandSlug, {
           dateFrom,
           dateTo,
+          branchId: activeBranchId ?? undefined,
         });
         if (cancelled) return;
         if (result.success && result.data) {
@@ -110,7 +113,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
     }
     fetchData();
     return () => { cancelled = true; };
-  }, [brandSlug, dateRange?.from?.getTime(), dateRange?.to?.getTime()]);
+  }, [brandSlug, activeBranchId, dateRange?.from?.getTime(), dateRange?.to?.getTime()]);
 
   return (
     <div className="space-y-3">

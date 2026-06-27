@@ -80,7 +80,7 @@ export function ServiceSidebarOverview() {
         ) : (
           <div className="flex min-h-full flex-col gap-4 p-4">
             {/* Stat Cards */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="flex flex-col gap-1 rounded-lg border bg-card p-3">
                 <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
                   <Smartphone className="size-3" />

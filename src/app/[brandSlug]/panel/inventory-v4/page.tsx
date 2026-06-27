@@ -636,7 +636,7 @@ function ProductTabContent({
         </Select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="overflow-x-auto rounded-lg border bg-card">
         <div className="grid grid-cols-[2fr_1fr_60px_70px_100px_70px_44px] gap-2 border-b bg-muted/50 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           <span>Nama</span><span>Kategori</span><span>Variasi</span><span>Stok</span><span>Harga Jual</span><span>Status</span><span />
         </div>
@@ -875,11 +875,11 @@ function VariantDetailDialog({
             {product.variants.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">Tidak ada varian.</p>
             ) : (
-              <div className="overflow-hidden rounded-lg border">
-                <div className="grid grid-cols-[2fr_1fr_70px_90px_70px_72px] gap-2 border-b bg-muted/50 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  <span>Varian</span><span>SKU / Barcode</span><span>Stok</span><span>Harga Jual</span><span>Status</span><span>Aksi</span>
-                </div>
-                {product.variants.map((v: VariantV4Row) => {
+      <div className="overflow-x-auto rounded-lg border">
+        <div className="grid grid-cols-[2fr_1fr_70px_90px_70px_72px] gap-2 border-b bg-muted/50 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <span>Varian</span><span>SKU / Barcode</span><span>Stok</span><span>Harga Jual</span><span>Status</span><span>Aksi</span>
+        </div>
+        {product.variants.map((v: VariantV4Row) => {
                   const sl = stockLabel(v.currentStock, v.minStock);
                   return (
                     <div key={v.id}
@@ -1182,15 +1182,15 @@ function EditVariantV4Dialog({
             <Label className="text-xs">Attributes / Opsi Variasi (JSON)</Label>
             <Textarea value={attributesText} onChange={(e) => setAttributesText(e.target.value)} className="mt-1 min-h-24 font-mono text-xs" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">SKU</Label><Input value={sku} onChange={(e) => setSku(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Barcode</Label><Input value={barcode} onChange={(e) => setBarcode(e.target.value)} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Satuan</Label><Input value={unit} onChange={(e) => setUnit(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Minimum Stok</Label><Input type="number" value={minStock} onChange={(e) => setMinStock(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Harga Modal</Label><Input type="number" value={costPrice} onChange={(e) => setCostPrice(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Harga Jual</Label><Input type="number" value={sellingPrice} onChange={(e) => setSellingPrice(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
           </div>
@@ -1514,30 +1514,30 @@ function EditUnitSecondV4Dialog({
           <DialogDescription>Edit metadata dan harga. Perubahan status stok tetap melalui aksi arsip/aktifkan atau transaksi.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Warna</Label><Input value={warna} onChange={(e) => setWarna(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Storage</Label><Input value={storage} onChange={(e) => setStorage(e.target.value)} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div><Label className="text-xs">IMEI</Label><Input value={imei} onChange={(e) => setImei(e.target.value)} className="mt-1 h-9 text-xs font-mono" /></div>
             <div><Label className="text-xs">Serial Number</Label><Input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Barcode</Label><Input value={barcode} onChange={(e) => setBarcode(e.target.value)} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div><Label className="text-xs">Battery Health</Label><Input type="number" value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value ? Number(e.target.value) : "")} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Kondisi</Label><Input value={conditionGrade} onChange={(e) => setConditionGrade(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">URL Gambar</Label><Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Catatan Fisik</Label><Textarea value={physicalNotes} onChange={(e) => setPhysicalNotes(e.target.value)} className="mt-1 min-h-20 text-xs" /></div>
             <div><Label className="text-xs">Catatan Fungsi</Label><Textarea value={functionalNotes} onChange={(e) => setFunctionalNotes(e.target.value)} className="mt-1 min-h-20 text-xs" /></div>
           </div>
           <div><Label className="text-xs">Kelengkapan</Label><Input value={accessories} onChange={(e) => setAccessories(e.target.value)} className="mt-1 h-9 text-xs" /></div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Garansi Sampai</Label><Input type="date" value={warrantyUntil} onChange={(e) => setWarrantyUntil(e.target.value)} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Catatan Garansi</Label><Input value={warrantyNotes} onChange={(e) => setWarrantyNotes(e.target.value)} className="mt-1 h-9 text-xs" /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div><Label className="text-xs">Harga Modal</Label><Input type="number" value={purchaseCost} onChange={(e) => setPurchaseCost(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
             <div><Label className="text-xs">Harga Jual / Nett</Label><Input type="number" value={sellingPrice} onChange={(e) => setSellingPrice(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
           </div>
@@ -2031,8 +2031,8 @@ function StockOpnameDialog({
               )}
             </div>
 
-            <div className="rounded-lg border">
-              <div className="grid grid-cols-[2fr_1fr_80px_100px_100px_50px] gap-1 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="overflow-x-auto rounded-lg border">
+              <div className="grid grid-cols-[130px_80px_70px_80px_80px_50px] sm:grid-cols-[2fr_1fr_80px_100px_100px_50px] gap-1 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 <span>Item</span><span>Kategori</span><span>Stok Sistem</span><span>Stok Opname</span><span>Selisih</span><span></span>
               </div>
               {loading ? (
@@ -2042,7 +2042,7 @@ function StockOpnameDialog({
                 const physical = adjustments[row.variantId];
                 const isChanged = diff !== null && diff !== 0;
                 return (
-                  <div key={row.variantId} className="grid grid-cols-[2fr_1fr_80px_100px_100px_50px] gap-1 border-b px-3 py-2 text-xs last:border-0 hover:bg-muted/10">
+                  <div key={row.variantId} className="grid grid-cols-[130px_80px_70px_80px_80px_50px] sm:grid-cols-[2fr_1fr_80px_100px_100px_50px] gap-1 border-b px-3 py-2 text-xs last:border-0 hover:bg-muted/10">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{row.productName}</p>
                       <p className="truncate text-[10px] text-muted-foreground">{formatVariantAttributes(row.attributes)}</p>
@@ -2291,7 +2291,7 @@ function BelanjaStokDialog({
               <DialogDescription>Catat pembelian stok untuk Sparepart, Produk, atau Unit Baru.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="text-xs">Tanggal Belanja</Label>
                   <Input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="mt-1 h-9 text-xs" />
@@ -2308,7 +2308,7 @@ function BelanjaStokDialog({
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="text-xs">Supplier (opsional)</Label>
                   <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Nama supplier" />

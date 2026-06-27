@@ -28,6 +28,7 @@ import {
   callCalculateServicePaymentSummary,
   getBranchPaymentMethods,
 } from "@/repositories/payment.repository";
+import { getServicePaymentSummary, type PaymentSummaryResult } from "@/repositories/payment-summary.repository";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
 
@@ -1077,11 +1078,18 @@ export async function verifyServicePickupAction(
     }
 
     // 5. Validate payment is PAID
-    const { data: summary } = await callCalculateServicePaymentSummary(service.id);
-    if (!summary) return errorResult("Tidak dapat menghitung status pembayaran.");
-    const totalCharged = Number(summary.total_charged) || 0;
-    const totalPaid = Number(summary.total_paid) || 0;
-    if (totalPaid < totalCharged) {
+    let paymentSummary: PaymentSummaryResult;
+    try {
+      paymentSummary = await getServicePaymentSummary(service.id);
+    } catch (rpcErr: any) {
+      console.warn("[verifyServicePickupAction] payment summary failed, retrying once:", rpcErr.message);
+      try {
+        paymentSummary = await getServicePaymentSummary(service.id);
+      } catch {
+        return errorResult("Gagal mengambil informasi pembayaran.");
+      }
+    }
+    if (paymentSummary.remainingBalance > 0) {
       return errorResult("Pelunasan diperlukan sebelum unit diserahkan.");
     }
 

@@ -275,18 +275,18 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
   const shiftStatuses = data?.shiftStatuses ?? [];
 
   const renderLoading = () => (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
           {[1,2,3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
         </div>
         <Skeleton className="h-64 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <Skeleton className="h-56 w-full rounded-xl" />
           <Skeleton className="h-56 w-full rounded-xl" />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
           <Skeleton className="h-64 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
         </div>
@@ -313,13 +313,13 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
   if (loading) return renderLoading();
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px]">
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-6">
         {error && renderError()}
 
         {/* ── Top Summary Cards ── */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
           <SummaryCard
             label="Revenue"
             value={formatRp(data?.revenue ?? 0)}
@@ -346,8 +346,8 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
             <CardTitle className="text-sm font-semibold">Statistik Revenue</CardTitle>
             <CardDescription className="text-xs">{descriptionText}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-52">
+          <CardContent className="overflow-x-auto">
+            <div className="h-52 min-w-[450px] sm:min-w-0">
               {revenueData.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                   Belum ada pemasukan pada periode ini.
@@ -399,8 +399,8 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
             <CardTitle className="text-sm font-semibold">Statistik Revenue Tiap Cabang</CardTitle>
             <CardDescription className="text-xs">Per cabang ({descriptionText.toLowerCase()})</CardDescription>
           </CardHeader>
-          <CardContent className="px-2 sm:px-4">
-            <div className="h-[220px]">
+          <CardContent className="overflow-x-auto px-2 sm:px-4">
+            <div className="h-[220px] min-w-[500px] sm:min-w-0">
               <ChartContainer config={branchConfig} className="h-full w-full">
                 <AreaChart data={branchData}>
                   <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
@@ -438,7 +438,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
         )}
 
         {/* ── Operational Health Score + Revenue vs Target ── */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           {/* Operational Health Score */}
           <Card className="shadow-xs">
             <CardHeader className="pb-3">
@@ -602,7 +602,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
           <CardContent className="relative p-0">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-4 bg-gradient-to-b from-card to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-gradient-to-t from-card to-transparent" />
-            <div className="max-h-[calc(100vh-18rem)] space-y-3 overflow-y-auto px-5 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="max-h-[calc(100dvh-18rem)] space-y-3 overflow-y-auto px-5 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {activityGroups.length === 0 ? (
                 <p className="px-1 text-xs text-muted-foreground">Belum ada aktivitas pada periode ini.</p>
               ) : (
