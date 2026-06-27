@@ -32,7 +32,7 @@ import {
   getPickupColor,
   getPaymentStatusLabel,
 } from "@/components/services/service-data";
-import { useRightSidebar } from "@/components/layout/right-sidebar-context";
+
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
@@ -113,6 +113,7 @@ interface ServiceListViewProps {
   onServiceUpdated?: () => void;
   onOpenPayment?: (serviceId: string) => void;
   onOpenSparepart?: (serviceId: string) => void;
+  onShowDetail?: (service: ServiceRecord) => void;
 }
 
 interface ServicePaginationProps {
@@ -416,11 +417,11 @@ export function ServiceListView({
   onServiceUpdated,
   onOpenPayment,
   onOpenSparepart,
+  onShowDetail,
 }: ServiceListViewProps) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
-  const { showDetail } = useRightSidebar();
   const [pendingTransition, setPendingTransition] = React.useState<PendingStatusTransition | null>(null);
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
   const [statusSubmitLoading, setStatusSubmitLoading] = React.useState(false);
@@ -569,7 +570,7 @@ export function ServiceListView({
                   type="button"
                   onClick={() => {
                     toggleExpand(service.id);
-                    showDetail(service);
+                    onShowDetail?.(service);
                   }}
                   className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/30`}
                 >
@@ -852,11 +853,10 @@ export function ServiceListView({
                             size="sm"
                             className="h-7 gap-1 text-[10px]"
                             onClick={(e) => {
-                              e.stopPropagation();
-                              showDetail(service);
-                            }}
-                          >
-                            Lihat Detail
+                               e.stopPropagation();
+                               onShowDetail?.(service);
+                             }}>
+                               Lihat Detail
                           </Button>
                         </div>
                       </div>
@@ -893,7 +893,7 @@ export function ServiceListView({
                 type="button"
                 onClick={() => {
                   toggleExpand(service.id);
-                  showDetail(service);
+                  onShowDetail?.(service);
                 }}
                 className="flex items-start justify-between gap-2 text-left"
               >
@@ -1081,7 +1081,7 @@ export function ServiceListView({
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-1 text-[10px]"
-                      onClick={() => showDetail(service)}
+                      onClick={() => onShowDetail?.(service)}
                     >
                       Lihat Detail
                     </Button>

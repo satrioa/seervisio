@@ -14,6 +14,7 @@ export type BrandProfileData = {
   whatsappNumber: string | null;
   invoiceFooter: string | null;
   receiptFooter: string | null;
+  slug: string;
 };
 
 export async function getBrandProfileAction(
@@ -37,11 +38,12 @@ export async function getBrandProfileAction(
         whatsappNumber: null,
         invoiceFooter: null,
         receiptFooter: null,
+        slug: session.brandSlug,
       });
     }
 
     return successResult({
-      storeName: settings.storeName,
+      storeName: session.brandName,
       tagline: settings.tagline,
       phone: settings.phone,
       email: settings.email,
@@ -50,6 +52,7 @@ export async function getBrandProfileAction(
       whatsappNumber: settings.whatsappNumber,
       invoiceFooter: settings.invoiceFooter,
       receiptFooter: settings.receiptFooter,
+      slug: session.brandSlug,
     });
   } catch (err: any) {
     console.error("[getBrandProfileAction]", err);
@@ -60,7 +63,7 @@ export async function getBrandProfileAction(
 export async function updateBrandProfileAction(
   brandSlug: string,
   data: BrandProfileData,
-): Promise<ActionResult<void>> {
+): Promise<ActionResult<{ newSlug?: string }>> {
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "settings.manage");
@@ -73,7 +76,34 @@ export async function updateBrandProfileAction(
       return errorResult("Format email tidak valid.");
     }
 
+    if (data.slug && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(data.slug)) {
+      return errorResult("Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung (contoh: toko-saya).");
+    }
+
     const adminDb = createServiceRoleSupabaseClient();
+
+    /* Handle slug change */
+    let slugChanged = false;
+    if (data.slug && data.slug !== session.brandSlug) {
+      const { data: existing } = await (adminDb as any)
+        .from("brands")
+        .select("id")
+        .eq("slug", data.slug)
+        .neq("id", session.brandId)
+        .maybeSingle();
+
+      if (existing) {
+        return errorResult("Slug sudah digunakan brand lain.");
+      }
+
+      const { error: slugError } = await (adminDb as any)
+        .from("brands")
+        .update({ slug: data.slug })
+        .eq("id", session.brandId);
+
+      if (slugError) throw new Error(`Gagal memperbarui slug: ${slugError.message}`);
+      slugChanged = true;
+    }
 
     const existing = await getBrandSettings(adminDb as any, session.brandId);
 
@@ -81,7 +111,6 @@ export async function updateBrandProfileAction(
       const { error } = await (adminDb as any)
         .from("brand_settings")
         .update({
-          store_name: data.storeName,
           tagline: data.tagline ?? null,
           phone: data.phone ?? null,
           email: data.email ?? null,
@@ -99,7 +128,6 @@ export async function updateBrandProfileAction(
         .from("brand_settings")
         .insert({
           brand_id: session.brandId,
-          store_name: data.storeName,
           tagline: data.tagline ?? null,
           phone: data.phone ?? null,
           email: data.email ?? null,
@@ -113,6 +141,16 @@ export async function updateBrandProfileAction(
       if (error) throw new Error(`Gagal membuat profil brand: ${error.message}`);
     }
 
+    /* Sync brand display name to brands table */
+    const { error: nameSyncError } = await (adminDb as any)
+      .from("brands")
+      .update({ name: data.storeName.trim() })
+      .eq("id", session.brandId);
+
+    if (nameSyncError) {
+      console.warn("[updateBrandProfileAction] failed to sync brands.name:", nameSyncError.message);
+    }
+
     await (adminDb as any).from("audit_logs").insert({
       brand_id: session.brandId,
       actor_id: session.profileId,
@@ -123,7 +161,7 @@ export async function updateBrandProfileAction(
       details: { section: "brand_profile" },
     });
 
-    return successResult(undefined);
+    return successResult({ newSlug: slugChanged ? data.slug : undefined });
   } catch (err: any) {
     console.error("[updateBrandProfileAction]", err);
     return errorResult(err.message ?? "Gagal menyimpan profil brand.");

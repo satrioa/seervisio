@@ -43,6 +43,7 @@ import {
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
 import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
+import { ServicePortalShare } from "@/components/services/service-portal-share";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
@@ -553,9 +554,23 @@ export function ServiceDetailContent({
               </p>
             )}
           </div>
-        </div>
+          </div>
 
-        {/* ── Pickup Status ── */}
+          <Separator />
+
+          {/* ── Bagikan ke Pelanggan ── */}
+          <div className="px-6">
+            <ServicePortalShare
+              serviceId={service.id}
+              serviceNumber={service.serviceNumber || service.id}
+              customerName={service.customerName}
+              deviceInfo={service.deviceName}
+            />
+          </div>
+
+          <Separator />
+
+          {/* ── Pickup Status ── */}
         {service.status === "selesai" && (
           (() => {
             const pickupStatus = getPickupStatus(service);

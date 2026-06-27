@@ -131,6 +131,128 @@ function buildEmail(eventType: string, brandName: string, payload: Record<string
       };
     }
 
+    case "SERVICE_STATUS_CHANGED": {
+      const serviceNumber = payload.serviceNumber ?? "";
+      const customerName = payload.customerName ?? "";
+      const fromStatus = payload.fromStatus ?? "";
+      const toStatus = payload.toStatus ?? "";
+      const deviceInfo = [payload.deviceType, payload.deviceBrand, payload.deviceModel].filter(Boolean).join(" ");
+      return {
+        subject: `[${brandName}] Status servis berubah — ${serviceNumber}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#3b82f6;">Status Servis Berubah</h2>
+            <p>Servis <strong>${serviceNumber}</strong> berubah status.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              ${fromStatus ? `<tr><td style="padding:4px 8px;color:#666;">Dari</td><td style="padding:4px 8px;font-weight:600;">${fromStatus}</td></tr>` : ""}
+              <tr><td style="padding:4px 8px;color:#666;">Ke</td><td style="padding:4px 8px;font-weight:600;">${toStatus}</td></tr>
+              ${customerName ? `<tr><td style="padding:4px 8px;color:#666;">Pelanggan</td><td style="padding:4px 8px;font-weight:600;">${customerName}</td></tr>` : ""}
+              ${deviceInfo ? `<tr><td style="padding:4px 8px;color:#666;">Perangkat</td><td style="padding:4px 8px;font-weight:600;">${deviceInfo}</td></tr>` : ""}
+            </table>
+            <a href="${appUrl}" style="display:inline-block;background:#3b82f6;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;">Lihat Servis</a>
+          </div>`,
+      };
+    }
+
+    case "TECHNICIAN_ASSIGNED": {
+      const serviceNumber = payload.serviceNumber ?? "";
+      const technicianName = payload.technicianName ?? "";
+      const customerName = payload.customerName ?? "";
+      const deviceInfo = [payload.deviceType, payload.deviceBrand, payload.deviceModel].filter(Boolean).join(" ");
+      return {
+        subject: `[${brandName}] Teknisi ditugaskan — ${serviceNumber}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#8b5cf6;">Teknisi Ditugaskan</h2>
+            <p>Teknisi telah ditugaskan untuk servis <strong>${serviceNumber}</strong>.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Teknisi</td><td style="padding:4px 8px;font-weight:600;">${technicianName}</td></tr>
+              ${customerName ? `<tr><td style="padding:4px 8px;color:#666;">Pelanggan</td><td style="padding:4px 8px;font-weight:600;">${customerName}</td></tr>` : ""}
+              ${deviceInfo ? `<tr><td style="padding:4px 8px;color:#666;">Perangkat</td><td style="padding:4px 8px;font-weight:600;">${deviceInfo}</td></tr>` : ""}
+            </table>
+            <a href="${appUrl}" style="display:inline-block;background:#8b5cf6;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;">Lihat Servis</a>
+          </div>`,
+      };
+    }
+
+    case "OPEN_SHIFT": {
+      const branch = payload.branchName ?? "";
+      const shiftNumber = payload.shiftNumber ?? "";
+      const openingCash = formatRp(payload.openingCash ?? 0);
+      return {
+        subject: `[${brandName}] Shift dibuka — ${branch}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#16a34a;">Shift Dibuka</h2>
+            <p>Shift <strong>${shiftNumber}</strong> di <strong>${branch}</strong> telah dibuka.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Kas awal</td><td style="padding:4px 8px;font-weight:600;">${openingCash}</td></tr>
+            </table>
+            <p style="color:#888;font-size:12px;">${new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+          </div>`,
+      };
+    }
+
+    case "POS_TRANSACTION_CREATED": {
+      const transactionNumber = payload.transactionNumber ?? "";
+      const amount = formatRp(payload.amount ?? 0);
+      const paymentMethod = payload.paymentMethod ?? "";
+      return {
+        subject: `[${brandName}] Transaksi POS — ${transactionNumber}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#f59e0b;">Transaksi POS Baru</h2>
+            <p>Transaksi <strong>${transactionNumber}</strong> telah dibuat.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Total</td><td style="padding:4px 8px;font-weight:600;font-size:18px;">${amount}</td></tr>
+              ${paymentMethod ? `<tr><td style="padding:4px 8px;color:#666;">Metode</td><td style="padding:4px 8px;font-weight:600;">${paymentMethod}</td></tr>` : ""}
+            </table>
+            <a href="${appUrl}" style="display:inline-block;background:#f59e0b;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;">Lihat Transaksi</a>
+          </div>`,
+      };
+    }
+
+    case "LOW_STOCK": {
+      const itemName = payload.itemName ?? "";
+      const currentStock = payload.currentStock ?? 0;
+      const threshold = payload.threshold ?? 0;
+      const branch = payload.branchName ?? "";
+      return {
+        subject: `[${brandName}] Stok menipis — ${itemName}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#dc2626;">Stok Menipis</h2>
+            <p>Stok <strong>${itemName}</strong> di <strong>${branch}</strong> hampir habis.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Sisa stok</td><td style="padding:4px 8px;font-weight:600;">${currentStock}</td></tr>
+              <tr><td style="padding:4px 8px;color:#666;">Batas minimum</td><td style="padding:4px 8px;font-weight:600;">${threshold}</td></tr>
+            </table>
+            <a href="${appUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;">Lihat Stok</a>
+          </div>`,
+      };
+    }
+
+    case "ACCOUNT_CHANGED": {
+      const changeType = payload.changeType ?? "";
+      const changedByName = payload.changedByName ?? "";
+      const targetEmail = payload.targetEmail ?? "";
+      const roleName = payload.roleName ?? "";
+      return {
+        subject: `[${brandName}] Perubahan akun — ${changeType}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#f59e0b;">Perubahan Akun</h2>
+            <p>Telah terjadi perubahan akun di <strong>${brandName}</strong>.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Jenis</td><td style="padding:4px 8px;font-weight:600;">${changeType}</td></tr>
+              ${changedByName ? `<tr><td style="padding:4px 8px;color:#666;">Oleh</td><td style="padding:4px 8px;font-weight:600;">${changedByName}</td></tr>` : ""}
+              ${targetEmail ? `<tr><td style="padding:4px 8px;color:#666;">Akun</td><td style="padding:4px 8px;font-weight:600;">${targetEmail}</td></tr>` : ""}
+              ${roleName ? `<tr><td style="padding:4px 8px;color:#666;">Role</td><td style="padding:4px 8px;font-weight:600;">${roleName}</td></tr>` : ""}
+            </table>
+          </div>`,
+      };
+    }
+
     default:
       return null;
   }
@@ -215,44 +337,67 @@ export async function sendOperationalNotification(
   try {
     const adminDb = createServiceRoleSupabaseClient();
 
-    /* Load brand settings */
+    console.log("[notification:event] Processing", {
+      eventType: input.eventType,
+      brandId: input.brandId,
+      branchId: input.branchId ?? null,
+    });
+
     const settings = await getBrandSettings(adminDb as any, input.brandId);
-    if (!settings) return;
+    if (!settings) {
+      console.log("[notification:event] SKIPPED — brand_settings not found", { eventType: input.eventType, brandId: input.brandId });
+      return;
+    }
 
     const notifSettings = settings.metadata?.notification_settings as NotificationSettings | undefined;
     if (!notifSettings?.emailEnabled) {
+      console.log("[notification:event] SKIPPED — email notifications disabled", { eventType: input.eventType });
       await logNotification(adminDb, input, "", "", "SKIPPED", "Email notifications disabled");
       return;
     }
 
     const eventConfig = notifSettings.events[input.eventType] as NotificationEventConfig | undefined;
     if (!eventConfig?.enabled) {
+      console.log("[notification:event] SKIPPED — event not enabled", { eventType: input.eventType });
       await logNotification(adminDb, input, "", "", "SKIPPED", `Event "${input.eventType}" not enabled`);
       return;
     }
 
-    /* Build email content */
-    const brandName = settings.storeName ?? "Seervis";
+    const { data: brandRow } = await adminDb.from("brands").select("name").eq("id", input.brandId).maybeSingle();
+    const brandName = brandRow?.name ?? "Seervis";
     const email = buildEmail(input.eventType, brandName, input.payload);
     if (!email) {
+      console.log("[notification:event] SKIPPED — no email template", { eventType: input.eventType });
       await logNotification(adminDb, input, "", "", "SKIPPED", `No email template for "${input.eventType}"`);
       return;
     }
 
-    /* Resolve recipients */
     const recipients = await resolveRecipients(adminDb, input.brandId, eventConfig);
     if (recipients.length === 0) {
+      console.log("[notification:event] SKIPPED — no recipients", { eventType: input.eventType });
       await logNotification(adminDb, input, "", "", "SKIPPED", "No recipients configured");
       return;
     }
 
-    /* Send to each recipient */
+    console.log("[notification:event] Sending", {
+      eventType: input.eventType,
+      recipientCount: recipients.length,
+      recipients: recipients,
+    });
+
     for (const emailAddr of recipients) {
+      console.log("[notification:email] Sending to", { to: emailAddr, subject: email.subject });
       const result = await sendTransactionalEmail({
         to: [{ email: emailAddr }],
         subject: email.subject,
-        htmlContent: email.html, // email.html is from buildEmail which returns { subject, html }
+        htmlContent: email.html,
+      });
 
+      console.log("[notification:email] Result", {
+        to: emailAddr,
+        success: result.success,
+        messageId: result.messageId,
+        error: result.error ?? null,
       });
 
       await logNotification(
@@ -265,6 +410,11 @@ export async function sendOperationalNotification(
       );
     }
   } catch (err: any) {
-    console.error("[notification.service] sendOperationalNotification error:", err);
+    console.error("[notification:error] sendOperationalNotification failed:", {
+      eventType: input.eventType,
+      brandId: input.brandId,
+      error: err.message,
+      stack: err.stack,
+    });
   }
 }

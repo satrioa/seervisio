@@ -7,6 +7,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 import { ok, fail, type Result } from "@/lib/utils/result";
@@ -449,6 +451,8 @@ export async function createInventoryItemAction(
     }
     requireBranchAccess(session, targetBranchId, "create");
 
+    await requireActiveStoreSession(supabase, session.brandId, targetBranchId);
+
     // Check barcode uniqueness per brand
     if (input.barcode && input.barcode.trim()) {
       const { data: existing } = await (supabase as any)
@@ -642,7 +646,7 @@ export async function createInventoryItemAction(
 
     return successResult(mapRow(parentItem));
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal membuat item");
+    return handleActionError(e, "Gagal membuat item");
   }
 }
 
@@ -658,6 +662,8 @@ export async function updateInventoryItemAction(
     requireActionPermission(session.role, "inventory.manage");
 
     const supabase = await createServerSupabase();
+
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
 
     // Verify item exists
     const { data: existingItem } = await (supabase as any)
@@ -737,7 +743,7 @@ export async function updateInventoryItemAction(
 
     return successResult(mapRow(fullItem ?? updated));
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal mengupdate item");
+    return handleActionError(e, "Gagal mengupdate item");
   }
 }
 
@@ -963,6 +969,8 @@ export async function manageInventoryCategoryAction(
 
     const supabase = await createServerSupabase();
 
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
+
     if (!input.name?.trim()) {
       return errorResult("Nama kategori wajib diisi.");
     }
@@ -1079,7 +1087,7 @@ export async function manageInventoryCategoryAction(
       });
     }
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal mengelola kategori.");
+    return handleActionError(e, "Gagal mengelola kategori.");
   }
 }
 
@@ -1096,6 +1104,8 @@ export async function toggleInventoryCategoryAction(
 
     const supabase = await createServerSupabase();
 
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
+
     const { error } = await (supabase as any)
       .from("inventory_categories")
       .update({ is_active: active, updated_at: new Date().toISOString() })
@@ -1105,7 +1115,7 @@ export async function toggleInventoryCategoryAction(
     if (error) return errorResult(error.message);
     return successResult(undefined);
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal mengubah status kategori.");
+    return handleActionError(e, "Gagal mengubah status kategori.");
   }
 }
 
@@ -1120,6 +1130,8 @@ export async function deleteInventoryCategoryAction(
     requireActionPermission(session.role, "inventory.manage");
 
     const supabase = await createServerSupabase();
+
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
 
     const { data: items } = await (supabase as any)
       .from("inventory_items")
@@ -1149,7 +1161,7 @@ export async function deleteInventoryCategoryAction(
     if (error) return errorResult(error.message);
     return successResult(undefined);
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal menghapus kategori.");
+    return handleActionError(e, "Gagal menghapus kategori.");
   }
 }
 
@@ -1468,6 +1480,8 @@ export async function adjustInventoryStockAction(
     // Verify branch access
     requireBranchAccess(session, branchId, "adjustment");
 
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
+
     // Fetch item
     const { data: item, error: itemError } = await (supabase as any)
       .from("inventory_items")
@@ -1598,7 +1612,7 @@ export async function adjustInventoryStockAction(
 
     return successResult(row);
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal melakukan penyesuaian stok");
+    return handleActionError(e, "Gagal melakukan penyesuaian stok");
   }
 }
 
@@ -1693,6 +1707,8 @@ export async function createStockPurchaseAction(
 
     requireBranchAccess(session, input.branchId, "purchase");
 
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     // Validate items
     for (const item of input.items) {
       if (item.quantity <= 0) {
@@ -1786,7 +1802,7 @@ export async function createStockPurchaseAction(
 
     return successResult(row);
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal membuat belanja stok");
+    return handleActionError(e, "Gagal membuat belanja stok");
   }
 }
 
@@ -2175,6 +2191,8 @@ export async function createSerializedUnitAction(
     if (!input.branchId) return errorResult("Cabang wajib diisi");
     if (!input.inventoryItemId) return errorResult("Item wajib diisi");
 
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     // Validate item belongs to brand and is SERIALIZED
     const { data: item } = await (supabase as any)
       .from("inventory_items")
@@ -2290,7 +2308,7 @@ export async function createSerializedUnitAction(
 
     return successResult(mapSerializedUnitRow(created));
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal membuat unit serial");
+    return handleActionError(e, "Gagal membuat unit serial");
   }
 }
 
@@ -2306,6 +2324,9 @@ export async function updateSerializedUnitAction(
     requireActionPermission(session.role, "inventory.view");
 
     const supabase = await createServerSupabase();
+
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
+
     const canManage = can(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     // Check existing unit
@@ -2406,7 +2427,7 @@ export async function updateSerializedUnitAction(
 
     return successResult(mapSerializedUnitRow(updated));
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal mengupdate unit serial");
+    return handleActionError(e, "Gagal mengupdate unit serial");
   }
 }
 

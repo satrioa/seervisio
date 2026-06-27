@@ -40,6 +40,8 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --platform-primary: 160 68% 53%;
+    --platform-primary-foreground: 0 0% 100%;
     --d-bg: 0 0% 100%;
     --d-muted: 0 0% 90%;
     --d-fg: 0 0% 0%;
@@ -92,6 +94,8 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 222.2 84% 12%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --platform-primary: 160 68% 53%;
+    --platform-primary-foreground: 0 0% 100%;
     --d-bg: 0 0% 10%;
     --d-muted: 0 0% 20%;
     --d-fg: 0 0% 100%;

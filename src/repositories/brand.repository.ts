@@ -18,11 +18,11 @@ export async function getBrandBySlug(
 ): Promise<DbBrand | null> {
   const { data } = await supabase
     .from("brands")
-    .select("*")
+    .select("id, name, slug")
     .eq("slug", slug)
     .single();
 
-  return data ?? null;
+  return (data ?? null) as DbBrand | null;
 }
 
 /**
@@ -34,11 +34,11 @@ export async function getBrandById(
 ): Promise<DbBrand | null> {
   const { data } = await supabase
     .from("brands")
-    .select("*")
+    .select("id, name, slug")
     .eq("id", id)
     .single();
 
-  return data ?? null;
+  return (data ?? null) as DbBrand | null;
 }
 
 /**
@@ -49,8 +49,8 @@ export async function getAllBrands(
 ): Promise<DbBrand[]> {
   const { data } = await supabase
     .from("brands")
-    .select("*")
+    .select("id, name, slug")
     .order("name");
 
-  return data ?? [];
+  return (data ?? []) as DbBrand[];
 }

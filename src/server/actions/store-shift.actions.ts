@@ -7,6 +7,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
@@ -340,6 +342,32 @@ export async function openStoreShiftAction(
 
     const shiftNumberStr = shiftNumber ? String(shiftNumber) : "";
 
+    try {
+      const { data: branchRow } = await (supabase as any)
+        .from("branches")
+        .select("name")
+        .eq("id", branchId)
+        .maybeSingle();
+
+      console.log("[notification:event] OPEN_SHIFT triggered", {
+        shiftNumber: shiftNumberStr,
+        openingCash,
+      });
+      await sendOperationalNotification({
+        brandId: session.brandId,
+        branchId,
+        eventType: "OPEN_SHIFT",
+        actorProfileId: session.profileId,
+        payload: {
+          branchName: branchRow?.name ?? "",
+          shiftNumber: shiftNumberStr,
+          openingCash,
+        },
+      });
+    } catch (notifErr: any) {
+      console.warn("[notification:error] OPEN_SHIFT failed:", notifErr.message);
+    }
+
     return successResult({
       shiftId: shiftId as string,
       shiftNumber: shiftNumberStr,
@@ -367,6 +395,8 @@ export async function closeStoreShiftAction(
     if (shift.shiftStatus !== "OPEN") return errorResult("Shift sudah ditutup.");
 
     requireBranchAccess(session, shift.branchId, "closeStoreShiftAction");
+
+    await requireActiveStoreSession(supabase, session.brandId, shift.branchId);
 
     const { data: expectedData } = await (supabase as any).rpc("calculate_shift_expected_cash", {
       p_shift_id: shiftId,
@@ -423,6 +453,10 @@ export async function closeStoreShiftAction(
         .eq("id", shift.branchId)
         .maybeSingle();
 
+      console.log("[notification:event] CLOSE_SHIFT triggered", {
+        shiftNumber: shift.shiftNumber,
+        cashDiff,
+      });
       await sendOperationalNotification({
         brandId: session.brandId,
         branchId: shift.branchId,
@@ -438,6 +472,9 @@ export async function closeStoreShiftAction(
       });
 
       if (Math.abs(cashDiff) > 0) {
+        console.log("[notification:event] CASH_DIFFERENCE_DETECTED triggered", {
+          cashDiff,
+        });
         await sendOperationalNotification({
           brandId: session.brandId,
           branchId: shift.branchId,
@@ -452,13 +489,13 @@ export async function closeStoreShiftAction(
         });
       }
     } catch (notifErr: any) {
-      console.warn("[StoreShiftActions] notification error:", notifErr.message);
+      console.warn("[notification:error] store-shift notification failed:", notifErr.message);
     }
 
     return successResult({ shiftId });
   } catch (err: any) {
     console.error("[StoreShiftActions] closeStoreShiftAction:", err.message);
-    return errorResult(err.message || "Gagal menutup shift.");
+    return handleActionError(err, "Gagal menutup shift.");
   }
 }
 

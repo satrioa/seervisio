@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit_logs: {
@@ -194,6 +169,9 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          mdr_enabled: boolean
+          mdr_fixed_fee: number
+          mdr_min_transaction: number
           mdr_percentage: number | null
           method_type: string
           payment_account_id: string | null
@@ -205,6 +183,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          mdr_enabled?: boolean
+          mdr_fixed_fee?: number
+          mdr_min_transaction?: number
           mdr_percentage?: number | null
           method_type: string
           payment_account_id?: string | null
@@ -216,6 +197,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          mdr_enabled?: boolean
+          mdr_fixed_fee?: number
+          mdr_min_transaction?: number
           mdr_percentage?: number | null
           method_type?: string
           payment_account_id?: string | null
@@ -249,38 +233,50 @@ export type Database = {
         Row: {
           address: string | null
           brand_id: number
+          city: string | null
           code: string | null
           created_at: string
           deleted_at: string | null
+          email: string | null
           id: string
           is_active: boolean
           name: string
           phone: string | null
+          province: string | null
           updated_at: string
+          whatsapp: string | null
         }
         Insert: {
           address?: string | null
           brand_id: number
+          city?: string | null
           code?: string | null
           created_at?: string
           deleted_at?: string | null
+          email?: string | null
           id?: string
           is_active?: boolean
           name: string
           phone?: string | null
+          province?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
         Update: {
           address?: string | null
           brand_id?: number
+          city?: string | null
           code?: string | null
           created_at?: string
           deleted_at?: string | null
+          email?: string | null
           id?: string
           is_active?: boolean
           name?: string
           phone?: string | null
+          province?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
         Relationships: [
           {
@@ -307,8 +303,12 @@ export type Database = {
           metadata: Json | null
           phone: string | null
           receipt_footer: string | null
-          store_name: string
+          store_name: string | null
           tagline: string | null
+          theme_accent_color: string
+          theme_mode: string
+          theme_primary_color: string
+          theme_tokens: Json | null
           updated_at: string
           whatsapp_number: string | null
         }
@@ -326,8 +326,12 @@ export type Database = {
           metadata?: Json | null
           phone?: string | null
           receipt_footer?: string | null
-          store_name: string
+          store_name?: string | null
           tagline?: string | null
+          theme_accent_color?: string
+          theme_mode?: string
+          theme_primary_color?: string
+          theme_tokens?: Json | null
           updated_at?: string
           whatsapp_number?: string | null
         }
@@ -345,8 +349,12 @@ export type Database = {
           metadata?: Json | null
           phone?: string | null
           receipt_footer?: string | null
-          store_name?: string
+          store_name?: string | null
           tagline?: string | null
+          theme_accent_color?: string
+          theme_mode?: string
+          theme_primary_color?: string
+          theme_tokens?: Json | null
           updated_at?: string
           whatsapp_number?: string | null
         }
@@ -360,61 +368,131 @@ export type Database = {
           },
         ]
       }
+      brand_subscriptions: {
+        Row: {
+          brand_id: number
+          created_at: string
+          expires_at: string | null
+          id: string
+          max_branches: number
+          plan: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          max_branches?: number
+          plan?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          max_branches?: number
+          plan?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_subscriptions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_targets: {
+        Row: {
+          branch_id: string | null
+          brand_id: number
+          created_at: string
+          id: string
+          monthly_amount: number
+          period: string
+          target_type: string
+          updated_at: string
+          yearly_amount: number
+        }
+        Insert: {
+          branch_id?: string | null
+          brand_id: number
+          created_at?: string
+          id?: string
+          monthly_amount?: number
+          period?: string
+          target_type?: string
+          updated_at?: string
+          yearly_amount?: number
+        }
+        Update: {
+          branch_id?: string | null
+          brand_id?: number
+          created_at?: string
+          id?: string
+          monthly_amount?: number
+          period?: string
+          target_type?: string
+          updated_at?: string
+          yearly_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_targets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
-          accent_color: string | null
           created_at: string
           currency: string
           id: number
-          logo_url: string | null
           name: string
           owner_email: string | null
           owner_name: string | null
           owner_phone: string | null
           slug: string
           status: string
-          theme_accent_color: string
-          theme_mode: string
-          theme_primary_color: string
-          theme_tokens: Json | null
           timezone: string
           updated_at: string
         }
         Insert: {
-          accent_color?: string | null
           created_at?: string
           currency?: string
           id?: never
-          logo_url?: string | null
           name: string
           owner_email?: string | null
           owner_name?: string | null
           owner_phone?: string | null
           slug: string
           status?: string
-          theme_accent_color?: string
-          theme_mode?: string
-          theme_primary_color?: string
-          theme_tokens?: Json | null
           timezone?: string
           updated_at?: string
         }
         Update: {
-          accent_color?: string | null
           created_at?: string
           currency?: string
           id?: never
-          logo_url?: string | null
           name?: string
           owner_email?: string | null
           owner_name?: string | null
           owner_phone?: string | null
           slug?: string
           status?: string
-          theme_accent_color?: string
-          theme_mode?: string
-          theme_primary_color?: string
-          theme_tokens?: Json | null
           timezone?: string
           updated_at?: string
         }
@@ -756,6 +834,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "inv_sparepart_usage_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
@@ -768,6 +867,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -865,6 +985,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inv_stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "inv_stock_movements_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
@@ -872,11 +1013,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inv_stock_movements_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["unit_id"]
+          },
+          {
             foreignKeyName: "inv_stock_movements_variant_id_fkey"
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -971,6 +1140,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "inv_stock_purchase_items_purchase_id_fkey"
             columns: ["purchase_id"]
             isOneToOne: false
@@ -983,6 +1173,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -1223,11 +1434,53 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inv_units_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_units_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_units_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "inv_units_variant_id_fkey"
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_units_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_units_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -1280,6 +1533,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -1362,6 +1636,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inv_products"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
           },
         ]
       }
@@ -2597,11 +2892,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "pos_transaction_items_transaction_id_fkey"
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "pos_transactions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "v4_pos_item_sales"
+            referencedColumns: ["transaction_id"]
           },
           {
             foreignKeyName: "pos_transaction_items_unit_id_fkey"
@@ -2611,11 +2934,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pos_transaction_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["unit_id"]
+          },
+          {
             foreignKeyName: "pos_transaction_items_variant_id_fkey"
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "inv_variants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
           },
         ]
       }
@@ -2651,6 +3002,81 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "brands"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_transaction_reversals: {
+        Row: {
+          branch_id: string
+          brand_id: number
+          created_at: string
+          created_by: string | null
+          id: string
+          payment_reversal_movement_id: string | null
+          reason: string
+          reversal_number: string | null
+          total_amount: number
+          transaction_id: string
+        }
+        Insert: {
+          branch_id: string
+          brand_id: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_reversal_movement_id?: string | null
+          reason: string
+          reversal_number?: string | null
+          total_amount?: number
+          transaction_id: string
+        }
+        Update: {
+          branch_id?: string
+          brand_id?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_reversal_movement_id?: string | null
+          reason?: string
+          reversal_number?: string | null
+          total_amount?: number
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transaction_reversals_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_reversals_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_reversals_payment_reversal_movement_id_fkey"
+            columns: ["payment_reversal_movement_id"]
+            isOneToOne: false
+            referencedRelation: "payment_account_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_reversals_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: true
+            referencedRelation: "pos_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_reversals_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: true
+            referencedRelation: "v4_pos_item_sales"
+            referencedColumns: ["transaction_id"]
           },
         ]
       }
@@ -2742,13 +3168,6 @@ export type Database = {
             columns: ["payment_account_id"]
             isOneToOne: false
             referencedRelation: "payment_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pos_transactions_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
             referencedColumns: ["id"]
           },
         ]
@@ -3121,6 +3540,7 @@ export type Database = {
       service_payments: {
         Row: {
           branch_id: string
+          branch_payment_method_id: string | null
           brand_id: number
           created_at: string
           created_by: string | null
@@ -3134,13 +3554,14 @@ export type Database = {
           paid_at: string
           payment_account_id: string
           payment_account_movement_id: string | null
-          payment_method_id: string
+          payment_method_id: string | null
           payment_number: string
           payment_status: string
           service_id: string
         }
         Insert: {
           branch_id: string
+          branch_payment_method_id?: string | null
           brand_id: number
           created_at?: string
           created_by?: string | null
@@ -3154,13 +3575,14 @@ export type Database = {
           paid_at?: string
           payment_account_id: string
           payment_account_movement_id?: string | null
-          payment_method_id: string
+          payment_method_id?: string | null
           payment_number: string
           payment_status?: string
           service_id: string
         }
         Update: {
           branch_id?: string
+          branch_payment_method_id?: string | null
           brand_id?: number
           created_at?: string
           created_by?: string | null
@@ -3174,7 +3596,7 @@ export type Database = {
           paid_at?: string
           payment_account_id?: string
           payment_account_movement_id?: string | null
-          payment_method_id?: string
+          payment_method_id?: string | null
           payment_number?: string
           payment_status?: string
           service_id?: string
@@ -3185,6 +3607,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_payments_branch_payment_method_id_fkey"
+            columns: ["branch_payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "branch_payment_methods"
             referencedColumns: ["id"]
           },
           {
@@ -4878,6 +5307,561 @@ export type Database = {
           },
         ]
       }
+      v4_branch_business_summary: {
+        Row: {
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          pos_gross_profit: number | null
+          pos_net_sales: number | null
+          pos_transaction_count: number | null
+          sparepart_usage_charge: number | null
+          sparepart_usage_cost: number | null
+          stock_purchase_total: number | null
+          summary_date: string | null
+          unit_second_ready_count: number | null
+          unit_second_sold_count: number | null
+        }
+        Relationships: []
+      }
+      v4_inventory_movement_summary: {
+        Row: {
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          condition_type: string | null
+          created_at: string | null
+          direction: string | null
+          movement_date: string | null
+          movement_type: string | null
+          notes: string | null
+          product_kind: string | null
+          product_name: string | null
+          quantity: number | null
+          reference_label: string | null
+          reference_type: string | null
+          stock_after: number | null
+          stock_before: number | null
+          unit_imei: string | null
+          unit_status_after: string | null
+          unit_status_before: string | null
+          variant_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_movements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_movements_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_inventory_stock_summary: {
+        Row: {
+          attributes: Json | null
+          available_stock: number | null
+          barcode: string | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          category_id: string | null
+          category_name: string | null
+          condition_type: string | null
+          current_stock: number | null
+          min_stock: number | null
+          product_id: string | null
+          product_kind: string | null
+          product_name: string | null
+          reserved_stock: number | null
+          sku: string | null
+          stock_status: string | null
+          variant_id: string | null
+          variant_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_inventory_valuation: {
+        Row: {
+          average_cost: number | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          condition_type: string | null
+          cost_value: number | null
+          current_stock: number | null
+          potential_gross_profit: number | null
+          potential_sales_value: number | null
+          product_id: string | null
+          product_kind: string | null
+          product_name: string | null
+          selling_price: number | null
+          variant_id: string | null
+          variant_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_variant_stocks_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_pos_item_sales: {
+        Row: {
+          attributes_snapshot: Json | null
+          battery_health_snapshot: number | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          condition_snapshot: string | null
+          cost_price_snapshot: number | null
+          created_at: string | null
+          gross_profit: number | null
+          imei_snapshot: string | null
+          item_name_snapshot: string | null
+          item_type: string | null
+          margin_percent: number | null
+          product_id: string | null
+          quantity: number | null
+          sales_date: string | null
+          selling_price_snapshot: number | null
+          subtotal_amount: number | null
+          transaction_id: string | null
+          transaction_number: string | null
+          transaction_status: string | null
+          unit_id: string | null
+          variant_id: string | null
+          variant_name_snapshot: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "inv_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["unit_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "pos_transaction_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_pos_payment_summary: {
+        Row: {
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          change_amount: number | null
+          paid_amount: number | null
+          payment_account_id: string | null
+          payment_account_name: string | null
+          payment_method_id: string | null
+          payment_method_name: string | null
+          sales_date: string | null
+          total_amount: number | null
+          transaction_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_pos_sales_summary: {
+        Row: {
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          discount_amount: number | null
+          gross_sales: number | null
+          net_sales: number | null
+          paid_amount: number | null
+          sales_date: string | null
+          service_fee_amount: number | null
+          transaction_count: number | null
+          voided_amount: number | null
+          voided_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_transactions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_sparepart_usage_summary: {
+        Row: {
+          attributes_snapshot: Json | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          cost_price_snapshot: number | null
+          gross_profit: number | null
+          product_id: string | null
+          product_name_snapshot: string | null
+          quantity: number | null
+          selling_price_snapshot: number | null
+          service_id: string | null
+          service_number: string | null
+          total_charge: number | null
+          total_cost: number | null
+          usage_date: string | null
+          variant_id: string | null
+          variant_name_snapshot: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_sparepart_usage_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_sparepart_usage_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
+          },
+        ]
+      }
+      v4_stock_purchase_summary: {
+        Row: {
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          payment_account_id: string | null
+          product_id: string | null
+          product_name_snapshot: string | null
+          purchase_date: string | null
+          purchase_number: string | null
+          quantity: number | null
+          status: string | null
+          subtotal_amount: number | null
+          supplier_name: string | null
+          unit_cost: number | null
+          variant_id: string | null
+          variant_name_snapshot: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "inv_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "inv_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_stock_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_inventory_valuation"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchase_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "v4_unit_second_summary"
+            referencedColumns: ["variant_id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_stock_purchases_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v4_unit_second_summary: {
+        Row: {
+          age_days: number | null
+          barcode: string | null
+          battery_health: number | null
+          branch_id: string | null
+          branch_name: string | null
+          brand_id: number | null
+          condition_grade: string | null
+          created_at: string | null
+          imei: string | null
+          potential_profit: number | null
+          product_id: string | null
+          product_name: string | null
+          purchase_cost: number | null
+          selling_price: number | null
+          serial_number: string | null
+          status: string | null
+          unit_attributes: Json | null
+          unit_id: string | null
+          updated_at: string | null
+          variant_id: string | null
+          variant_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inv_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inv_units_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_finance_ledger_entry: {
@@ -5016,6 +6000,16 @@ export type Database = {
         }
         Returns: string
       }
+      adjust_inv_variant_stock_opname: {
+        Args: {
+          p_adjustments: Json
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by?: string
+          p_notes: string
+        }
+        Returns: Json
+      }
       calculate_branch_item_stock: {
         Args: { p_branch_id: string; p_item_id: string }
         Returns: number
@@ -5024,14 +6018,24 @@ export type Database = {
         Args: { p_account_id: string }
         Returns: number
       }
-      calculate_pos_mdr: {
-        Args: {
-          p_amount: number
-          p_mdr_percentage?: number
-          p_method_type: string
-        }
-        Returns: number
-      }
+      calculate_pos_mdr:
+        | {
+            Args: {
+              p_amount: number
+              p_mdr_percentage?: number
+              p_method_type: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_amount: number
+              p_mdr_min_transaction?: number
+              p_mdr_percentage?: number
+              p_method_type: string
+            }
+            Returns: number
+          }
       calculate_pos_sale_summary: {
         Args: { p_pos_sale_id: string }
         Returns: Json
@@ -5051,6 +6055,21 @@ export type Database = {
       calculate_shift_expected_cash: {
         Args: { p_shift_id: string }
         Returns: number
+      }
+      checkout_pos_v4: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by?: string
+          p_customer_id?: string
+          p_discount_amount?: number
+          p_items: Json
+          p_notes?: string
+          p_paid_amount?: number
+          p_payment_method_id: string
+          p_service_fee_amount?: number
+        }
+        Returns: Json
       }
       close_store_shift: {
         Args: {
@@ -5153,6 +6172,17 @@ export type Database = {
           p_opened_by?: string
           p_opening_cash: number
           p_opening_notes?: string
+        }
+        Returns: string
+      }
+      post_pos_revenue_ledger: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_occurred_at: string
+          p_total_amount: number
+          p_transaction_id: string
+          p_transaction_number: string
         }
         Returns: string
       }
@@ -5265,6 +6295,17 @@ export type Database = {
         }
         Returns: Json
       }
+      use_inv_sparepart_for_service: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by?: string
+          p_items: Json
+          p_notes?: string
+          p_service_id: string
+        }
+        Returns: Json
+      }
       validate_service_status_transition: {
         Args: { p_from_status: string; p_to_status: string }
         Returns: boolean
@@ -5276,6 +6317,16 @@ export type Database = {
           p_metadata?: Json
           p_pos_sale_id: string
           p_reason: string
+        }
+        Returns: Json
+      }
+      void_pos_transaction_v4: {
+        Args: {
+          p_branch_id: string
+          p_brand_id: number
+          p_created_by?: string
+          p_reason: string
+          p_transaction_id: string
         }
         Returns: Json
       }
@@ -5466,9 +6517,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       inventory_item_type: ["PRODUCT", "SPAREPART", "SUPPLY", "OTHER"],

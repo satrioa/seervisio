@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import {
   Clock, Bell, Settings2, Database, Save, Loader2, Check, AlertCircle,
   AlertTriangle, Wrench, Building2, Globe, ShieldCheck, Mail,
+  Download, RefreshCw, RotateCcw, XCircle, Trash2, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -31,6 +32,13 @@ import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { can } from "@/lib/permissions/can";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import { ROLES } from "@/lib/permissions/roles";
+import {
+  clearCacheAction, exportBrandConfigAction, exportUsersAction,
+  exportCustomersAction, exportServicesAction, exportInventoryAction,
+  exportFinanceAction, exportFullBackupAction,
+  getRecordCountsAction, previewBackupAction, importBackupAction,
+  resetDemoDataAction, deleteAllDataAction, factoryResetAction,
+} from "@/server/actions/data-maintenance.actions";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 const DAY_LABELS: Record<string, string> = {
@@ -609,72 +617,543 @@ function WorkflowRulesTab({
   );
 }
 
+/* ── Confirmation Dialog ── */
+
+function ConfirmDialog({
+  open, title, description, confirmLabel, confirmVariant,
+  confirmText, onConfirm, onCancel, busy,
+}: {
+  open: boolean; title: string; description: string;
+  confirmLabel: string; confirmVariant?: "default" | "destructive";
+  confirmText?: string; onConfirm: () => void; onCancel: () => void; busy: boolean;
+}) {
+  const [typed, setTyped] = useState("");
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+        <h3 className="text-sm font-semibold mb-1">{title}</h3>
+        <p className="text-xs text-muted-foreground mb-4">{description}</p>
+        {confirmText && (
+          <div className="mb-4">
+            <p className="text-xs text-muted-foreground mb-1">
+              Ketik <span className="font-mono font-bold text-foreground">{confirmText}</span> untuk konfirmasi:
+            </p>
+            <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={confirmText} className="h-9 text-xs" />
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>Batal</Button>
+          <Button variant={confirmVariant ?? "destructive"} size="sm" onClick={onConfirm} disabled={busy || (confirmText ? typed !== confirmText : false)}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Data & Maintenance Tab ── */
 function DataMaintenanceTab() {
+  const params = useParams<{ brandSlug: string }>();
+  const brandSlug = params?.brandSlug ?? "";
+  const { userRole } = useActiveBranch();
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [recordCounts, setRecordCounts] = useState<Record<string, number> | null>(null);
+  const [backupPreview, setBackupPreview] = useState<{ files: any[]; totalRecords: number; zipBase64: string } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: Record<string, number>; errors: string[] } | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    type: "reset-demo" | "delete-all" | "factory-reset";
+    step: number;
+  } | null>(null);
+
+  const isMasterAdmin = userRole === ROLES.MASTER_ADMIN || userRole === ROLES.PLATFORM_OWNER;
+  const canExport = isMasterAdmin || userRole === ROLES.ADMIN;
+
+  function showToast(type: "success" | "error", message: string) {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadBase64Zip(base64: string, filename: string) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    downloadBlob(new Blob([bytes], { type: "application/zip" }), filename);
+  }
+
+  async function loadRecordCounts() {
+    setBusyAction("load-counts");
+    try {
+      const res = await getRecordCountsAction(brandSlug);
+      if (res.success) setRecordCounts(res.data as any);
+    } catch {}
+    setBusyAction(null);
+  }
+
+  React.useEffect(() => { loadRecordCounts(); }, []);
+
+  async function handleExportCSV(type: string, actionFn: (slug: string) => Promise<any>, filename: string) {
+    setBusyAction(`export-${type}`);
+    try {
+      const res = await actionFn(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      downloadBlob(new Blob([res.data], { type: "text/csv;charset=utf-8;" }), `${filename}-${brandSlug}-${Date.now()}.csv`);
+      showToast("success", `Export ${type} berhasil.`);
+    } catch (err: any) {
+      showToast("error", err.message ?? `Gagal export ${type}.`);
+    }
+    setBusyAction(null);
+  }
+
+  async function handleExportJSON() {
+    setBusyAction("export-config");
+    try {
+      const res = await exportBrandConfigAction(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      downloadBlob(new Blob([res.data], { type: "application/json" }), `brand-config-${brandSlug}-${Date.now()}.json`);
+      showToast("success", "Export konfigurasi berhasil.");
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal export konfigurasi.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleExportFullBackup() {
+    setBusyAction("export-backup");
+    try {
+      const res = await exportFullBackupAction(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      downloadBase64Zip(res.data, `full-backup-${brandSlug}-${Date.now()}.zip`);
+      showToast("success", "Backup lengkap berhasil diekspor.");
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal export backup.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleClearCache() {
+    setBusyAction("clear-cache");
+    try {
+      const res = await clearCacheAction(brandSlug);
+      if (res.success) showToast("success", "Cache berhasil dibersihkan.");
+      else showToast("error", res.error ?? "Gagal membersihkan cache.");
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal membersihkan cache.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupPreview(null);
+    setImportResult(null);
+    setBusyAction("preview");
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+
+      const res = await previewBackupAction(brandSlug, base64);
+      if (!res.success) { showToast("error", res.error!); return; }
+      setBackupPreview({ files: res.data.files, totalRecords: res.data.totalRecords, zipBase64: base64 });
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal membaca file backup.");
+    }
+    setBusyAction(null);
+    e.target.value = "";
+  }
+
+  async function handleRestoreImport() {
+    if (!backupPreview) return;
+    setBusyAction("import");
+    try {
+      const res = await importBackupAction(brandSlug, backupPreview.zipBase64, false);
+      if (!res.success) { showToast("error", res.error!); return; }
+      setImportResult(res.data);
+      setBackupPreview(null);
+      if (res.data.errors.length > 0) {
+        showToast("error", `Import selesai dengan ${res.data.errors.length} error.`);
+      } else {
+        showToast("success", "Import backup berhasil.");
+      }
+      loadRecordCounts();
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal mengimpor backup.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleResetDemoData() {
+    if (!confirmState || confirmState.step < 2) return;
+    setBusyAction("reset-demo");
+    try {
+      const res = await resetDemoDataAction(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      showToast("success", `Data demo direset. ${Object.values(res.data).reduce((a, b) => a + b, 0)} record dihapus.`);
+      setConfirmState(null);
+      loadRecordCounts();
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal mereset data demo.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleDeleteAllData() {
+    if (!confirmState || confirmState.step < 3) return;
+    setBusyAction("delete-all");
+    try {
+      const res = await deleteAllDataAction(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      showToast("success", `Semua data dihapus. ${Object.values(res.data).reduce((a, b) => a + b, 0)} record dihapus.`);
+      setConfirmState(null);
+      loadRecordCounts();
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal menghapus semua data.");
+    }
+    setBusyAction(null);
+  }
+
+  async function handleFactoryReset() {
+    if (!confirmState || confirmState.step < 2) return;
+    setBusyAction("factory-reset");
+    try {
+      const res = await factoryResetAction(brandSlug);
+      if (!res.success) { showToast("error", res.error!); return; }
+      showToast("success", `Factory reset selesai. ${Object.values(res.data).reduce((a, b) => a + b, 0)} record dihapus.`);
+      setConfirmState(null);
+      loadRecordCounts();
+    } catch (err: any) {
+      showToast("error", err.message ?? "Gagal melakukan factory reset.");
+    }
+    setBusyAction(null);
+  }
+
+  const confirmDialog = confirmState && (
+    <ConfirmDialog
+      open={true}
+      title={
+        confirmState.type === "reset-demo" ? "Reset Demo Data" :
+        confirmState.type === "delete-all" ? "Delete All Data" :
+        "Factory Reset"
+      }
+      description={
+        confirmState.type === "reset-demo" ? "Tindakan ini akan menghapus semua data pelanggan, servis, inventaris, dan pembayaran. Data pengguna, cabang, dan pengaturan brand tidak akan terpengaruh." :
+        confirmState.type === "delete-all" ? "PERINGATAN: Tindakan ini akan menghapus SEMUA data operasional brand termasuk pelanggan, servis, inventaris, pembayaran, dan catatan keuangan. Tindakan ini tidak dapat dibatalkan!" :
+        "PERINGATAN: Tindakan ini akan mengembalikan brand ke pengaturan awal pabrik. Semua data operasional, konfigurasi workflow, dan pengaturan tampilan akan dihapus. Data pemilik, subscription, dan brand record akan tetap ada."
+      }
+      confirmLabel={
+        confirmState.type === "reset-demo" ? (confirmState.step >= 2 ? "Reset Data Demo" : "Lanjut") :
+        confirmState.type === "delete-all" ? (confirmState.step >= 3 ? "Delete All Data" : "Lanjut") :
+        (confirmState.step >= 2 ? "Factory Reset" : "Lanjut")
+      }
+      confirmVariant="destructive"
+      confirmText={
+        confirmState.type === "reset-demo" && confirmState.step >= 2 ? "RESET DEMO DATA" :
+        confirmState.type === "delete-all" && confirmState.step >= 2 ? brandSlug :
+        confirmState.type === "delete-all" && confirmState.step >= 3 ? "DELETE ALL DATA" :
+        confirmState.type === "factory-reset" && confirmState.step >= 2 ? "FACTORY RESET" :
+        undefined
+      }
+      onConfirm={() => {
+        if (confirmState.type === "reset-demo") {
+          if (confirmState.step < 2) setConfirmState({ ...confirmState, step: 2 });
+          else handleResetDemoData();
+        } else if (confirmState.type === "delete-all") {
+          if (confirmState.step < 3) setConfirmState({ ...confirmState, step: confirmState.step + 1 });
+          else handleDeleteAllData();
+        } else if (confirmState.type === "factory-reset") {
+          if (confirmState.step < 2) setConfirmState({ ...confirmState, step: 2 });
+          else handleFactoryReset();
+        }
+      }}
+      onCancel={() => setConfirmState(null)}
+      busy={Boolean(busyAction)}
+    />
+  );
+
+  const estCounts = recordCounts ? (Object.values(recordCounts).reduce((a, b) => a + b, 0)) : 0;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {confirmDialog}
+
       <Alert variant="default" className="bg-amber-50 border-amber-200">
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         <AlertTitle className="text-sm text-amber-800">Perhatian</AlertTitle>
         <AlertDescription className="text-xs text-amber-700">
           Fitur maintenance dapat memengaruhi laporan. Semua aktivitas akan dicatat di audit log.
+          {recordCounts && <span className="block mt-1">Estimasi total record: <strong>{estCounts.toLocaleString()}</strong></span>}
         </AlertDescription>
       </Alert>
 
-      <Card className="border-amber-100/60 shadow-sm">
+      {!isMasterAdmin && (
+        <Alert variant="default" className="bg-blue-50 border-blue-200">
+          <ShieldCheck className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-sm text-blue-800">Mode Terbatas</AlertTitle>
+          <AlertDescription className="text-xs text-blue-700">
+            {canExport ? "Anda hanya dapat mengekspor data." : "Anda tidak memiliki akses ke fitur ini. Hubungi Master Admin."}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {toast && (
+        <Alert variant={toast.type === "success" ? "default" : "destructive"} className={toast.type === "success" ? "bg-green-50 border-green-200" : ""}>
+          {toast.type === "success" ? <Check className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4" />}
+          <AlertTitle className="text-sm">{toast.type === "success" ? "Berhasil" : "Gagal"}</AlertTitle>
+          <AlertDescription className="text-xs">{toast.message}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* ═══════ 1. BACKUP & EXPORT ═══════ */}
+      <Card className="border-emerald-100/60 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">Tools Maintenance</CardTitle>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Download className="h-4 w-4 text-emerald-500" />
+            Backup &amp; Export
+          </CardTitle>
           <CardDescription className="text-xs">
-            Alat bantu untuk pengelolaan data brand
+            Ekspor data brand untuk cadangan atau migrasi
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Clear Cache */}
+          <div className="flex items-center justify-between p-4 rounded-lg border">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5 text-orange-500" />
+                Clear Cache
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Membersihkan cache aplikasi (revalidate path &amp; tag).</p>
+            </div>
+            <Button variant="outline" size="sm" className="text-xs" disabled={!canExport || busyAction === "clear-cache"} onClick={handleClearCache}>
+              {busyAction === "clear-cache" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+              Clear Cache
+            </Button>
+          </div>
+
+          {/* Export Brand Config */}
+          <div className="flex items-center justify-between p-4 rounded-lg border">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Download className="h-3.5 w-3.5 text-blue-500" />
+                Export Brand Config
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Brand, settings, targets, payment methods &mdash; JSON.</p>
+            </div>
+            <Button variant="outline" size="sm" className="text-xs" disabled={!canExport || busyAction === "export-config"} onClick={handleExportJSON}>
+              {busyAction === "export-config" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+              Export JSON
+            </Button>
+          </div>
+
+          {/* CSV Exports Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {[
+              { key: "users", label: "Users", action: exportUsersAction, file: "users" },
+              { key: "customers", label: "Customers", action: exportCustomersAction, file: "customers" },
+              { key: "services", label: "Services", action: exportServicesAction, file: "services" },
+              { key: "inventory", label: "Inventory", action: exportInventoryAction, file: "inventory" },
+              { key: "finance", label: "Finance", action: exportFinanceAction, file: "finance" },
+            ].map(({ key, label, action, file }) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-lg border gap-2">
+                <span className="text-xs font-medium">{label}</span>
+                <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1" disabled={!canExport || busyAction === `export-${key}`} onClick={() => handleExportCSV(key, action, file)}>
+                  {busyAction === `export-${key}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  CSV
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Full Backup */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-emerald-200/50 bg-emerald-50/30">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                Full Operational Backup
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">ZIP</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Customers, services, payments, inventory, movements, branches, users, accounts, methods, settings.
+                {recordCounts && <span className="block text-emerald-600">~{estCounts.toLocaleString()} total records</span>}
+              </p>
+            </div>
+            <Button variant="default" size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700" disabled={!isMasterAdmin || busyAction === "export-backup"} onClick={handleExportFullBackup}>
+              {busyAction === "export-backup" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+              {busyAction === "export-backup" ? "Mengekspor..." : "Export ZIP"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══════ 2. RECOVERY & RESTORE ═══════ */}
+      <Card className="border-blue-100/60 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 text-blue-500" />
+            Recovery &amp; Restore
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium ml-1">BETA</span>
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Pulihkan data dari file backup yang telah diekspor sebelumnya
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg border border-amber-100/60">
-            <div>
-              <p className="text-sm font-medium">Historical Data Import</p>
-              <p className="text-xs text-muted-foreground">Import data historis untuk bulan sebelumnya.</p>
+          {/* Import Backup */}
+          <div className="p-4 rounded-lg border">
+            <p className="text-sm font-medium mb-1">Import Backup</p>
+            <p className="text-xs text-muted-foreground mb-3">Upload file ZIP hasil export untuk mengembalikan data brand.</p>
+
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-4 py-2.5 text-xs text-muted-foreground hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
+              <input type="file" accept=".zip" className="hidden" onChange={handleFileImport} disabled={!isMasterAdmin || busyAction === "preview" || busyAction === "import"} />
+              {busyAction === "preview" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {busyAction === "preview" ? "Membaca file..." : "Pilih file ZIP"}
+            </label>
+
+            {backupPreview && (
+              <div className="mt-3 space-y-2 rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs font-semibold">Preview Backup ({backupPreview.totalRecords} total records)</p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {backupPreview.files.map((f) => (
+                    <div key={f.name} className="flex items-center justify-between text-[10px]">
+                      <span className={f.valid ? "" : "text-red-500"}>{f.name}</span>
+                      <span className={f.valid ? "text-muted-foreground" : "text-red-500"}>
+                        {f.valid ? `${f.recordCount} records` : f.error ?? "Invalid"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setBackupPreview(null)}>Batal</Button>
+                  <Button variant="default" size="sm" className="text-xs" disabled={busyAction === "import"} onClick={handleRestoreImport}>
+                    {busyAction === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                    {busyAction === "import" ? "Merestorasi..." : "Restore Backup"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {importResult && (
+              <div className="mt-3 space-y-1 rounded-lg border bg-green-50/30 p-3">
+                <p className="text-xs font-semibold text-green-700">Hasil Import</p>
+                {Object.entries(importResult.imported).filter(([, v]) => v > 0).map(([table, count]) => (
+                  <div key={table} className="flex justify-between text-[10px]">
+                    <span>{table}</span>
+                    <span className="text-muted-foreground">{count} records</span>
+                  </div>
+                ))}
+                {importResult.errors.length > 0 && (
+                  <div className="mt-1 text-[10px] text-red-500">
+                    {importResult.errors.map((e, i) => <p key={i}>{e}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Backup History */}
+          <div className="p-4 rounded-lg border border-dashed">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Backup History</p>
+                <p className="text-xs text-muted-foreground">Riwayat backup yang telah diekspor tercatat di audit log.</p>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Audit Log</span>
             </div>
-            <Button variant="outline" size="sm" disabled className="text-xs border-amber-200">
-              <Database className="h-3.5 w-3.5 mr-1" />
-              Siapkan Import
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══════ 3. DANGEROUS ZONE ═══════ */}
+      <Card className="border-red-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-600">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            Dangerous Zone
+          </CardTitle>
+          <CardDescription className="text-xs text-red-600/70">
+            Tindakan di bawah ini bersifat destruktif dan tidak dapat dibatalkan. Harap berhati-hati.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Reset Demo Data */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-red-200/50 bg-red-50/20">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5 text-red-700">
+                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                Reset Demo Data
+              </p>
+              <p className="text-xs text-red-600/70 mt-0.5">
+                Hapus data demo: pelanggan, servis, inventaris, pembayaran.
+                {recordCounts && <span className="block">~{recordCounts.customers + recordCounts.services + recordCounts.servicePayments + recordCounts.inventoryItems + recordCounts.inventoryMovements + recordCounts.serviceSparepartUsages} record akan terpengaruh</span>}
+                <span className="block">Data pengguna, cabang, dan pengaturan brand AMAN.</span>
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="text-xs border-red-300 text-red-600 hover:bg-red-50" disabled={!isMasterAdmin || Boolean(busyAction)} onClick={() => setConfirmState({ type: "reset-demo", step: 1 })}>
+              <XCircle className="h-3.5 w-3.5 mr-1" />
+              Reset
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-lg border border-amber-100/60">
+          {/* Delete All Data */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-red-300 bg-red-50/30">
             <div>
-              <p className="text-sm font-medium">Export Master Data</p>
-              <p className="text-xs text-muted-foreground">Export data pelanggan, servis, inventori, dan akun pembayaran.</p>
+              <p className="text-sm font-medium flex items-center gap-1.5 text-red-700">
+                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                Delete All Data
+              </p>
+              <p className="text-xs text-red-600/70 mt-0.5">
+                Hapus SEMUA data operasional brand.
+                {recordCounts && <span className="block">~{estCounts.toLocaleString()} record akan terpengaruh</span>}
+                <span className="block">Triple confirmation required. Tindakan permanen!</span>
+              </p>
             </div>
-            <Button variant="outline" size="sm" disabled className="text-xs border-amber-200">
-              <Database className="h-3.5 w-3.5 mr-1" />
-              Export Data
+            <Button variant="destructive" size="sm" className="text-xs" disabled={!isMasterAdmin || Boolean(busyAction)} onClick={() => setConfirmState({ type: "delete-all", step: 1 })}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Delete All
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-lg border border-amber-100/60">
+          {/* Factory Reset */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-red-400/50 bg-red-100/20">
             <div>
-              <p className="text-sm font-medium">Recalculate Summary</p>
-              <p className="text-xs text-muted-foreground">Hitung ulang ringkasan dashboard dari ledger dan mutasi.</p>
+              <p className="text-sm font-medium flex items-center gap-1.5 text-red-700">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                Factory Reset
+              </p>
+              <p className="text-xs text-red-600/70 mt-0.5">
+                Kembalikan brand ke pengaturan awal pabrik.
+                {recordCounts && <span className="block">~{estCounts.toLocaleString()} record akan dihapus</span>}
+                <span className="block">Data pemilik, subscription, dan brand record tetap ada.</span>
+              </p>
             </div>
-            <Button variant="outline" size="sm" disabled className="text-xs border-amber-200">
-              <RefreshCwIcon className="h-3.5 w-3.5 mr-1" />
-              Recalculate
+            <Button variant="destructive" size="sm" className="text-xs" disabled={!isMasterAdmin || Boolean(busyAction)} onClick={() => setConfirmState({ type: "factory-reset", step: 1 })}>
+              <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+              Factory Reset
             </Button>
           </div>
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function RefreshCwIcon(props: any) {
-  return (
-    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 2v6h-6" />
-      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-      <path d="M3 22v-6h6" />
-      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-    </svg>
   );
 }
 

@@ -31,6 +31,8 @@ export interface AppContext {
   brandSlug: string;
   /** Current brand name */
   brandName: string;
+  /** Current brand logo URL (from brand_settings) */
+  brandLogoUrl: string | null;
   /** Currently selected branch ID (null for brand-wide scope) */
   branchId: string | null;
   /** Currently selected branch name (null for brand-wide scope) */

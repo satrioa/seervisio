@@ -15,24 +15,48 @@ comment on column public.brand_settings.theme_mode is 'Current theme mode: light
 comment on column public.brand_settings.theme_tokens is 'Full generated CSS variable tokens (JSON)';
 
 -- Backfill existing theme data from brands table if any brand_settings row exists
-update public.brand_settings bs
-set
-  theme_primary_color = coalesce(b.theme_primary_color, bs.theme_primary_color),
-  theme_accent_color = coalesce(b.theme_accent_color, bs.theme_accent_color),
-  theme_mode = coalesce(b.theme_mode, bs.theme_mode),
-  theme_tokens = coalesce(b.theme_tokens, bs.theme_tokens)
-from public.brands b
-where bs.brand_id = b.id
-  and (b.theme_primary_color is not null or b.theme_accent_color is not null or b.theme_mode is not null or b.theme_tokens is not null);
+-- (skip if columns already dropped from brands via migration 050)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'brands'
+      and column_name = 'theme_primary_color'
+  ) then
+    update public.brand_settings bs
+    set
+      theme_primary_color = coalesce(b.theme_primary_color, bs.theme_primary_color),
+      theme_accent_color = coalesce(b.theme_accent_color, bs.theme_accent_color),
+      theme_mode = coalesce(b.theme_mode, bs.theme_mode),
+      theme_tokens = coalesce(b.theme_tokens, bs.theme_tokens)
+    from public.brands b
+    where bs.brand_id = b.id
+      and (b.theme_primary_color is not null or b.theme_accent_color is not null or b.theme_mode is not null or b.theme_tokens is not null);
+  end if;
+end $$;
 
 -- Ensure default rows exist for brands that have no brand_settings yet
-insert into public.brand_settings (brand_id, store_name, theme_primary_color, theme_accent_color, theme_mode, theme_tokens)
-select
-  b.id,
-  b.name,
-  coalesce(b.theme_primary_color, '#F59E0B'),
-  coalesce(b.theme_accent_color, '#D4A017'),
-  coalesce(b.theme_mode, 'light'),
-  coalesce(b.theme_tokens, '{}'::jsonb)
-from public.brands b
-where not exists (select 1 from public.brand_settings bs2 where bs2.brand_id = b.id);
+-- (wrapped in DO block with guard because theme columns may already be dropped from brands)
+do $inner$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'brands'
+      and column_name = 'theme_primary_color'
+  ) then
+    execute $inner_sql$
+      insert into public.brand_settings (brand_id, store_name, theme_primary_color, theme_accent_color, theme_mode, theme_tokens)
+      select
+        b.id,
+        b.name,
+        coalesce(b.theme_primary_color, '#F59E0B'),
+        coalesce(b.theme_accent_color, '#D4A017'),
+        coalesce(b.theme_mode, 'light'),
+        coalesce(b.theme_tokens, '{}'::jsonb)
+      from public.brands b
+      where not exists (select 1 from public.brand_settings bs2 where bs2.brand_id = b.id);
+    $inner_sql$;
+  end if;
+end $inner$;

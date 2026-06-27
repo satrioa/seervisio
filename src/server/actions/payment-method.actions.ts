@@ -8,6 +8,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 
@@ -184,6 +186,7 @@ export async function linkPaymentMethodAccountAction(
 
     /* ── Validate payment account ── */
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
     const { data: account, error: accountErr } = await (supabase as any)
       .from("payment_accounts")
@@ -307,7 +310,7 @@ export async function linkPaymentMethodAccountAction(
       error: err.message,
       stack: err.stack,
     });
-    return errorResult(err.message || "Gagal menautkan akun.");
+    return handleActionError(err, "Gagal menautkan akun.");
   }
 }
 
@@ -324,6 +327,7 @@ export async function togglePaymentMethodActiveAction(
     requireActionPermission(session.role, "payment_method.toggle_active");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
     const methodType = methodCodeToType(methodCode);
 
     if (methodType === "CASH" && !isActive) {
@@ -379,7 +383,7 @@ export async function togglePaymentMethodActiveAction(
     return successResult(mapBranchMethodRow(updatedRow, def, branch?.name ?? ""));
   } catch (err: any) {
     console.error("[PaymentMethods] togglePaymentMethodActiveAction:", err.message);
-    return errorResult(err.message || "Gagal mengubah status metode.");
+    return handleActionError(err, "Gagal mengubah status metode.");
   }
 }
 
@@ -394,6 +398,7 @@ export async function ensureSystemPaymentMethodsAction(
     requireActionPermission(session.role, "payment_method.repair");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: branch } = await (supabase as any)
       .from("branches")
@@ -496,7 +501,7 @@ export async function ensureSystemPaymentMethodsAction(
     return successResult({ created, linked });
   } catch (err: any) {
     console.error("[PaymentMethods] ensureSystemPaymentMethodsAction:", err.message);
-    return errorResult(err.message || "Gagal menyiapkan metode pembayaran.");
+    return handleActionError(err, "Gagal menyiapkan metode pembayaran.");
   }
 }
 
@@ -564,6 +569,7 @@ export async function repairBranchCashMethodAction(
     requireActionPermission(session.role, "payment_method.link_account");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: branch } = await (supabase as any)
       .from("branches")
@@ -653,7 +659,7 @@ export async function repairBranchCashMethodAction(
     return successResult(mapBranchMethodRow(updatedRow, def, branchName));
   } catch (err: any) {
     console.error("[PaymentMethods] repairBranchCashMethodAction:", err.message);
-    return errorResult(err.message || "Gagal memperbaiki metode Cash.");
+    return handleActionError(err, "Gagal memperbaiki metode Cash.");
   }
 }
 
@@ -671,6 +677,9 @@ export async function updateMethodMdrAction(
     requireActionPermission(session.role, "payment_method.manage_mdr");
 
     if (!branchId) return errorResult("Cabang belum dipilih.");
+
+    const sup = await createServerSupabase();
+    await requireActiveStoreSession(sup, session.brandId, branchId);
 
     const normalizedType = methodCodeToType(methodType);
 
@@ -717,6 +726,6 @@ export async function updateMethodMdrAction(
       minTransaction,
       error: err.message,
     });
-    return errorResult(err.message || "Gagal menyimpan potongan.");
+    return handleActionError(err, "Gagal menyimpan potongan.");
   }
 }

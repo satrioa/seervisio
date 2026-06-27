@@ -3,12 +3,7 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { addServiceTimelineEntry, addAuditLog } from "@/repositories/service.repository";
-import {
-  getSessionData,
-  successResult,
-  errorResult,
-  requireActionPermission,
-} from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, } from "./action-helper";
 import type {
   CreateSparepartV4Input,
   CreateProductV4Input,
@@ -104,15 +99,17 @@ export async function createCategoryV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
+
     if (!input.name?.trim()) return errorResult("Nama kategori wajib diisi.");
 
-    const supabase = await createServerSupabase();
     const id = await repoCreateCategory(supabase as any, { ...input, brandId: session.brandId });
 
     return successResult({ id });
   } catch (err: any) {
     console.error("[createCategoryV4Action]", err);
-    return errorResult(err.message || "Gagal membuat kategori.");
+    return handleActionError(err, "Gagal membuat kategori.");
   }
 }
 
@@ -129,12 +126,13 @@ export async function updateCategoryV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await repoUpdateCategory(supabase as any, id, input);
 
     return successResult({});
   } catch (err: any) {
     console.error("[updateCategoryV4Action]", err);
-    return errorResult(err.message || "Gagal memperbarui kategori.");
+    return handleActionError(err, "Gagal memperbarui kategori.");
   }
 }
 
@@ -178,6 +176,9 @@ export async function createStockPurchaseV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -192,7 +193,6 @@ export async function createStockPurchaseV4Action(
       if (item.unitCost < 0) return errorResult("Harga modal tidak boleh negatif.");
     }
 
-    const supabase = await createServerSupabase();
     const result = await repoCreatePurchase(supabase as any, input, session.brandId, session.profileId);
 
     return successResult({
@@ -203,7 +203,7 @@ export async function createStockPurchaseV4Action(
     });
   } catch (err: any) {
     console.error("[createStockPurchaseV4Action]", err);
-    return errorResult(err.message || "Gagal mencatat belanja stok.");
+    return handleActionError(err, "Gagal mencatat belanja stok.");
   }
 }
 
@@ -319,6 +319,9 @@ export async function submitStockOpnameV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -330,13 +333,11 @@ export async function submitStockOpnameV4Action(
     for (const a of input.adjustments) {
       if (a.physicalStock < 0) return errorResult("Stok opname tidak boleh negatif.");
     }
-
-    const supabase = await createServerSupabase();
     const result = await repoSubmitOpname(supabase as any, input, session.brandId);
     return successResult(result);
   } catch (err: any) {
     console.error("[submitStockOpnameV4Action]", err);
-    return errorResult(err.message || "Gagal menyimpan penyesuaian stok.");
+    return handleActionError(err, "Gagal menyimpan penyesuaian stok.");
   }
 }
 
@@ -381,12 +382,13 @@ export async function deactivateProductV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setProductActiveStatusV4(supabase as any, productId, false);
 
     return successResult(null);
   } catch (err: any) {
     console.error("[deactivateProductV4Action]", err);
-    return errorResult(err.message || "Gagal menonaktifkan produk.");
+    return handleActionError(err, "Gagal menonaktifkan produk.");
   }
 }
 
@@ -402,12 +404,13 @@ export async function reactivateProductV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setProductActiveStatusV4(supabase as any, productId, true);
 
     return successResult(null);
   } catch (err: any) {
     console.error("[reactivateProductV4Action]", err);
-    return errorResult(err.message || "Gagal mengaktifkan produk.");
+    return handleActionError(err, "Gagal mengaktifkan produk.");
   }
 }
 
@@ -423,12 +426,13 @@ export async function deactivateVariantV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setVariantActiveStatusV4(supabase as any, variantId, false);
 
     return successResult(null);
   } catch (err: any) {
     console.error("[deactivateVariantV4Action]", err);
-    return errorResult(err.message || "Gagal menonaktifkan varian.");
+    return handleActionError(err, "Gagal menonaktifkan varian.");
   }
 }
 
@@ -444,12 +448,13 @@ export async function reactivateVariantV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setVariantActiveStatusV4(supabase as any, variantId, true);
 
     return successResult(null);
   } catch (err: any) {
     console.error("[reactivateVariantV4Action]", err);
-    return errorResult(err.message || "Gagal mengaktifkan varian.");
+    return handleActionError(err, "Gagal mengaktifkan varian.");
   }
 }
 
@@ -465,12 +470,13 @@ export async function archiveUnitSecondV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setUnitSecondStatusV4(supabase as any, unitId, "ARCHIVED");
 
     return successResult(null);
   } catch (err: any) {
     console.error("[archiveUnitSecondV4Action]", err);
-    return errorResult(err.message || "Gagal mengarsipkan unit.");
+    return handleActionError(err, "Gagal mengarsipkan unit.");
   }
 }
 
@@ -486,12 +492,13 @@ export async function reactivateUnitSecondV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
     await setUnitSecondStatusV4(supabase as any, unitId, "READY_STOCK");
 
     return successResult(null);
   } catch (err: any) {
     console.error("[reactivateUnitSecondV4Action]", err);
-    return errorResult(err.message || "Gagal mengaktifkan kembali unit.");
+    return handleActionError(err, "Gagal mengaktifkan kembali unit.");
   }
 }
 
@@ -517,6 +524,8 @@ export async function updateProductV4Action(
     if (productErr) throw productErr;
     if (!product || product.brand_id !== session.brandId) return errorResult("Produk tidak ditemukan.");
 
+    await requireActiveStoreSession(supabase, session.brandId, product.branch_id);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, product.branch_id)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
@@ -531,7 +540,7 @@ export async function updateProductV4Action(
     return successResult(null);
   } catch (err: any) {
     console.error("[updateProductV4Action]", err);
-    return errorResult(err.message || "Gagal memperbarui item.");
+    return handleActionError(err, "Gagal memperbarui item.");
   }
 }
 
@@ -560,6 +569,8 @@ export async function updateVariantV4Action(
     if (variantErr) throw variantErr;
     if (!variant || variant.brand_id !== session.brandId) return errorResult("Varian tidak ditemukan.");
 
+    await requireActiveStoreSession(supabase, session.brandId, variant.branch_id);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, variant.branch_id)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
@@ -576,7 +587,7 @@ export async function updateVariantV4Action(
     return successResult(null);
   } catch (err: any) {
     console.error("[updateVariantV4Action]", err);
-    return errorResult(err.message || "Gagal memperbarui varian.");
+    return handleActionError(err, "Gagal memperbarui varian.");
   }
 }
 
@@ -606,6 +617,8 @@ export async function updateUnitSecondV4Action(
     if (unitErr) throw unitErr;
     if (!unit || unit.brand_id !== session.brandId) return errorResult("Unit tidak ditemukan.");
 
+    await requireActiveStoreSession(supabase, session.brandId, unit.branch_id);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, unit.branch_id)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
@@ -625,7 +638,7 @@ export async function updateUnitSecondV4Action(
     return successResult(null);
   } catch (err: any) {
     console.error("[updateUnitSecondV4Action]", err);
-    return errorResult(err.message || "Gagal memperbarui unit second.");
+    return handleActionError(err, "Gagal memperbarui unit second.");
   }
 }
 
@@ -663,6 +676,9 @@ export async function createSparepartV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -676,13 +692,12 @@ export async function createSparepartV4Action(
       input.variants = [{ name: input.name }];
     }
 
-    const supabase = await createServerSupabase();
     const result = await repoCreateSparepart(supabase as any, { ...input, brandId: session.brandId }, session.profileId);
 
     return successResult(result);
   } catch (err: any) {
     console.error("[createSparepartV4Action]", err);
-    return errorResult(err.message || "Gagal membuat sparepart.");
+    return handleActionError(err, "Gagal membuat sparepart.");
   }
 }
 
@@ -697,6 +712,9 @@ export async function createProductV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -710,13 +728,12 @@ export async function createProductV4Action(
       input.variants = [{ name: input.name }];
     }
 
-    const supabase = await createServerSupabase();
     const result = await repoCreateProduct(supabase as any, { ...input, brandId: session.brandId }, session.profileId);
 
     return successResult(result);
   } catch (err: any) {
     console.error("[createProductV4Action]", err);
-    return errorResult(err.message || "Gagal membuat produk.");
+    return handleActionError(err, "Gagal membuat produk.");
   }
 }
 
@@ -731,6 +748,9 @@ export async function createUnitBaruV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -744,13 +764,12 @@ export async function createUnitBaruV4Action(
       input.variants = [{ name: input.name }];
     }
 
-    const supabase = await createServerSupabase();
     const result = await repoCreateUnitBaru(supabase as any, { ...input, brandId: session.brandId }, session.profileId);
 
     return successResult(result);
   } catch (err: any) {
     console.error("[createUnitBaruV4Action]", err);
-    return errorResult(err.message || "Gagal membuat unit baru.");
+    return handleActionError(err, "Gagal membuat unit baru.");
   }
 }
 
@@ -786,6 +805,9 @@ export async function createUnitSecondV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -809,14 +831,12 @@ export async function createUnitSecondV4Action(
         return errorResult("Battery health harus antara 0-100.");
       }
     }
-
-    const supabase = await createServerSupabase();
     const result = await repoCreateUnitSecond(supabase as any, { ...input, brandId: session.brandId }, session.profileId);
 
     return successResult(result);
   } catch (err: any) {
     console.error("[createUnitSecondV4Action]", err);
-    return errorResult(err.message || "Gagal membuat unit second.");
+    return handleActionError(err, "Gagal membuat unit second.");
   }
 }
 
@@ -887,6 +907,9 @@ export async function useSparepartForServiceV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -900,7 +923,6 @@ export async function useSparepartForServiceV4Action(
       if (!item.quantity || item.quantity <= 0) return errorResult("Jumlah pemakaian harus lebih dari 0.");
     }
 
-    const supabase = await createServerSupabase();
     const result = await repoUseSparepart(supabase as any, input, session.brandId, session.profileId);
 
     /* Record timeline and audit for sparepart usage */
@@ -958,7 +980,7 @@ export async function useSparepartForServiceV4Action(
     return successResult(result);
   } catch (err: any) {
     console.error("[useSparepartForServiceV4Action]", err);
-    return errorResult(err.message || "Gagal mencatat pemakaian sparepart.");
+    return handleActionError(err, "Gagal mencatat pemakaian sparepart.");
   }
 }
 
@@ -1068,6 +1090,9 @@ export async function checkoutPosV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.POS_SALE_CREATE);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -1085,13 +1110,11 @@ export async function checkoutPosV4Action(
       }
       if (item.sellingPrice < 0) return errorResult("Harga jual tidak boleh negatif.");
     }
-
-    const supabase = await createServerSupabase();
     const result = await repoCheckoutPos(supabase as any, input, session.brandId, session.profileId);
     return successResult(result);
   } catch (err: any) {
     console.error("[checkoutPosV4Action]", err);
-    return errorResult(err.message || "Gagal memproses transaksi POS.");
+    return handleActionError(err, "Gagal memproses transaksi POS.");
   }
 }
 
@@ -1203,6 +1226,9 @@ export async function voidPosTransactionV4Action(
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.POS_VOID);
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
     const { canAccessBranch } = await import("@/domain/access/branch-access");
     if (!canAccessBranch(ctx, input.branchId)) {
@@ -1212,7 +1238,6 @@ export async function voidPosTransactionV4Action(
     if (!input.transactionId) return errorResult("ID transaksi wajib diisi.");
     if (!input.reason || input.reason.trim().length < 5) return errorResult("Alasan pembatalan minimal 5 karakter.");
 
-    const supabase = await createServerSupabase();
     const result = await repoVoidPosTransaction(
       supabase as any,
       session.brandId,
@@ -1223,6 +1248,6 @@ export async function voidPosTransactionV4Action(
     return successResult(result);
   } catch (err: any) {
     console.error("[voidPosTransactionV4Action]", err);
-    return errorResult(err.message || "Gagal membatalkan transaksi POS.");
+    return handleActionError(err, "Gagal membatalkan transaksi POS.");
   }
 }

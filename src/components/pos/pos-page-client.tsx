@@ -3,6 +3,7 @@
 "use client";
 
 import * as React from "react";
+import { ShoppingCart } from "lucide-react";
 import { ProductBrowser } from "./product-browser";
 import { CartPanel } from "./cart-panel";
 import type { PosCartItem, PosProductResult, PosTradeIn, CreatePosSaleInput, CartDeviceUnit } from "@/domain/pos/types";
@@ -117,6 +118,7 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
   const [state, dispatch] = React.useReducer(posReducer, initialState);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string | undefined>();
+  const [mobileCartOpen, setMobileCartOpen] = React.useState(false);
   const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const { activeBranchId, activeBranchName, userRole } = useActiveBranch();
   const setCartProps = useSetPosCart();
@@ -349,29 +351,72 @@ export function PosPageClient({ brandSlug }: PosPageClientProps) {
         />
       </section>
 
-      {/* Mobile cart — below products, hidden on lg+ */}
-      <aside className="relative z-10 mt-4 w-full shrink-0 bg-background lg:hidden">
-        <CartPanel
-          cart={state.cart}
-          customerId={state.customerId}
-          customerQuickCreate={state.customerQuickCreate}
-          tradeIn={state.tradeIn}
-          discountAmount={state.discountAmount}
-          submitting={state.submitting}
-          error={state.error}
-          success={state.success}
-          paymentMethods={state.paymentMethods}
-          brandSlug={brandSlug}
-          onRemoveItem={(key) => dispatch({ type: "REMOVE_FROM_CART", cartKey: key })}
-          onUpdateQty={(key, qty) => dispatch({ type: "UPDATE_QTY", cartKey: key, quantity: qty })}
-          onSetCustomer={(id) => dispatch({ type: "SET_CUSTOMER", customerId: id })}
-          onSetCustomerQuick={(data) => dispatch({ type: "SET_CUSTOMER_QUICK", data })}
-          onSetTradeIn={(t) => dispatch({ type: "SET_TRADE_IN", tradeIn: t })}
-          onSetDiscount={(a) => dispatch({ type: "SET_DISCOUNT", amount: a })}
-          onSubmitSale={handleSubmitSale}
-          onReset={handleReset}
-        />
-      </aside>
+      {/* Mobile cart toggle button */}
+      {state.cart.length > 0 && !state.success && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-[4px] lg:hidden pointer-events-none">
+          <button
+            type="button"
+            onClick={() => setMobileCartOpen(true)}
+            className="pointer-events-auto flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white shadow-lg"
+            style={{ backgroundColor: "#3ecf8e" }}
+          >
+            <ShoppingCart className="size-4" />
+            Lihat Keranjang ({state.cart.length})
+          </button>
+        </div>
+      )}
+
+      {/* Mobile cart sheet — fixed overlay */}
+      {mobileCartOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setMobileCartOpen(false)}
+          />
+          <div
+            className="absolute bottom-[4px] left-[4px] right-[4px] top-[10%] flex flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="size-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Keranjang</span>
+                <span className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                  {state.cart.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileCartOpen(false)}
+                className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+              >
+                <span className="text-sm">✕</span>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <CartPanel
+                cart={state.cart}
+                customerId={state.customerId}
+                customerQuickCreate={state.customerQuickCreate}
+                tradeIn={state.tradeIn}
+                discountAmount={state.discountAmount}
+                submitting={state.submitting}
+                error={state.error}
+                success={state.success}
+                paymentMethods={state.paymentMethods}
+                brandSlug={brandSlug}
+                onRemoveItem={(key) => dispatch({ type: "REMOVE_FROM_CART", cartKey: key })}
+                onUpdateQty={(key, qty) => dispatch({ type: "UPDATE_QTY", cartKey: key, quantity: qty })}
+                onSetCustomer={(id) => dispatch({ type: "SET_CUSTOMER", customerId: id })}
+                onSetCustomerQuick={(data) => dispatch({ type: "SET_CUSTOMER_QUICK", data })}
+                onSetTradeIn={(t) => dispatch({ type: "SET_TRADE_IN", tradeIn: t })}
+                onSetDiscount={(a) => dispatch({ type: "SET_DISCOUNT", amount: a })}
+                onSubmitSale={handleSubmitSale}
+                onReset={handleReset}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 
@@ -234,6 +236,10 @@ export async function createPaymentAccountAction(
     if ((input.initialBalance ?? 0) < 0) return errorResult("Saldo awal tidak boleh negatif.");
 
     const supabase = await createServerSupabase();
+    const guardBranchId = isGlobal ? session.defaultBranchId : input.branchId;
+    if (guardBranchId) {
+      await requireActiveStoreSession(supabase, session.brandId, guardBranchId);
+    }
 
     const internalType = input.bankName ? "BANK" : "OTHER";
 
@@ -306,7 +312,7 @@ export async function createPaymentAccountAction(
     return successResult(mapDbAccount(withBranch ?? created));
   } catch (err: any) {
     console.error("[PaymentAccounts] createPaymentAccountAction:", err.message);
-    return errorResult(err.message || "Gagal membuat akun pembayaran.");
+    return handleActionError(err, "Gagal membuat akun pembayaran.");
   }
 }
 
@@ -340,6 +346,12 @@ export async function updatePaymentAccountAction(
       .single();
 
     if (!existing) return errorResult("Akun tidak ditemukan.");
+
+    if (existing.branch_id) {
+      await requireActiveStoreSession(supabase, session.brandId, existing.branch_id);
+    } else if (session.defaultBranchId) {
+      await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
+    }
 
     if (existing.is_system_account || existing.is_cash_account) {
       if (input.isActive === false) {
@@ -381,7 +393,7 @@ export async function updatePaymentAccountAction(
     return successResult(mapDbAccount(updated));
   } catch (err: any) {
     console.error("[PaymentAccounts] updatePaymentAccountAction:", err.message);
-    return errorResult(err.message || "Gagal memperbarui akun.");
+    return handleActionError(err, "Gagal memperbarui akun.");
   }
 }
 
@@ -412,6 +424,11 @@ export async function deletePaymentAccountAction(
 
     if (existing.branch_id) {
       requireBranchAccess(session, existing.branch_id, "deletePaymentAccountAction");
+    }
+
+    const guardDeleteBranchId = existing.branch_id || session.defaultBranchId;
+    if (guardDeleteBranchId) {
+      await requireActiveStoreSession(supabase, session.brandId, guardDeleteBranchId);
     }
 
     await (supabase as any)
@@ -466,7 +483,7 @@ export async function deletePaymentAccountAction(
     return successResult(true);
   } catch (err: any) {
     console.error("[PaymentAccounts] deletePaymentAccountAction:", err.message);
-    return errorResult(err.message || "Gagal menghapus akun.");
+    return handleActionError(err, "Gagal menghapus akun.");
   }
 }
 
@@ -494,12 +511,17 @@ export async function adjustPaymentAccountBalanceAction(
 
     const { data: account } = await (supabase as any)
       .from("payment_accounts")
-      .select("id, brand_id, current_balance, is_cash_account, is_system_account")
+      .select("id, brand_id, branch_id, current_balance, is_cash_account, is_system_account")
       .eq("id", input.accountId)
       .eq("brand_id", session.brandId)
       .single();
 
     if (!account) return errorResult("Akun tidak ditemukan.");
+
+    const adjBranchId = account.branch_id || session.defaultBranchId;
+    if (adjBranchId) {
+      await requireActiveStoreSession(supabase, session.brandId, adjBranchId);
+    }
 
     const { error: movError } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.accountId,
@@ -540,7 +562,7 @@ export async function adjustPaymentAccountBalanceAction(
     return successResult(mapDbAccount(updated));
   } catch (err: any) {
     console.error("[PaymentAccounts] adjustPaymentAccountBalanceAction:", err.message);
-    return errorResult(err.message || "Gagal menyesuaikan saldo.");
+    return handleActionError(err, "Gagal menyesuaikan saldo.");
   }
 }
 
@@ -589,6 +611,7 @@ export async function repairBranchCashAccountAction(
     requireBranchAccess(session, branchId, "repairBranchCashAccountAction");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: existing } = await (supabase as any)
       .from("payment_accounts")
@@ -648,7 +671,7 @@ export async function repairBranchCashAccountAction(
     return successResult(mapDbAccount(created));
   } catch (err: any) {
     console.error("[PaymentAccounts] repairBranchCashAccountAction:", err.message);
-    return errorResult(err.message || "Gagal memperbaiki akun kas cabang.");
+    return handleActionError(err, "Gagal memperbaiki akun kas cabang.");
   }
 }
 

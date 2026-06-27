@@ -50,6 +50,7 @@ declare
   v_payment_account_id uuid;
   v_method_type text;
   v_mdr_pct numeric;
+  v_mdr_min_transaction numeric := 0;
   v_mdr_amount numeric;
   v_net_amount numeric;
   v_pa_movement_id uuid;
@@ -64,8 +65,8 @@ begin
   end if;
 
   -- 2. Validate payment method and resolve account from branch_payment_methods
-  select bpm.payment_account_id, bpm.method_type, bpm.mdr_percentage
-  into v_payment_account_id, v_method_type, v_mdr_pct
+  select bpm.payment_account_id, bpm.method_type, bpm.mdr_percentage, bpm.mdr_min_transaction
+  into v_payment_account_id, v_method_type, v_mdr_pct, v_mdr_min_transaction
   from public.branch_payment_methods bpm
   where bpm.id = p_payment_method_id
     and bpm.brand_id = p_brand_id
@@ -95,6 +96,7 @@ begin
   end if;
 
   v_mdr_pct := coalesce(v_mdr_pct, 0);
+  v_mdr_min_transaction := coalesce(v_mdr_min_transaction, 0);
 
   -- 3. Generate transaction number
   v_transaction_number := public.generate_pos_transaction_number(p_brand_id);
@@ -370,7 +372,7 @@ begin
   end if;
 
   -- 7. Calculate MDR and net amount
-  v_mdr_amount := public.calculate_pos_mdr(v_method_type, v_total_amount, v_mdr_pct);
+  v_mdr_amount := public.calculate_pos_mdr(v_method_type, v_total_amount, v_mdr_pct, v_mdr_min_transaction);
   v_net_amount := v_total_amount - v_mdr_amount;
 
   -- 8. Calculate change for CASH
@@ -406,6 +408,7 @@ begin
       'paid_amount', p_paid_amount,
       'change_amount', v_change_amount,
       'mdr_amount', v_mdr_amount,
+      'mdr_min_transaction', v_mdr_min_transaction,
       'method_type', v_method_type
     ),
     p_created_by         := p_created_by

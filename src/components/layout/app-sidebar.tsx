@@ -17,6 +17,7 @@ import {
   LogOut,
   Loader2,
   UserPlus,
+  UserCog,
 } from "lucide-react";
 
 import {
@@ -30,6 +31,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuSubButton,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -72,10 +74,8 @@ function itemPermission(href: string): string | null {
   if (href === "services") return "service.view";
   if (href === "customers") return "customer.view";
   if (href === "pos-v4") return "pos.view";
-  if (href === "pos") return "pos.view";
   if (href === "store-shift") return "store_shift.view";
   if (href === "inventory-v4") return "inventory.view";
-  if (href === "inventory") return "inventory.view";
   if (href === "stock-reports") return "inventory.view";
   if (href === "finance") return "finance.view";
   if (href === "finance/cashflow") return "cashflow.view";
@@ -179,7 +179,6 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
       { href: "services", label: "Service" },
       { href: "customers", label: "Customers" },
       { href: "pos-v4", label: "POS" },
-      { href: "pos", label: "POS (Legacy)", adminOnly: true },
       { href: "store-shift", label: "Store Shift" },
     ],
   },
@@ -188,7 +187,6 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     icon: Package,
     items: [
       { href: "inventory-v4", label: "Inventory" },
-      { href: "inventory", label: "Inventory (Legacy)", adminOnly: true },
       { href: "stock-reports", label: "Laporan Stok" },
     ],
   },
@@ -227,6 +225,8 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
 
 interface AppSidebarProps {
   brandSlug: string;
+  brandName: string;
+  brandLogoUrl: string | null;
   role: string;
   canAccessAllBranches: boolean;
   authUserId: string;
@@ -237,14 +237,20 @@ interface AppSidebarProps {
   userAvatarUrl?: string | null;
 }
 
-export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail, userAvatarUrl }: AppSidebarProps) {
+export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail, userAvatarUrl }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
     {}
   );
   const [currentSection, setCurrentSection] = React.useState<string | null>(null);
+  const [brandImageFailed, setBrandImageFailed] = React.useState(false);
   const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleNavClick = React.useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
 
   const handleBranchSwitch = React.useCallback(async (branchId: string | null) => {
     if (isSwitching) return;
@@ -351,11 +357,20 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <span className="text-sm font-bold">K</span>
-                  </div>
+                  {brandLogoUrl && !brandImageFailed ? (
+                    <img
+                      src={brandLogoUrl}
+                      alt={brandName}
+                      className="aspect-square size-8 rounded-lg object-cover"
+                      onError={() => setBrandImageFailed(true)}
+                    />
+                  ) : (
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                      <span className="text-sm font-bold">{getInitials(brandName)}</span>
+                    </div>
+                  )}
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Kasservice</span>
+                    <span className="truncate font-semibold">{brandName}</span>
                     {activeBranchName && (
                       <span className="truncate text-xs text-muted-foreground">{activeBranchName}</span>
                     )}
@@ -377,12 +392,21 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                       disabled={isSwitching}
                       onClick={() => handleBranchSwitch(null)}
                     >
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
-                        K
-                      </div>
+                      {brandLogoUrl && !brandImageFailed ? (
+                        <img
+                          src={brandLogoUrl}
+                          alt={brandName}
+                          className="size-7 shrink-0 rounded-md object-cover"
+                          onError={() => setBrandImageFailed(true)}
+                        />
+                      ) : (
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
+                          {getInitials(brandName)}
+                        </div>
+                      )}
                       <div className="grid flex-1 gap-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Kasservice</span>
+                          <span className="text-sm font-medium">{brandName}</span>
                           <Badge
                             variant="secondary"
                             className="h-5 rounded-full px-2 text-[10px] font-normal"
@@ -422,7 +446,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                         {branch.name}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        Kasservice
+                        {brandName}
                       </span>
                     </div>
                     {activeBranchId === branch.id && (
@@ -454,7 +478,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                     }
                     asChild
                   >
-                    <Link href={`/${brandSlug}/panel/dashboard`}>
+                    <Link href={`/${brandSlug}/panel/dashboard`} onClick={handleNavClick}>
                       <LayoutDashboard />
                       <span>Dashboard</span>
                     </Link>
@@ -513,6 +537,7 @@ export function AppSidebar({ brandSlug, role, canAccessAllBranches, authUserId, 
                                 >
                                   <Link
                                     href={`/${brandSlug}/panel/${item.href}`}
+                                    onClick={handleNavClick}
                                   >
                                     <span>{item.label}</span>
                                   </Link>
@@ -585,6 +610,7 @@ function AccountSwitcher({
   userEmail: string;
   avatarUrl: string | null;
 }) {
+  const router = useRouter();
   const { setActiveBranchId } = useActiveBranch();
   const [popoverOpen, setPopoverOpen] = React.useState(false);
   const [isSwitching, setIsSwitching] = React.useState(false);
@@ -838,6 +864,16 @@ function AccountSwitcher({
                 <UserPlus className="size-4" />
               </span>
               Add Account
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-sidebar-accent"
+              onClick={() => router.push(`/${brandSlug}/panel/account`)}
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted-foreground/30">
+                <UserCog className="size-4" />
+              </span>
+              Pengaturan Akun
             </button>
             <button
               type="button"

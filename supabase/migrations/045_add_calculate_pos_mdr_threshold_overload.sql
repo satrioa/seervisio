@@ -6,6 +6,8 @@
 -- version with mdr_min_transaction threshold support.
 -- ============================================================
 
+drop function if exists public.calculate_pos_mdr(text, numeric, numeric, numeric);
+
 create or replace function public.calculate_pos_mdr(
   p_method_type text,
   p_amount numeric,

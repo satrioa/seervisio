@@ -60,11 +60,11 @@ create policy ic_insert on public.inventory_categories
   for insert
   with check (
     exists (
-      select 1 from public.brand_memberships bm
+      select 1 from public.user_brand_memberships bm
       where bm.brand_id = inventory_categories.brand_id
         and bm.profile_id = auth.uid()
         and bm.role in ('MASTER_ADMIN', 'ADMIN')
-        and bm.deleted_at is null
+        and bm.is_active = true
     )
   );
 
@@ -74,11 +74,11 @@ create policy ic_update on public.inventory_categories
   using (true)
   with check (
     exists (
-      select 1 from public.brand_memberships bm
+      select 1 from public.user_brand_memberships bm
       where bm.brand_id = inventory_categories.brand_id
         and bm.profile_id = auth.uid()
         and bm.role in ('MASTER_ADMIN', 'ADMIN')
-        and bm.deleted_at is null
+        and bm.is_active = true
     )
   );
 
@@ -87,11 +87,11 @@ create policy ic_delete on public.inventory_categories
   for delete
   using (
     exists (
-      select 1 from public.brand_memberships bm
+      select 1 from public.user_brand_memberships bm
       where bm.brand_id = inventory_categories.brand_id
         and bm.profile_id = auth.uid()
         and bm.role in ('MASTER_ADMIN', 'ADMIN')
-        and bm.deleted_at is null
+        and bm.is_active = true
     )
   );
 

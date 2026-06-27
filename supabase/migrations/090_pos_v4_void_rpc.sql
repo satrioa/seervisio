@@ -35,6 +35,7 @@ comment on table public.pos_transaction_reversals is
 -- RLS
 alter table public.pos_transaction_reversals enable row level security;
 
+drop policy if exists pos_transaction_reversals_select on public.pos_transaction_reversals;
 create policy pos_transaction_reversals_select
   on public.pos_transaction_reversals for select
   using (
@@ -42,6 +43,7 @@ create policy pos_transaction_reversals_select
     and (branch_id = any(get_user_branch_ids()) or get_user_roles() && array['MASTER_ADMIN'::text])
   );
 
+drop policy if exists pos_transaction_reversals_insert on public.pos_transaction_reversals;
 create policy pos_transaction_reversals_insert
   on public.pos_transaction_reversals for insert
   with check (

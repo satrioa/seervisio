@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
@@ -97,10 +97,11 @@ export async function saveBrandSettingsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "settings.manage");
 
+    await requireActiveStoreSession(createServerSupabase(), session.brandId, session.defaultBranchId);
+
     const adminDb = createServiceRoleSupabaseClient();
 
     const settings = await getBrandSettings(adminDb as any, session.brandId);
-    const storeName = settings?.storeName ?? session.brandName;
     const currentBusinessHours = settings?.businessHours ?? {};
     const currentMetadata = settings?.metadata ?? {};
 
@@ -120,7 +121,7 @@ export async function saveBrandSettingsAction(
       afterJson = data;
     }
 
-    await upsertBrandSettings(adminDb as any, session.brandId, storeName, updates);
+    await upsertBrandSettings(adminDb as any, session.brandId, updates);
 
     /* Audit log */
     const sectionLabels: Record<string, string> = {
@@ -148,7 +149,7 @@ export async function saveBrandSettingsAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[saveBrandSettingsAction]", err);
-    return errorResult(err.message ?? "Gagal menyimpan pengaturan.");
+    return handleActionError(err, "Gagal menyimpan pengaturan.");
   }
 }
 
@@ -161,6 +162,8 @@ export async function sendTestEmailAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "settings.manage");
+
+    await requireActiveStoreSession(createServerSupabase(), session.brandId, session.defaultBranchId);
 
     const supabase = await createServerSupabase();
     const { data: { user } } = await supabase.auth.getUser();
@@ -205,6 +208,6 @@ export async function sendTestEmailAction(
     return successResult({ messageId: result.messageId });
   } catch (err: any) {
     console.error("[sendTestEmailAction]", err);
-    return errorResult(err.message ?? "Gagal mengirim email test.");
+    return handleActionError(err, "Gagal mengirim email test.");
   }
 }

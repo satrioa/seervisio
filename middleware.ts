@@ -64,38 +64,68 @@ export async function middleware(request: NextRequest) {
 
   // Check if this is a panel route
   const isPanelRoute = /^\/[^/]+\/panel(\/.*)?$/.test(pathname);
+  const isPlatformRoute = pathname.startsWith("/platform");
 
   // If it's a public route, pass through
   if (isPublicRoute) {
-    // If user is already logged in and visiting /login, redirect to their brand
+    // If user is already logged in and visiting /login, redirect to their brand or platform
     if (pathname === "/login" && user) {
-      // Try to find which brand they belong to
-      const membershipResult = await (
+      const { data: profile } = await (
         supabase
-          .from("user_brand_memberships")
-          .select("brand_id")
-          .eq("profile_id", user.id)
+          .from("profiles")
+          .select("id")
+          .eq("auth_user_id", user.id)
           .single() as unknown as Promise<{
-          data: { brand_id: number | null } | null;
+          data: { id: string } | null;
         }>
       );
 
-      if (membershipResult.data?.brand_id) {
-        const brandResult = await (
+      if (profile) {
+        const { data: memberships } = await (
           supabase
-            .from("brands")
-            .select("slug")
-            .eq("id", membershipResult.data.brand_id)
-            .single() as unknown as Promise<{ data: { slug: string } | null }>
+            .from("user_brand_memberships")
+            .select("brand_id, role")
+            .eq("profile_id", profile.id)
+            .eq("is_active", true) as unknown as Promise<{
+            data: Array<{ brand_id: number | null; role: string }> | null;
+          }>
         );
 
-        if (brandResult.data?.slug) {
-          url.pathname = `/${brandResult.data.slug}/panel/dashboard`;
-          return NextResponse.redirect(url);
+        if (memberships && memberships.length > 0) {
+          const platformOwner = memberships.find(
+            (m) => m.role === "PLATFORM_OWNER" && m.brand_id === null
+          );
+          if (platformOwner) {
+            url.pathname = "/platform/dashboard";
+            return NextResponse.redirect(url);
+          }
+
+          const brandMembership = memberships.find((m) => m.brand_id !== null);
+          if (brandMembership) {
+            const brandResult = await (
+              supabase
+                .from("brands")
+                .select("slug")
+                .eq("id", brandMembership.brand_id as number)
+                .single() as unknown as Promise<{ data: { slug: string } | null }>
+            );
+
+            if (brandResult.data?.slug) {
+              url.pathname = `/${brandResult.data.slug}/panel/dashboard`;
+              return NextResponse.redirect(url);
+            }
+          }
         }
       }
     }
     return supabaseResponse;
+  }
+
+  // If platform route and not authenticated, redirect to login
+  if (isPlatformRoute && !user) {
+    url.pathname = "/login";
+    url.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(url);
   }
 
   // If panel route and not authenticated, redirect to login
@@ -158,6 +188,38 @@ export async function middleware(request: NextRequest) {
         url.searchParams.set("error", "no_brand_access");
         return NextResponse.redirect(url);
       }
+    } else {
+      // Brand slug may have changed — redirect to user's first brand
+      const membershipResult = await (
+        supabase
+          .from("user_brand_memberships")
+          .select("brand_id")
+          .eq("profile_id", profile.id)
+          .not("brand_id", "is", null)
+          .limit(1)
+          .single() as unknown as Promise<{ data: { brand_id: number } | null }>
+      );
+
+      if (membershipResult.data?.brand_id) {
+        const brandByIdResult = await (
+          supabase
+            .from("brands")
+            .select("slug")
+            .eq("id", membershipResult.data.brand_id)
+            .single() as unknown as Promise<{ data: { slug: string } | null }>
+        );
+
+        if (brandByIdResult.data?.slug) {
+          const newPath = pathname.replace(/^\/[^/]+/, `/${brandByIdResult.data.slug}`);
+          url.pathname = newPath;
+          return NextResponse.redirect(url);
+        }
+      }
+
+      // No brand found — redirect to login
+      url.pathname = "/login";
+      url.searchParams.set("error", "no_brand_access");
+      return NextResponse.redirect(url);
     }
   }
 

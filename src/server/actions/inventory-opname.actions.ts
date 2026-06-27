@@ -7,6 +7,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 import { can } from "@/lib/permissions/can";
@@ -202,11 +204,12 @@ export async function adjustInventoryOpnameAction(
       return errorResult("Pilih cabang terlebih dahulu.");
     }
 
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, effectiveBranchId);
+
     if (!input.adjustments || input.adjustments.length === 0) {
       return errorResult("Tidak ada penyesuaian yang dilakukan.");
     }
-
-    const supabase = await createServerSupabase();
     let updatedCount = 0;
 
     for (const adj of input.adjustments) {
@@ -322,6 +325,6 @@ export async function adjustInventoryOpnameAction(
 
     return successResult({ updatedCount });
   } catch (e: any) {
-    return errorResult(e.message ?? "Gagal melakukan penyesuaian stok opname");
+    return handleActionError(e, "Gagal melakukan penyesuaian stok opname");
   }
 }

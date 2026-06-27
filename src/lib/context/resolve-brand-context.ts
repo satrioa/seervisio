@@ -13,12 +13,14 @@ import type { AppContext } from "./app-context";
 import type { Role } from "@/lib/permissions/roles";
 import { ROLES } from "@/lib/permissions/roles";
 import { getBrandBySlug } from "@/repositories/brand.repository";
+import { getBrandSettings } from "@/repositories/brand-settings.repository";
 import {
   getMembershipForBrand,
   getBranchAccessForMembership,
   getDefaultBranchId,
 } from "@/repositories/profile.repository";
 import { NotFoundError, AuthError } from "@/lib/utils/errors";
+import { toDirectImageUrl } from "@/lib/utils/url";
 
 /**
  * Resolve the full AppContext for a user accessing a specific brand.
@@ -45,7 +47,23 @@ export async function resolveBrandContext(
   }
 
   // Step 2: Find user's membership for this brand
-  const membership = await getMembershipForBrand(supabase, session.profileId, brand.id);
+  // First check if user has a platform-wide membership (PLATFORM_OWNER with brand_id = NULL)
+  const platformMembership = session.memberships.find(
+    (m) => m.role === ROLES.PLATFORM_OWNER && m.brandId === null,
+  );
+
+  let membership;
+  if (platformMembership) {
+    membership = {
+      id: platformMembership.id,
+      profile_id: session.profileId,
+      brand_id: null,
+      role: ROLES.PLATFORM_OWNER,
+      is_active: true,
+    };
+  } else {
+    membership = await getMembershipForBrand(supabase, session.profileId, brand.id);
+  }
 
   if (!membership) {
     throw new AuthError(`Anda tidak memiliki akses ke brand "${brand.name}"`);
@@ -92,7 +110,10 @@ export async function resolveBrandContext(
     .maybeSingle();
   const avatarUrl = profileRow?.avatar_url ?? null;
 
-  // Step 8: Build and return the AppContext
+  // Step 8: Get brand settings (includes logo_url)
+  const brandSettings = await getBrandSettings(supabase, brand.id);
+
+  // Step 9: Build and return the AppContext
   return {
     profileId: session.profileId,
     authUserId: session.authUserId,
@@ -103,6 +124,7 @@ export async function resolveBrandContext(
     brandId: brand.id,
     brandSlug: brand.slug,
     brandName: brand.name,
+    brandLogoUrl: toDirectImageUrl(brandSettings?.logoUrl ?? null),
     branchId: effectiveDefaultBranchId,
     branchName: null,
     accessibleBranchIds: effectiveAccessibleBranchIds,

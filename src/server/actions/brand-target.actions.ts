@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import {
   getBrandTarget,
@@ -64,6 +64,9 @@ export async function saveBrandTargetAction(
     requireActionPermission(session.role, "settings.manage");
 
     const adminDb = createServiceRoleSupabaseClient();
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
+    }
 
     if (data.brandMonthly < 0 || data.brandYearly < 0) {
       return errorResult("Target tidak boleh negatif.");
@@ -101,6 +104,6 @@ export async function saveBrandTargetAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[saveBrandTargetAction]", err);
-    return errorResult(err.message ?? "Gagal menyimpan target.");
+    return handleActionError(err, "Gagal menyimpan target.");
   }
 }

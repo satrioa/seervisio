@@ -86,7 +86,6 @@ export async function saveBrandTheme(
       .from("brand_settings")
       .insert({
         brand_id: brandId,
-        store_name: "Brand",
         theme_primary_color: input.primaryColor,
         theme_accent_color: input.accentColor,
         theme_mode: input.mode,

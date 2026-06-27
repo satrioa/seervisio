@@ -2,7 +2,7 @@
 
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, requireActiveStoreSession, type ActionResult } from "./action-helper";
 import {
   getAccounts,
   createAccount,
@@ -16,6 +16,8 @@ import {
   type AccountRow,
 } from "@/server/repositories/account.repository";
 import { addAuditLog } from "@/repositories/service.repository";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { getBrandSubscription } from "@/repositories/branch.repository";
 
 export type { AccountRow };
 
@@ -48,6 +50,27 @@ export async function createAccountAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "user.manage");
+
+    const adminDb = createServiceRoleSupabaseClient();
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
+    }
+
+    /* Check user limit */
+    const sub = await getBrandSubscription(adminDb as any, session.brandId);
+    const maxUsers = sub?.maxUsers ?? 5;
+
+    const { count: currentUsers } = await (adminDb as any)
+      .from("user_brand_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("brand_id", session.brandId)
+      .eq("is_active", true);
+
+    if ((currentUsers ?? 0) >= maxUsers) {
+      return errorResult(
+        "Jumlah pengguna telah mencapai batas paket Anda. Upgrade paket untuk menambah pengguna baru."
+      );
+    }
 
     const result = await createAccount(
       session.brandId,
@@ -96,7 +119,7 @@ export async function createAccountAction(
     return successResult({ profileId: result.profileId, authUserId, authWarning });
   } catch (err: any) {
     console.error("[Account] createAccountAction:", err);
-    return errorResult(err.message || "Gagal membuat akun.");
+    return handleActionError(err, "Gagal membuat akun.");
   }
 }
 
@@ -113,8 +136,10 @@ export async function resetPasswordAction(
       return errorResult("Password minimal 8 karakter.");
     }
 
-    /* Get auth_user_id from profiles table */
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
     const { data: profile, error: profErr } = await db
       .from("profiles")
       .select("auth_user_id")
@@ -138,7 +163,7 @@ export async function resetPasswordAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] resetPasswordAction:", err);
-    return errorResult(err.message || "Gagal mereset password.");
+    return handleActionError(err, "Gagal mereset password.");
   }
 }
 
@@ -151,8 +176,12 @@ export async function deleteAccountFromBrandAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "user.manage");
 
-    /* Verify membership belongs to this brand */
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
+
+    /* Verify membership belongs to this brand */
     const { data: membership, error: memCheckErr } = await db
       .from("user_brand_memberships")
       .select("id, profile_id, role, is_active")
@@ -192,7 +221,7 @@ export async function deleteAccountFromBrandAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] deleteAccountFromBrandAction:", err);
-    return errorResult(err.message || "Gagal menghapus akses.");
+    return handleActionError(err, "Gagal menghapus akses.");
   }
 }
 
@@ -204,6 +233,11 @@ export async function linkAccountAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "user.manage");
+
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
 
     const result = await linkExistingAuthUser(email, profileId);
 
@@ -221,7 +255,7 @@ export async function linkAccountAction(
     return successResult(result);
   } catch (err: any) {
     console.error("[Account] linkAccountAction:", err);
-    return errorResult(err.message || "Gagal menghubungkan akun login.");
+    return handleActionError(err, "Gagal menghubungkan akun login.");
   }
 }
 
@@ -239,6 +273,11 @@ export async function updateAccountAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "user.manage");
+
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
 
     if (updates.role !== undefined || updates.isActive === false) {
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
@@ -268,7 +307,7 @@ export async function updateAccountAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] updateAccountAction:", err);
-    return errorResult(err.message || "Gagal mengubah akun.");
+    return handleActionError(err, "Gagal mengubah akun.");
   }
 }
 
@@ -280,6 +319,11 @@ export async function toggleAccountActiveAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "user.manage");
+
+    const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
 
     if (!active) {
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
@@ -304,7 +348,7 @@ export async function toggleAccountActiveAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] toggleAccountActiveAction:", err);
-    return errorResult(err.message || "Gagal mengubah status akun.");
+    return handleActionError(err, "Gagal mengubah status akun.");
   }
 }
 
@@ -318,6 +362,10 @@ export async function updateAccountAvatarAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
+    if (session.defaultBranchId) {
+      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
+    }
+
     const { error } = await db
       .from("profiles")
       .update({ avatar_url: avatarUrl })
@@ -328,6 +376,6 @@ export async function updateAccountAvatarAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[Account] updateAccountAvatarAction:", err);
-    return errorResult(err.message || "Gagal memperbarui foto profil.");
+    return handleActionError(err, "Gagal memperbarui foto profil.");
   }
 }

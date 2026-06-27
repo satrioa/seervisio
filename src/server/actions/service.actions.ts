@@ -3,7 +3,7 @@
  */
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { fromDbStatus } from "@/domain/service/service-workflow";
@@ -624,6 +624,9 @@ export async function createServiceAction(
 
     if (!branch) return errorResult("Cabang tidak ditemukan atau bukan milik brand ini.");
     requireBranchAccess(session, branchId, "createServiceAction");
+
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
+
     if (!input.customerName?.trim()) return errorResult("Nama customer wajib diisi.");
     if (!input.reportedIssue?.trim()) return errorResult("Keluhan wajib diisi.");
 
@@ -751,8 +754,13 @@ export async function createServiceAction(
           deviceModel: input.deviceModel?.trim() ?? "",
         },
       });
+      console.log("[notification:event] SERVICE_CREATED triggered", {
+        serviceNumber,
+        brandId,
+        branchId,
+      });
     } catch (notifErr: any) {
-      console.warn("[service:create] notification error:", notifErr.message);
+      console.warn("[notification:error] SERVICE_CREATED failed:", notifErr.message);
     }
 
     if (input.dpAmount && input.dpAmount > 0 && input.dpPaymentMethodId) {
@@ -826,7 +834,7 @@ export async function createServiceAction(
     return successResult({ serviceId: service.id, serviceNumber });
   } catch (err: any) {
     console.error("[createServiceAction]", err);
-    return errorResult(err.message ?? "Gagal membuat servis.");
+    return handleActionError(err, "Gagal membuat servis.");
   }
 }
 
@@ -914,13 +922,15 @@ export async function assignServiceTechnicianAction(
 
     const { data: service } = await (adminDb as any)
       .from("services")
-      .select("id, service_number, brand_id, branch_id, assigned_technician_id, current_status")
+      .select("id, service_number, brand_id, branch_id, assigned_technician_id, current_status, customer_id, device_type, device_brand, device_model")
       .eq("id", serviceId)
       .is("deleted_at", null)
       .maybeSingle();
 
     if (!service) return errorResult("Servis tidak ditemukan.");
     if (service.brand_id !== session.brandId) return errorResult("Servis bukan milik brand ini.");
+
+    await requireActiveStoreSession(adminDb as any, session.brandId, service.branch_id);
 
     if (technicianProfileId) {
       const { data: techMembership } = await (adminDb as any)
@@ -1006,10 +1016,38 @@ export async function assignServiceTechnicianAction(
       console.warn("[assignServiceTechnicianAction] audit log failed", auditErr);
     }
 
+    /* Notify TECHNICIAN_ASSIGNED */
+    try {
+      if (technicianProfileId) {
+        let techCustName = "";
+        if (service.customer_id) {
+          const { data: cust } = await (adminDb as any)
+            .from("customers")
+            .select("name")
+            .eq("id", service.customer_id)
+            .maybeSingle();
+          techCustName = cust?.name ?? "";
+        }
+        await sendOperationalNotification({
+          brandId: session.brandId,
+          branchId: service.branch_id,
+          eventType: "TECHNICIAN_ASSIGNED",
+          actorProfileId: session.profileId,
+          payload: {
+            serviceNumber: service.service_number,
+            technicianName: technicianName ?? "",
+            customerName: techCustName,
+          },
+        });
+      }
+    } catch (notifErr: any) {
+      console.warn("[assignServiceTechnicianAction] notification error:", notifErr.message);
+    }
+
     return successResult({ technicianName });
   } catch (err: any) {
     console.error("[assignServiceTechnicianAction]", err);
-    return errorResult(err.message ?? "Gagal menugaskan teknisi.");
+    return handleActionError(err, "Gagal menugaskan teknisi.");
   }
 }
 

@@ -65,14 +65,14 @@ ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view purchases in their brand"
   ON purchases FOR SELECT
   USING (
-    brand_id IN (SELECT get_user_brand_ids())
+    brand_id = any(public.get_user_brand_ids())
   );
 
 CREATE POLICY "Users can insert purchases in their brand"
   ON purchases FOR INSERT
   WITH CHECK (
-    brand_id IN (SELECT get_user_brand_ids())
-    AND branch_id IN (SELECT get_user_branch_ids())
+    brand_id = any(public.get_user_brand_ids())
+    AND branch_id = any(public.get_user_branch_ids())
   );
 
 -- ============================================================
@@ -104,13 +104,13 @@ ALTER TABLE purchase_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view purchase items via purchase"
   ON purchase_items FOR SELECT
   USING (
-    purchase_id IN (SELECT id FROM purchases WHERE brand_id IN (SELECT get_user_brand_ids()))
+    purchase_id IN (SELECT id FROM purchases WHERE brand_id = any(public.get_user_brand_ids()))
   );
 
 CREATE POLICY "Users can insert purchase items"
   ON purchase_items FOR INSERT
   WITH CHECK (
-    purchase_id IN (SELECT id FROM purchases WHERE brand_id IN (SELECT get_user_brand_ids()))
+    purchase_id IN (SELECT id FROM purchases WHERE brand_id = any(public.get_user_brand_ids()))
   );
 
 -- ============================================================
@@ -132,13 +132,13 @@ CREATE TABLE IF NOT EXISTS purchase_number_counters (
 ALTER TABLE purchase_number_counters ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view counters in their brand"
   ON purchase_number_counters FOR SELECT
-  USING (brand_id IN (SELECT get_user_brand_ids()));
+  USING (brand_id = any(public.get_user_brand_ids()));
 CREATE POLICY "Users can insert counters in their brand"
   ON purchase_number_counters FOR INSERT
-  WITH CHECK (brand_id IN (SELECT get_user_brand_ids()));
+  WITH CHECK (brand_id = any(public.get_user_brand_ids()));
 CREATE POLICY "Users can update counters in their brand"
   ON purchase_number_counters FOR UPDATE
-  USING (brand_id IN (SELECT get_user_brand_ids()));
+  USING (brand_id = any(public.get_user_brand_ids()));
 
 -- ============================================================
 -- 6. INVENTORY MOVEMENTS NEW COLUMNS RLS UPDATE
@@ -150,8 +150,8 @@ DROP POLICY IF EXISTS "Users can insert movements in their branch" ON inventory_
 CREATE POLICY "Users can insert movements in their branch"
   ON inventory_movements FOR INSERT
   WITH CHECK (
-    brand_id IN (SELECT get_user_brand_ids())
-    AND branch_id IN (SELECT get_user_branch_ids())
+    brand_id = any(public.get_user_brand_ids())
+    AND branch_id = any(public.get_user_branch_ids())
   );
 
 -- ============================================================

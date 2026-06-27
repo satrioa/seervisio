@@ -5,8 +5,10 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { resolveBrandContext } from "@/lib/context/resolve-brand-context";
 import { resolveActiveOperator } from "@/lib/auth/active-operator";
+import { getImpersonationCookie } from "@/lib/auth/impersonation";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
 import { PanelLayoutClient } from "./panel-layout-client";
+import { ROLES } from "@/lib/permissions/roles";
 
 interface PanelLayoutProps {
   children: React.ReactNode;
@@ -26,13 +28,20 @@ export default async function PanelLayout({
     redirect("/login");
   }
 
-  // Step 2: Resolve brand context (validates access)
+  // Step 2: Detect impersonation
+  const impersonatingBrandSlug = await getImpersonationCookie();
+  const isPlatformOwner = authResult.user.memberships.some(
+    (m) => m.role === ROLES.PLATFORM_OWNER
+  );
+  const isImpersonating = isPlatformOwner && impersonatingBrandSlug === brandSlug;
+
+  // Step 3: Resolve brand context (validates access)
   const supabase = await createServerSupabase();
 
   try {
     const context = await resolveBrandContext(supabase, authResult.user, brandSlug);
 
-    // Step 3: Check active operator override (staff quick-switch)
+    // Step 4: Check active operator override (staff quick-switch)
     const activeOperator = await resolveActiveOperator(supabase, context.brandId, context.profileId);
 
     let effectiveContext = context;
@@ -50,6 +59,8 @@ export default async function PanelLayout({
     return (
       <PanelLayoutClient
         brandSlug={brandSlug}
+        brandName={effectiveContext.brandName}
+        brandLogoUrl={effectiveContext.brandLogoUrl}
         branches={accessibleBranches}
         initialBranchId={effectiveContext.branchId}
         role={effectiveContext.role}
@@ -60,12 +71,32 @@ export default async function PanelLayout({
         userName={effectiveContext.name}
         userEmail={effectiveContext.email}
         userAvatarUrl={effectiveContext.avatarUrl}
+        isImpersonating={isImpersonating}
       >
         {children}
       </PanelLayoutClient>
     );
   } catch (error) {
     if (error instanceof Error && error.message.includes("tidak ditemukan")) {
+      // Brand slug may have changed — try to resolve from user's memberships
+      const brandIds = authResult.user.memberships
+        .map((m) => m.brandId)
+        .filter((id): id is number => id !== null && id !== undefined);
+
+      if (brandIds.length > 0) {
+        const { data: fallbackBrand } = await (supabase as any)
+          .from("brands")
+          .select("slug")
+          .in("id", brandIds)
+          .limit(1)
+          .maybeSingle();
+
+        if (fallbackBrand?.slug) {
+          const targetPath = `/${fallbackBrand.slug}/panel/dashboard`;
+          redirect(targetPath);
+        }
+      }
+
       notFound();
     }
     // Permission error or other — show access denied

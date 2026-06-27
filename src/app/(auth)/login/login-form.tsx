@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
+import { resolveLoginRedirectAction } from "@/server/actions/resolve-brand.action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,18 +27,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   unknown: "Terjadi kesalahan. Silakan coba lagi.",
 };
 
-const DEFAULT_REDIRECT = "/kasservice/panel/dashboard";
+async function resolveRedirectTarget(redirectTo?: string | null): Promise<string> {
+  if (redirectTo && redirectTo !== "/login" && redirectTo.startsWith("/")) {
+    return redirectTo;
+  }
 
-function getSafeRedirect(redirectTo?: string | null) {
-  if (!redirectTo) return DEFAULT_REDIRECT;
-
-  // Hindari redirect balik ke login.
-  if (redirectTo === "/login") return DEFAULT_REDIRECT;
-
-  // Hindari external redirect.
-  if (!redirectTo.startsWith("/")) return DEFAULT_REDIRECT;
-
-  return redirectTo;
+  return resolveLoginRedirectAction();
 }
 
 export function LoginForm() {
@@ -100,7 +95,8 @@ export function LoginForm() {
         // Record last_login_at (non-blocking)
         updateLastLoginAt(supabase, data.user.id);
 
-        const target = getSafeRedirect(redirectTo);
+        // Resolve redirect target using current brand slug from DB
+        const target = await resolveRedirectTarget(redirectTo);
 
         // Full reload supaya Server Components membaca session/cookie terbaru.
         window.location.href = target;

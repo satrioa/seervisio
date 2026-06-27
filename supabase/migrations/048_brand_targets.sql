@@ -21,6 +21,7 @@ create index if not exists idx_brand_targets_brand
 
 alter table public.brand_targets enable row level security;
 
+drop policy if exists brand_targets_select on public.brand_targets;
 create policy brand_targets_select on public.brand_targets
   for select using (
     'PLATFORM_OWNER' = any(public.get_user_roles())
@@ -28,6 +29,7 @@ create policy brand_targets_select on public.brand_targets
     or brand_id = any(public.get_user_brand_ids())
   );
 
+drop policy if exists brand_targets_insert on public.brand_targets;
 create policy brand_targets_insert on public.brand_targets
   for insert with check (
     'PLATFORM_OWNER' = any(public.get_user_roles())
@@ -35,6 +37,7 @@ create policy brand_targets_insert on public.brand_targets
     or brand_id = any(public.get_user_brand_ids())
   );
 
+drop policy if exists brand_targets_update on public.brand_targets;
 create policy brand_targets_update on public.brand_targets
   for update using (
     'PLATFORM_OWNER' = any(public.get_user_roles())
@@ -42,6 +45,7 @@ create policy brand_targets_update on public.brand_targets
     or brand_id = any(public.get_user_brand_ids())
   );
 
+drop policy if exists brand_targets_delete on public.brand_targets;
 create policy brand_targets_delete on public.brand_targets
   for delete using (
     'PLATFORM_OWNER' = any(public.get_user_roles())

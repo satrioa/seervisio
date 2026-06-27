@@ -3,7 +3,7 @@
  */
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, requireActiveStoreSession, handleActionError, OperationalGuardError, type ActionResult } from "./action-helper";
 import { hasPermission } from "@/lib/permissions/require-permission";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 import {
@@ -111,6 +111,8 @@ export async function updateServiceStatusAction(
     }
 
     requireBranchAccess(session, service.branch_id, "updateServiceStatusAction");
+
+    await requireActiveStoreSession(supabase, session.brandId, service.branch_id);
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     const nextStatus = normalizeServiceStatus(input.nextStatus);
@@ -297,6 +299,36 @@ export async function updateServiceStatusAction(
 
     // ── End direct update ──
 
+    /* Notify SERVICE_STATUS_CHANGED for every transition */
+    try {
+      let statusCustomerName = service.customer?.name ?? "";
+      if (!statusCustomerName && service.customer_id) {
+        const { data: cust } = await (supabase as any)
+          .from("customers")
+          .select("name")
+          .eq("id", service.customer_id)
+          .maybeSingle();
+        statusCustomerName = cust?.name ?? "";
+      }
+      await sendOperationalNotification({
+        brandId: service.brand_id,
+        branchId: service.branch_id,
+        eventType: "SERVICE_STATUS_CHANGED",
+        actorProfileId: session.profileId,
+        payload: {
+          serviceNumber: service.service_number,
+          customerName: statusCustomerName,
+          fromStatus: service.current_status ?? "",
+          toStatus: dbNextStatus ?? "",
+          deviceType: service.device_type ?? "",
+          deviceBrand: service.device_brand ?? "",
+          deviceModel: service.device_model ?? "",
+        },
+      });
+    } catch (notifErr: any) {
+      console.warn("[updateServiceStatusAction] SERVICE_STATUS_CHANGED notification error:", notifErr.message);
+    }
+
     if (dbNextStatus === "DONE") {
       const { data: payments } = await (supabase as any)
         .from("service_payments")
@@ -328,6 +360,10 @@ export async function updateServiceStatusAction(
             .maybeSingle();
           customerName = cust?.name ?? "";
         }
+        console.log("[notification:event] SERVICE_COMPLETED triggered", {
+          serviceNumber: service.service_number,
+          brandId: service.brand_id,
+        });
         await sendOperationalNotification({
           brandId: service.brand_id,
           branchId: service.branch_id,
@@ -342,7 +378,7 @@ export async function updateServiceStatusAction(
           },
         });
       } catch (notifErr: any) {
-        console.warn("[updateServiceStatusAction] notification error:", notifErr.message);
+        console.warn("[notification:error] SERVICE_COMPLETED failed:", notifErr.message);
       }
     }
 
@@ -366,7 +402,7 @@ export async function updateServiceStatusAction(
     });
   } catch (err: any) {
     console.error("[updateServiceStatusAction]", err);
-    return errorResult(err.message ?? "Gagal mengubah status servis.");
+    return handleActionError(err, "Gagal mengubah status servis.");
   }
 }
 
@@ -388,6 +424,8 @@ export async function cancelServiceAction(
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "cancelServiceAction");
+
+    await requireActiveStoreSession(createServerSupabase(), session.brandId, service.branch_id);
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     const userRole = session.role as unknown as ServiceWorkflowRole;
@@ -434,7 +472,7 @@ export async function cancelServiceAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[cancelServiceAction]", err);
-    return errorResult(err.message ?? "Gagal membatalkan servis.");
+    return handleActionError(err, "Gagal membatalkan servis.");
   }
 }
 
@@ -455,6 +493,8 @@ export async function reopenServiceAction(
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "reopenServiceAction");
+
+    await requireActiveStoreSession(createServerSupabase(), session.brandId, service.branch_id);
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     const userRole = session.role as unknown as ServiceWorkflowRole;
@@ -483,7 +523,7 @@ export async function reopenServiceAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[reopenServiceAction]", err);
-    return errorResult(err.message ?? "Gagal membuka ulang servis.");
+    return handleActionError(err, "Gagal membuka ulang servis.");
   }
 }
 
@@ -513,6 +553,8 @@ export async function addServiceSparepartAction(
     const service = await getServiceById(input.serviceId);
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "addServiceSparepartAction");
+
+    await requireActiveStoreSession(createServerSupabase(), session.brandId, service.branch_id);
 
     const currentStatus = normalizeServiceStatus(service.current_status);
     if (currentStatus !== "PERBAIKAN" && currentStatus !== "QC") {
@@ -609,7 +651,7 @@ export async function addServiceSparepartAction(
     return successResult({ usageIds });
   } catch (err: any) {
     console.error("[addServiceSparepartAction]", err);
-    return errorResult(err.message ?? "Gagal menambahkan sparepart.");
+    return handleActionError(err, "Gagal menambahkan sparepart.");
   }
 }
 
@@ -695,8 +737,8 @@ export async function receiveServicePaymentAction(
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "receiveServicePaymentAction");
 
-    const { createServerSupabase } = await import("@/lib/supabase/server");
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, service.branch_id);
 
     // Validate branch_payment_method belongs to service branch
     const { data: bpm, error: bpmErr } = await (supabase as any)
@@ -808,6 +850,11 @@ export async function receiveServicePaymentAction(
     });
 
     try {
+      console.log("[notification:event] PAYMENT_RECEIVED triggered", {
+        serviceNumber: service.service_number,
+        brandId: service.brand_id,
+        amount: input.amount,
+      });
       await sendOperationalNotification({
         brandId: service.brand_id,
         branchId: service.branch_id,
@@ -820,14 +867,16 @@ export async function receiveServicePaymentAction(
         },
       });
     } catch (notifErr: any) {
-      console.warn("[receiveServicePaymentAction] notification error:", notifErr.message);
+      console.warn("[notification:error] PAYMENT_RECEIVED failed:", notifErr.message);
     }
 
     return successResult(paymentResult);
   } catch (err: any) {
     console.error("[receiveServicePaymentAction]", err);
-    if (err.message?.includes("exceeds")) return errorResult("Nominal pembayaran melebihi sisa tagihan.");
-    return errorResult(err.message ?? "Gagal menerima pembayaran.");
+    if (!(err instanceof OperationalGuardError) && err.message?.includes("exceeds")) {
+      return errorResult("Nominal pembayaran melebihi sisa tagihan.");
+    }
+    return handleActionError(err, "Gagal menerima pembayaran.");
   }
 }
 
@@ -997,6 +1046,9 @@ export async function verifyServicePickupAction(
     if (!service) return errorResult("Servis tidak ditemukan.");
     requireBranchAccess(session, service.branch_id, "verifyServicePickupAction");
 
+    const guardSupabase = await createServerSupabase();
+    await requireActiveStoreSession(guardSupabase, session.brandId, service.branch_id);
+
     // 1. Validate service is SELESAI (DONE) and not already picked up
     if (service.current_status !== "DONE") {
       return errorResult("Servis belum selesai. Hanya unit selesai yang dapat diambil.");
@@ -1033,10 +1085,8 @@ export async function verifyServicePickupAction(
       return errorResult("Pelunasan diperlukan sebelum unit diserahkan.");
     }
 
-    // 6. Update pickup fields - use dynamic import to avoid circular deps
-    const { createServerSupabase } = await import("@/lib/supabase/server");
-    const supabase = await createServerSupabase();
-    const { error: updateError } = await (supabase as any)
+    // 6. Update pickup fields
+    const { error: updateError } = await (guardSupabase as any)
       .from("services")
       .update({
         picked_up_at: new Date().toISOString(),
@@ -1087,6 +1137,6 @@ export async function verifyServicePickupAction(
     return successResult(undefined);
   } catch (err: any) {
     console.error("[verifyServicePickupAction]", err);
-    return errorResult(err.message ?? "Gagal memverifikasi pengambilan unit.");
+    return handleActionError(err, "Gagal memverifikasi pengambilan unit.");
   }
 }

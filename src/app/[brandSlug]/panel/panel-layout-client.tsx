@@ -25,10 +25,13 @@ import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
 import { StoreShiftProvider } from "@/features/store-shift/store-shift-provider";
 import { saveRememberedAccount, loadRememberedAccounts } from "@/lib/auth/remembered-accounts";
 import { ROLE_LABELS } from "@/lib/permissions/roles";
+import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
   brandSlug: string;
+  brandName: string;
+  brandLogoUrl: string | null;
   branches: ActiveBranchOption[];
   initialBranchId: string | null;
   role: string;
@@ -39,6 +42,7 @@ interface PanelLayoutClientProps {
   userName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  isImpersonating?: boolean;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -67,6 +71,8 @@ function getPageTitle(pathname: string | null) {
 export function PanelLayoutClient({
   children,
   brandSlug,
+  brandName,
+  brandLogoUrl,
   branches,
   initialBranchId,
   role,
@@ -77,13 +83,14 @@ export function PanelLayoutClient({
   userName,
   userEmail,
   userAvatarUrl,
+  isImpersonating = false,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
           <PosCartProvider>
-            <PanelLayoutShell brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating}>{children}</PanelLayoutShell>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -94,6 +101,8 @@ export function PanelLayoutClient({
 function PanelLayoutShell({
   children,
   brandSlug,
+  brandName,
+  brandLogoUrl,
   role,
   canAccessAllBranches,
   authUserId,
@@ -102,6 +111,7 @@ function PanelLayoutShell({
   userName,
   userEmail,
   userAvatarUrl,
+  isImpersonating,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -232,9 +242,12 @@ function PanelLayoutShell({
 
   return (
     <StoreShiftProvider>
-      <div className="flex h-screen overflow-hidden bg-sidebar text-sidebar-foreground">
+      {isImpersonating && (
+        <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
+      )}
+      <div className={`flex overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100vh-40px)]" : "h-screen"}`}>
         <SidebarProvider>
-          <AppSidebar brandSlug={brandSlug} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
+          <AppSidebar brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
 
           <SidebarInset className={`h-screen min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
             {/* ── Desktop header ── */}

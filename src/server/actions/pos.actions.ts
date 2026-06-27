@@ -196,6 +196,7 @@ export async function createPosSaleAction(
     const branch = resolveSessionBranchId(session, input.branchId);
     if (branch.error) return errorResult(branch.error);
     const branchId = branch.branchId;
+    await requireActiveStoreSession(supabase, session.brandId, branchId);
     const brandId = input.brandId || session.brandId;
 
     // ── 2. Validate Cart ──
@@ -203,7 +204,6 @@ export async function createPosSaleAction(
       return errorResult("Keranjang masih kosong.");
     }
 
-    // ── 3. Lightweight request validation only. The RPC is authoritative. ──
     for (const cartItem of input.cartItems) {
       if (!cartItem.inventoryItemId) {
         return errorResult("Produk tidak valid.");
@@ -296,7 +296,7 @@ export async function createPosSaleAction(
     return successResult(rpcResult.data);
   } catch (err: any) {
     console.error("[createPosSaleAction]", err);
-    return errorResult(err.message || "Gagal memproses penjualan.");
+    return handleActionError(err, "Gagal memproses penjualan.");
   }
 }
 

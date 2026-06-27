@@ -33,6 +33,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "settings.manage", "payment.method.manage", "payment.account.manage",
     "user.manage", "branch.manage",
     "audit_log.view",
+    "data.manage",
   ],
   MASTER_ADMIN: [
     "layout.view_panel",
@@ -52,8 +53,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "store_shift.view", "store_shift.open", "store_shift.close",
     "finance_transaction.view", "finance_transaction.create_income", "finance_transaction.create_expense", "finance_transaction.void", "finance_transaction.export",
     "settings.manage", "payment.method.manage", "payment.account.manage",
-    "user.manage",
+    "user.manage", "branch.manage",
     "audit_log.view",
+    "data.manage",
   ],
   ADMIN: [
     "layout.view_panel",

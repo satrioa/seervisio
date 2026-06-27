@@ -7,6 +7,8 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
+  requireActiveStoreSession,
+  handleActionError,
   type ActionResult,
 } from "./action-helper";
 
@@ -367,6 +369,7 @@ export async function createOtherIncomeAction(
     requireBranchAccess(session, input.branchId, "createOtherIncomeAction");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
@@ -418,7 +421,7 @@ export async function createOtherIncomeAction(
     return successResult(mapMovement(created));
   } catch (err: any) {
     console.error("[FinanceTransaction] createOtherIncomeAction:", err.message);
-    return errorResult(err.message || "Gagal membuat pendapatan.");
+    return handleActionError(err, "Gagal membuat pendapatan.");
   }
 }
 
@@ -433,6 +436,7 @@ export async function createOperatingExpenseAction(
     requireBranchAccess(session, input.branchId, "createOperatingExpenseAction");
 
     const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
@@ -484,7 +488,7 @@ export async function createOperatingExpenseAction(
     return successResult(mapMovement(created));
   } catch (err: any) {
     console.error("[FinanceTransaction] createOperatingExpenseAction:", err.message);
-    return errorResult(err.message || "Gagal membuat pengeluaran.");
+    return handleActionError(err, "Gagal membuat pengeluaran.");
   }
 }
 
@@ -516,6 +520,8 @@ export async function voidFinanceTransactionAction(
     if (!MANUAL_TYPES.has(original.movement_type)) {
       return errorResult("Tipe transaksi ini tidak dapat dibatalkan dari halaman ini.");
     }
+
+    await requireActiveStoreSession(supabase, session.brandId, original.branch_id);
 
     const reverseDirection = original.direction === "IN" ? "OUT" : "IN";
 
@@ -566,6 +572,6 @@ export async function voidFinanceTransactionAction(
     return successResult(null);
   } catch (err: any) {
     console.error("[FinanceTransaction] voidFinanceTransactionAction:", err.message);
-    return errorResult(err.message || "Gagal membatalkan transaksi.");
+    return handleActionError(err, "Gagal membatalkan transaksi.");
   }
 }

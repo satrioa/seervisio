@@ -119,7 +119,6 @@ select
   ii.stock_type,
   ii.appears_in_pos,
   ii.service_usage_enabled,
-  ii.unit_attributes,
   ii.name,
   ii.sku,
   ii.barcode,

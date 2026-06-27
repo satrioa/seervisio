@@ -8,7 +8,6 @@ type DbBrandSettingsUpdate = Database["public"]["Tables"]["brand_settings"]["Upd
 export interface BrandSettingsData {
   id: string;
   brandId: number;
-  storeName: string;
   tagline: string | null;
   logoUrl: string | null;
   faviconUrl: string | null;
@@ -21,25 +20,33 @@ export interface BrandSettingsData {
   receiptFooter: string | null;
   businessHours: Record<string, any> | null;
   metadata: Record<string, any> | null;
+  themePrimaryColor: string;
+  themeAccentColor: string;
+  themeMode: string;
+  themeTokens: Record<string, any> | null;
 }
 
 function mapRow(row: DbBrandSettings): BrandSettingsData {
+  const r = row as any;
   return {
-    id: row.id,
-    brandId: row.brand_id,
-    storeName: row.store_name,
-    tagline: row.tagline,
-    logoUrl: row.logo_url,
-    faviconUrl: row.favicon_url,
-    accentColor: row.accent_color,
-    phone: row.phone,
-    email: row.email,
-    address: row.address,
-    whatsappNumber: row.whatsapp_number,
-    invoiceFooter: row.invoice_footer,
-    receiptFooter: row.receipt_footer,
-    businessHours: row.business_hours as Record<string, any> | null,
-    metadata: row.metadata as Record<string, any> | null,
+    id: r.id,
+    brandId: r.brand_id,
+    tagline: r.tagline,
+    logoUrl: r.logo_url,
+    faviconUrl: r.favicon_url,
+    accentColor: r.accent_color,
+    phone: r.phone,
+    email: r.email,
+    address: r.address,
+    whatsappNumber: r.whatsapp_number,
+    invoiceFooter: r.invoice_footer,
+    receiptFooter: r.receipt_footer,
+    businessHours: r.business_hours as Record<string, any> | null,
+    metadata: r.metadata as Record<string, any> | null,
+    themePrimaryColor: r.theme_primary_color ?? "#F59E0B",
+    themeAccentColor: r.theme_accent_color ?? "#D4A017",
+    themeMode: r.theme_mode ?? "light",
+    themeTokens: (r.theme_tokens as Record<string, any> | null) ?? null,
   };
 }
 
@@ -60,7 +67,6 @@ export async function getBrandSettings(
 export async function upsertBrandSettings(
   supabase: SupabaseClient<any, any, any>,
   brandId: number,
-  storeName: string,
   updates: {
     business_hours?: Record<string, any>;
     metadata?: Record<string, any>;
@@ -86,8 +92,7 @@ export async function upsertBrandSettings(
   } else {
     const payload: DbBrandSettingsInsert = {
       brand_id: brandId,
-      store_name: storeName,
-    };
+    } as any;
     if (updates.business_hours !== undefined) payload.business_hours = updates.business_hours as any;
     if (updates.metadata !== undefined) payload.metadata = updates.metadata as any;
 

@@ -37,6 +37,20 @@ import { listServicesAction, getServiceDetailAction, getSessionRoleAction } from
 
 type ViewMode = "list" | "kanban";
 
+function useIsMobile(breakpoint = 1024) {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 const viewTransition = {
   transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
 };
@@ -232,6 +246,21 @@ function ServicesPageContent() {
       router.replace(newUrl, { scroll: false });
     },
     [searchParams, router, pathname]
+  );
+
+  const isMobile = useIsMobile(1024);
+
+  const handleShowDetail = React.useCallback(
+    (service: ServiceRecord) => {
+      if (isMobile) {
+        setSelectedServiceId(service.id);
+        setIsDetailOpen(true);
+        updateUrlParam(service.id);
+      } else {
+        showDetail(service);
+      }
+    },
+    [isMobile, showDetail, updateUrlParam]
   );
 
   const handleCardDoubleClick = React.useCallback(
@@ -547,6 +576,7 @@ function ServicesPageContent() {
                   onServiceUpdated={handleServiceUpdated}
                   onOpenPayment={handleOpenPayment}
                   onOpenSparepart={handleOpenSparepart}
+                  onShowDetail={handleShowDetail}
                 />
               </motion.div>
             ) : (

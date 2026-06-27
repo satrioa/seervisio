@@ -56,14 +56,51 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
     throw new Error("Profile not found");
   }
 
-  // Get brand by slug
-  const brand = await getBrandBySlug(supabase as any, brandSlug);
+  // Get brand by slug (may fail if slug was recently changed)
+  let brand = await getBrandBySlug(supabase as any, brandSlug);
+
+  // Brand slug may have changed — resolve from user's membership
+  if (!brand) {
+    const { data: membership } = await (supabase as any)
+      .from("user_brand_memberships")
+      .select("brand_id")
+      .eq("profile_id", profile.id)
+      .not("brand_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (membership?.brand_id) {
+      const { data: brandById } = await (supabase as any)
+        .from("brands")
+        .select("id, name, slug")
+        .eq("id", membership.brand_id)
+        .maybeSingle();
+
+      if (brandById) {
+        brand = brandById;
+      }
+    }
+  }
+
   if (!brand) {
     throw new Error("Brand not found");
   }
 
   // Get membership for this brand
-  const membership = await getMembershipForBrand(supabase as any, profile.id, brand.id);
+  let membership = await getMembershipForBrand(supabase as any, profile.id, brand.id);
+
+  // If no brand-specific membership, check for PLATFORM_OWNER (brand_id = NULL)
+  if (!membership) {
+    const { data: platformMembership } = await (supabase as any)
+      .from("user_brand_memberships")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .is("brand_id", null)
+      .eq("role", "PLATFORM_OWNER")
+      .maybeSingle();
+    membership = platformMembership;
+  }
+
   if (!membership) {
     throw new Error("Brand access denied");
   }
@@ -142,4 +179,56 @@ export function requireAllBranchesScope(session: { role: Role; accessibleBranchI
   if (!canUseAllBranchesScope({ role: session.role, accessibleBranchIds: session.accessibleBranchIds })) {
     throw new Error("Scope semua cabang tidak tersedia untuk role Anda.");
   }
+}
+
+/**
+ * Assert there is an active store shift (i.e. toko sedang buka).
+ * Throws with a STORE_NOT_OPEN code if no active shift exists for the given branch.
+ *
+ * For brand-level actions (no specific branch), pass the user's defaultBranchId
+ * or first accessible branch. If no branch is available, the check is skipped
+ * (e.g. platform owner without branch assignment).
+ */
+export async function requireActiveStoreSession(
+  supabase: any,
+  brandId: number,
+  branchId: string | null | undefined,
+): Promise<void> {
+  if (!branchId) return;
+
+  const { data, error } = await supabase
+    .from("store_shifts")
+    .select("id")
+    .eq("brand_id", brandId)
+    .eq("branch_id", branchId)
+    .eq("shift_status", "OPEN")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Gagal memverifikasi status toko.");
+  }
+
+  if (!data) {
+    throw new OperationalGuardError("Toko belum dibuka. Buka toko terlebih dahulu untuk melakukan operasi ini.");
+  }
+}
+
+export class OperationalGuardError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OperationalGuardError";
+  }
+}
+
+/**
+ * Wraps error handling for action catch blocks.
+ * If the error is an OperationalGuardError, returns STORE_NOT_OPEN code.
+ * Otherwise returns a generic error message.
+ */
+export function handleActionError(err: unknown, fallbackMessage = "Terjadi kesalahan."): ActionResult<never> {
+  if (err instanceof OperationalGuardError) {
+    return errorResult(err.message, "STORE_NOT_OPEN");
+  }
+  const message = err instanceof Error ? err.message : fallbackMessage;
+  return errorResult(message);
 }

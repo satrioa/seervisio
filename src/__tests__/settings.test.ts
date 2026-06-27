@@ -9,28 +9,36 @@ describe("Settings Module", () => {
       id: 1,
       name: "Seervis Semarang",
       slug: "seervis-semarang",
-      address: "Jl. Pemuda No. 123",
-      phone: "081234567890",
-      email: "info@seervis.com",
-      description: "Service center elektronik",
-      logo_url: "https://storage.example.com/logo.png",
     };
 
-    it("must load brand profile data from brands table", () => {
-      const profile = VALID_BRAND;
-      expect(profile.name).toBeTruthy();
-      expect(profile.slug).toBeTruthy();
+    const VALID_BRAND_SETTINGS = {
+      id: "uuid-1",
+      brandId: 1,
+      storeName: "Seervis Semarang",
+      tagline: "Service center elektronik",
+      phone: "081234567890",
+      email: "info@seervis.com",
+      address: "Jl. Pemuda No. 123",
+      logoUrl: "https://storage.example.com/logo.png",
+      whatsappNumber: null,
+      invoiceFooter: null,
+      receiptFooter: null,
+    };
+
+    it("must load brand profile data from brand_settings table", () => {
+      const profile = VALID_BRAND_SETTINGS;
+      expect(profile.storeName).toBeTruthy();
       expect(profile.phone).toBeTruthy();
       expect(profile.email).toBeTruthy();
     });
 
-    it("must persist updates to brands table after save", () => {
+    it("must persist updates to brand_settings table after save", () => {
       const updated = {
-        ...VALID_BRAND,
-        name: "Seervis Semarang Updated",
+        ...VALID_BRAND_SETTINGS,
+        storeName: "Seervis Semarang Updated",
         phone: "081298765432",
       };
-      expect(updated.name).toBe("Seervis Semarang Updated");
+      expect(updated.storeName).toBe("Seervis Semarang Updated");
       expect(updated.phone).toBe("081298765432");
     });
 

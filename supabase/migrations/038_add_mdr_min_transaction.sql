@@ -43,7 +43,7 @@ begin
 end;
 $func$;
 
-comment on function public.calculate_pos_mdr is
+comment on function public.calculate_pos_mdr(text, numeric, numeric, numeric) is
   'POS MDR: TRANSFER/CASH=0, QRIS threshold 500000, else method pct. Respects mdr_min_transaction.';
 
 -- 3. Update resolve_pos_payment_account to return mdr_min_transaction
@@ -196,14 +196,18 @@ declare
   v_item_type text;
   v_variant_id uuid;
   v_unit_id uuid;
-  v_variant_row public.inv_variants%rowtype;
-  v_product_row public.inv_products%rowtype;
+  v_variant_name text;
+  v_product_name text;
+  v_attributes jsonb;
+  v_status text;
+  v_sold_price numeric;
+  v_acquisition_cost numeric;
   v_stock_row public.inv_variant_stocks%rowtype;
   v_stock_before numeric;
   v_stock_after numeric;
-  v_unit_row public.inv_units%rowtype;
   v_quantity numeric;
   v_selling_price numeric;
+  v_cost_price numeric;
   v_cost_snapshot numeric;
   v_movement_id uuid;
   v_movement_ids uuid[] := '{}';
@@ -286,8 +290,12 @@ begin
     if v_item_type = 'UNIT_SECOND_SERIALIZED' then
       v_unit_id := (v_item->>'unit_id')::uuid;
 
-      select u.*, v.*, p.*
-      into strict v_unit_row, v_variant_row, v_product_row
+      select u.status, u.sold_price, u.acquisition_cost,
+             v.name, v.attributes,
+             p.name
+      into strict v_status, v_sold_price, v_acquisition_cost,
+             v_variant_name, v_attributes,
+             v_product_name
       from public.inv_units u
       join public.inv_variants v on v.id = u.variant_id
       join public.inv_products p on p.id = v.product_id
@@ -298,10 +306,10 @@ begin
       for update;
 
       v_quantity := 1;
-      v_cost_snapshot := v_unit_row.acquisition_cost;
-      v_item_name_snapshot := v_product_row.name;
-      v_variant_name_snapshot := v_variant_row.name;
-      v_attributes_snapshot := v_variant_row.attributes;
+      v_cost_snapshot := v_acquisition_cost;
+      v_item_name_snapshot := v_product_name;
+      v_variant_name_snapshot := v_variant_name;
+      v_attributes_snapshot := v_attributes;
 
       -- Mark unit as sold
       update public.inv_units
@@ -319,7 +327,7 @@ begin
         movement_date, notes, created_by
       ) values (
         v_movement_id, p_brand_id, p_branch_id, 'OUT', 'pos_transaction', v_transaction_id,
-        v_variant_row.id, v_unit_id, 1, -1, 0,
+        v_variant_id, v_unit_id, 1, -1, 0,
         now(), 'POS ' || v_transaction_number, p_created_by
       );
       v_movement_ids := v_movement_ids || v_movement_id;
@@ -330,7 +338,7 @@ begin
         product_name, attributes_snapshot,
         selling_price, cost_price, quantity, subtotal
       ) values (
-        v_transaction_id, v_item_type, v_variant_row.id, v_unit_id,
+        v_transaction_id, v_item_type, v_variant_id, v_unit_id,
         v_variant_name_snapshot, v_item_name_snapshot, v_attributes_snapshot,
         v_selling_price, v_cost_snapshot, v_quantity,
         v_selling_price * v_quantity
@@ -340,8 +348,10 @@ begin
       v_variant_id := (v_item->>'variant_id')::uuid;
       v_quantity := (v_item->>'quantity')::numeric;
 
-      select v.*, p.*
-      into strict v_variant_row, v_product_row
+      select v.name, v.cost_price, v.attributes,
+             p.name
+      into strict v_variant_name, v_cost_price, v_attributes,
+             v_product_name
       from public.inv_variants v
       join public.inv_products p on p.id = v.product_id
       where v.id = v_variant_id
@@ -349,10 +359,10 @@ begin
         and v.deleted_at is null
       for update;
 
-      v_cost_snapshot := v_variant_row.cost_price;
-      v_item_name_snapshot := v_product_row.name;
-      v_variant_name_snapshot := v_variant_row.name;
-      v_attributes_snapshot := v_variant_row.attributes;
+      v_cost_snapshot := v_cost_price;
+      v_item_name_snapshot := v_product_name;
+      v_variant_name_snapshot := v_variant_name;
+      v_attributes_snapshot := v_attributes;
 
       -- Check and deduct stock
       select * into v_stock_row
@@ -388,7 +398,7 @@ begin
         movement_date, notes, created_by
       ) values (
         v_movement_id, p_brand_id, p_branch_id, 'OUT', 'pos_transaction', v_transaction_id,
-        v_variant_row.id, v_stock_before, -v_quantity, v_stock_after,
+        v_variant_id, v_stock_before, -v_quantity, v_stock_after,
         now(), 'POS ' || v_transaction_number, p_created_by
       );
       v_movement_ids := v_movement_ids || v_movement_id;
@@ -398,7 +408,7 @@ begin
         product_name, attributes_snapshot,
         selling_price, cost_price, quantity, subtotal
       ) values (
-        v_transaction_id, v_item_type, v_variant_row.id, null,
+        v_transaction_id, v_item_type, v_variant_id, null,
         v_variant_name_snapshot, v_item_name_snapshot, v_attributes_snapshot,
         v_selling_price, v_cost_snapshot, v_quantity,
         v_selling_price * v_quantity
