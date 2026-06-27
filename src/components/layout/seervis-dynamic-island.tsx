@@ -9,6 +9,7 @@ import {
 } from "react";
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DynamicIslandProvider,
@@ -29,6 +30,7 @@ import {
 import { type DynamicIslandFeedbackPayload } from "@/lib/dynamic-island/dynamic-island-events";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { useStoreShift } from "@/features/store-shift/store-shift-provider";
+import { StoreShiftCloseModal } from "@/components/store-shift/StoreShiftCloseModal";
 
 /* ── Types ── */
 type IslandMode = "welcome" | "idle" | "expanded" | "feedback";
@@ -77,10 +79,12 @@ function getFeedbackDimensions(actionState: ActionState) {
 
 /* ── Inner component ── */
 function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; onOpenShift?: () => void }) {
+  const pathname = usePathname();
+  const brandSlug = pathname.split("/")[1];
   const { setSize } = useDynamicIslandSize();
   const { activeBranchName } = useActiveBranch();
   const displayBranchName = activeBranchName ?? "Semua Cabang";
-  const { activeShift, isShiftLoading } = useStoreShift();
+  const { activeShift, isShiftLoading, refreshShiftStatus } = useStoreShift();
 
   const hasActiveShift = activeShift !== null && activeShift.shiftStatus === "OPEN";
 
@@ -99,6 +103,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
   const shiftStartRef = useRef<Date | null>(null);
   const islandRef = useRef<HTMLDivElement | null>(null);
   const [errorShake, setErrorShake] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
 
   /* Feedback dynamic text */
   const [feedbackTitle, setFeedbackTitle] = useState("");
@@ -302,6 +307,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
     mode === "expanded" ? "0 18px 40px rgba(15, 23, 42, 0.22)" : "none";
 
   return (
+    <>
     <motion.div
       ref={islandRef}
       className="flex origin-center cursor-pointer items-center justify-center rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-black/10 dark:bg-white dark:text-black dark:hover:border-black/20"
@@ -496,7 +502,13 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
                 size="sm"
                 variant="outline"
                 className="h-9 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMode("idle");
+                  setSize("compact" as any);
+                  setIsExpanded(false);
+                  setShowCloseModal(true);
+                }}
               >
                 <LogOut className="size-3.5" />
                 Akhiri Shift
@@ -564,6 +576,18 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
         )}
       </AnimatePresence>
     </motion.div>
+
+    {activeShift && (
+      <StoreShiftCloseModal
+        open={showCloseModal}
+        onOpenChange={setShowCloseModal}
+        brandSlug={brandSlug}
+        shiftId={activeShift.id}
+        expectedCash={activeShift.expectedClosingCash ?? null}
+        onSuccess={() => { refreshShiftStatus(); }}
+      />
+    )}
+  </>
   );
 }
 

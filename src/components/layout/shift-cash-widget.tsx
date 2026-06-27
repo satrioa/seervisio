@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Wallet, ChevronRight, Store, Clock, User, Timer,
   X, AlertTriangle, Loader2, ArrowUpRight, ArrowDownRight,
-  BadgeCheck, Ban, Plus, LogOut,
+  BadgeCheck, Ban, Plus, LogOut, ArrowRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,25 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { useStoreShift } from "@/features/store-shift/store-shift-provider";
 import { getStoreShiftOverviewAction } from "@/server/actions/store-shift.actions";
+import { createOtherIncomeAction, createOperatingExpenseAction } from "@/server/actions/finance-transaction.actions";
+import { listPaymentAccountsAction } from "@/server/actions/payment-account.actions";
+import { StoreShiftCloseModal } from "@/components/store-shift/StoreShiftCloseModal";
+import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 import type { Role } from "@/lib/permissions/roles";
 import { ROLE_LABELS } from "@/lib/permissions/roles";
 
@@ -67,6 +82,27 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [duration, setDuration] = useState("");
 
+  /* Income quick action */
+  const [showIncome, setShowIncome] = useState(false);
+  const [incAmount, setIncAmount] = useState("");
+  const [incDesc, setIncDesc] = useState("");
+  const [incAccount, setIncAccount] = useState("");
+  const [incAccounts, setIncAccounts] = useState<any[]>([]);
+  const [incLoading, setIncLoading] = useState(false);
+  const [incError, setIncError] = useState<string | null>(null);
+
+  /* Expense quick action */
+  const [showExpense, setShowExpense] = useState(false);
+  const [expAmount, setExpAmount] = useState("");
+  const [expDesc, setExpDesc] = useState("");
+  const [expAccount, setExpAccount] = useState("");
+  const [expAccounts, setExpAccounts] = useState<any[]>([]);
+  const [expLoading, setExpLoading] = useState(false);
+  const [expError, setExpError] = useState<string | null>(null);
+
+  /* Close shift quick action */
+  const [showCloseShift, setShowCloseShift] = useState(false);
+
   const isGeneralMode = !activeBranchId || activeBranchId === "ALL_BRANCHES";
 
   /* Format duration */
@@ -104,6 +140,94 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     }
     setOverviewLoading(false);
   }, [brandSlug, activeBranchId, isGeneralMode]);
+
+  /* ── Income / Expense Quick Action Handlers ── */
+
+  const openIncomeForm = useCallback(async () => {
+    setIncAmount("");
+    setIncDesc("");
+    setIncAccount("");
+    setIncError(null);
+    setIncLoading(true);
+    const result = await listPaymentAccountsAction(brandSlug, activeBranchId!);
+    if (result.success) {
+      setIncAccounts(result.data);
+      if (result.data.length > 0) setIncAccount(result.data[0].id);
+    } else {
+      setIncError(result.error);
+    }
+    setIncLoading(false);
+    setShowIncome(true);
+  }, [brandSlug, activeBranchId]);
+
+  const handleCreateIncome = useCallback(async () => {
+    if (!incAmount || !incDesc || !incAccount) return;
+    const amount = parseInt(incAmount.replace(/[^0-9]/g, ""), 10);
+    if (amount <= 0) { setIncError("Jumlah harus lebih dari 0."); return; }
+    setIncLoading(true);
+    setIncError(null);
+    const today = new Date().toISOString().split("T")[0];
+    const result = await createOtherIncomeAction({
+      brandSlug,
+      branchId: activeBranchId!,
+      paymentAccountId: incAccount,
+      category: "Lainnya",
+      amount,
+      description: incDesc.trim(),
+      date: today,
+    });
+    setIncLoading(false);
+    if (result.success) {
+      setShowIncome(false);
+      triggerDynamicIslandFeedback({ type: "success", title: "Pemasukan berhasil dicatat" });
+      openDrawer(); // refresh overview
+    } else {
+      setIncError(result.error);
+    }
+  }, [brandSlug, activeBranchId, incAmount, incDesc, incAccount, openDrawer]);
+
+  const openExpenseForm = useCallback(async () => {
+    setExpAmount("");
+    setExpDesc("");
+    setExpAccount("");
+    setExpError(null);
+    setExpLoading(true);
+    const result = await listPaymentAccountsAction(brandSlug, activeBranchId!);
+    if (result.success) {
+      setExpAccounts(result.data);
+      if (result.data.length > 0) setExpAccount(result.data[0].id);
+    } else {
+      setExpError(result.error);
+    }
+    setExpLoading(false);
+    setShowExpense(true);
+  }, [brandSlug, activeBranchId]);
+
+  const handleCreateExpense = useCallback(async () => {
+    if (!expAmount || !expDesc || !expAccount) return;
+    const amount = parseInt(expAmount.replace(/[^0-9]/g, ""), 10);
+    if (amount <= 0) { setExpError("Jumlah harus lebih dari 0."); return; }
+    setExpLoading(true);
+    setExpError(null);
+    const today = new Date().toISOString().split("T")[0];
+    const result = await createOperatingExpenseAction({
+      brandSlug,
+      branchId: activeBranchId!,
+      paymentAccountId: expAccount,
+      category: "Lainnya",
+      amount,
+      description: expDesc.trim(),
+      date: today,
+    });
+    setExpLoading(false);
+    if (result.success) {
+      setShowExpense(false);
+      triggerDynamicIslandFeedback({ type: "success", title: "Pengeluaran berhasil dicatat" });
+      openDrawer(); // refresh overview
+    } else {
+      setExpError(result.error);
+    }
+  }, [brandSlug, activeBranchId, expAmount, expDesc, expAccount, openDrawer]);
 
   /* Visibility logic */
   if (role === "TECHNICIAN") return null;
@@ -278,28 +402,161 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
               <section className="mt-auto flex flex-col gap-2 pt-2 border-t">
                 <p className="text-xs font-medium text-muted-foreground">Aksi Cepat</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs justify-center" disabled>
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs justify-center" onClick={openIncomeForm}>
                     <Plus className="size-3.5" /> Tambah Pemasukan
                   </Button>
-                  <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs justify-center" disabled>
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs justify-center" onClick={openExpenseForm}>
                     <Plus className="size-3.5" /> Catat Pengeluaran
                   </Button>
                 </div>
-                {onOpenShift && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-9 gap-1.5 text-xs justify-center"
-                    disabled
-                  >
-                    <LogOut className="size-3.5" /> Akhiri Shift
-                  </Button>
-                )}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-9 gap-1.5 text-xs justify-center"
+                  onClick={() => setShowCloseShift(true)}
+                >
+                  <LogOut className="size-3.5" /> Akhiri Shift
+                </Button>
               </section>
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Income Quick Action Dialog */}
+      <Dialog open={showIncome} onOpenChange={(o) => { if (!o) setShowIncome(false); }}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Plus className="size-4" /> Tambah Pemasukan
+            </DialogTitle>
+            <DialogDescription className="text-xs">Catat pemasukan manual ke kas.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Akun Kas</Label>
+              <Select value={incAccount} onValueChange={setIncAccount} disabled={incLoading}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
+                <SelectContent>
+                  {incAccounts.map((a: any) => (
+                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.account_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Jumlah (Rp)</Label>
+              <Input
+                type="text" inputMode="numeric"
+                placeholder="0"
+                value={incAmount}
+                onChange={(e) => setIncAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                className="h-9 text-xs"
+                disabled={incLoading}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Keterangan</Label>
+              <Textarea
+                placeholder="Deskripsi pemasukan..."
+                value={incDesc}
+                onChange={(e) => setIncDesc(e.target.value)}
+                rows={2}
+                className="text-xs"
+                disabled={incLoading}
+              />
+            </div>
+            {incError && (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="size-4" />
+                <AlertDescription className="text-xs">{incError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowIncome(false)} disabled={incLoading}>Batal</Button>
+            <Button size="sm" className="gap-2" onClick={handleCreateIncome} disabled={incLoading || !incAmount || !incDesc || !incAccount}>
+              {incLoading ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expense Quick Action Dialog */}
+      <Dialog open={showExpense} onOpenChange={(o) => { if (!o) setShowExpense(false); }}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Plus className="size-4" /> Catat Pengeluaran
+            </DialogTitle>
+            <DialogDescription className="text-xs">Catat pengeluaran manual dari kas.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Akun Kas</Label>
+              <Select value={expAccount} onValueChange={setExpAccount} disabled={expLoading}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
+                <SelectContent>
+                  {expAccounts.map((a: any) => (
+                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.account_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Jumlah (Rp)</Label>
+              <Input
+                type="text" inputMode="numeric"
+                placeholder="0"
+                value={expAmount}
+                onChange={(e) => setExpAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                className="h-9 text-xs"
+                disabled={expLoading}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Keterangan</Label>
+              <Textarea
+                placeholder="Deskripsi pengeluaran..."
+                value={expDesc}
+                onChange={(e) => setExpDesc(e.target.value)}
+                rows={2}
+                className="text-xs"
+                disabled={expLoading}
+              />
+            </div>
+            {expError && (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="size-4" />
+                <AlertDescription className="text-xs">{expError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowExpense(false)} disabled={expLoading}>Batal</Button>
+            <Button size="sm" className="gap-2" onClick={handleCreateExpense} disabled={expLoading || !expAmount || !expDesc || !expAccount}>
+              {expLoading ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Shift Modal (reuses existing StoreShiftCloseModal) */}
+      {overview?.activeShift && (
+        <StoreShiftCloseModal
+          open={showCloseShift}
+          onOpenChange={setShowCloseShift}
+          brandSlug={brandSlug}
+          shiftId={overview.activeShift.id}
+          expectedCash={overview.expectedCash}
+          onSuccess={() => {
+            openDrawer(); // refresh overview
+            refreshShiftStatus();
+          }}
+        />
+      )}
     </>
   );
 }

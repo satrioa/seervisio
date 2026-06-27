@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   LayoutDashboard,
+  Sparkles,
   Wrench,
   Package,
   Banknote,
@@ -484,6 +485,27 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+
+                {/* AI Command Center — owner/master_admin only */}
+                {(role === "MASTER_ADMIN" || role === "PLATFORM_OWNER") && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={isActive("ai")}
+                      tooltip="AI Command Center"
+                      className={
+                        isActive("ai")
+                          ? "bg-emerald-500/10 text-emerald-500 shadow-sm hover:bg-emerald-500/15 hover:text-emerald-500 group-data-[collapsible=icon]:bg-emerald-500/10 group-data-[collapsible=icon]:shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }
+                      asChild
+                    >
+                      <Link href={`/${brandSlug}/panel/ai`} onClick={handleNavClick}>
+                        <Sparkles className="size-4" />
+                        <span>AI Command Center</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
 
                 {/* Collapsible nav groups */}
                 {visibleGroups.map((group) => {
