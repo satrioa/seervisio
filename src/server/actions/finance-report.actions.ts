@@ -503,19 +503,6 @@ export async function getFinanceReportAction(
         perf.expense += Number(r.amount || 0);
       }
     }
-    /* Also aggregate from movements for non-ledger data */
-    for (const m of movements) {
-      const perf = branchPerfMap.get(m.branch_id);
-      if (!perf) continue;
-      if (m.movement_type === "OTHER_INCOME" && m.direction === "IN") {
-        perf.otherIncome += Number(m.amount || 0);
-      } else if (
-        ["OPERATING_EXPENSE", "BANK_FEE", "STOCK_PURCHASE"].includes(m.movement_type) &&
-        m.direction === "OUT"
-      ) {
-        perf.expense += Number(m.amount || 0);
-      }
-    }
     for (const svc of services) {
       const perf = branchPerfMap.get(svc.branch_id);
       if (!perf) continue;
@@ -527,10 +514,14 @@ export async function getFinanceReportAction(
       }
     }
 
-    const branchPerformance = Array.from(branchPerfMap.values()).map((bp) => ({
-      ...bp,
-      net: bp.serviceRevenue + bp.posRevenue + bp.otherIncome - bp.expense,
-    }));
+    const branchPerformance = Array.from(branchPerfMap.values()).map((bp) => {
+      const net = bp.serviceRevenue + bp.posRevenue + bp.otherIncome - bp.expense;
+      /* Integrity check */
+      if (net !== bp.serviceRevenue + bp.posRevenue + bp.otherIncome - bp.expense) {
+        console.error(`[Integrity] Branch ${bp.branchName}: service=${bp.serviceRevenue} pos=${bp.posRevenue} other=${bp.otherIncome} expense=${bp.expense} net=${net} — MISMATCH`);
+      }
+      return { ...bp, net };
+    });
 
     /* ── 8. Shift summary ── */
     const shiftSummary: ShiftSummaryItem[] = shifts.map((s: any) => ({

@@ -3,8 +3,9 @@
 import * as React from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, Bell } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { SeervisDynamicIsland } from "@/components/layout/seervis-dynamic-island";
+import { NotificationPopover } from "@/components/notifications/NotificationPopover";
 
 interface UnifiedTopFrameProps {
   brandLogoUrl: string | null;
@@ -107,16 +108,7 @@ export function UnifiedTopFrame({
                 <Moon className="size-4" />
               )}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="relative size-8 rounded-full text-white/40 hover:bg-white/10 hover:text-white"
-              aria-label="Notifications"
-            >
-              <Bell className="size-4" />
-              <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />
-            </Button>
+            <NotificationPopover />
           </div>
         </div>
       </div>

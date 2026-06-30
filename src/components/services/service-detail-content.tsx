@@ -65,6 +65,7 @@ interface ServiceDetailContentProps {
   brandSlug?: string;
   onServiceUpdated?: () => void;
   role?: string;
+  hideStatusSteps?: boolean;
 }
 
 function formatDateTime(value?: string | null): string {
@@ -88,6 +89,7 @@ export function ServiceDetailContent({
   brandSlug: brandSlugProp,
   onServiceUpdated,
   role,
+  hideStatusSteps = false,
 }: ServiceDetailContentProps) {
   const params = useParams();
   const brandSlug = brandSlugProp ?? (params?.brandSlug as string) ?? "";
@@ -221,38 +223,40 @@ export function ServiceDetailContent({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {STATUS_ORDER.map((s, i) => {
-                      const isActive = i <= statusIndex;
-                      const isCurrent = i === statusIndex;
-                      const isLast = i === STATUS_ORDER.length - 1;
-                      return (
-                        <React.Fragment key={s}>
-                          <div className="flex items-center gap-1">
-                            <div
-                              className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
-                                isCurrent
-                                  ? "bg-primary text-primary-foreground"
-                                  : isActive
-                                    ? "bg-primary/15 text-primary"
-                                    : "bg-muted text-muted-foreground/50"
-                              }`}
-                            >
-                              <span className="text-[7px] font-bold">{i + 1}</span>
+                  {!hideStatusSteps && (
+                    <div className="flex items-center gap-1.5">
+                      {STATUS_ORDER.map((s, i) => {
+                        const isActive = i <= statusIndex;
+                        const isCurrent = i === statusIndex;
+                        const isLast = i === STATUS_ORDER.length - 1;
+                        return (
+                          <React.Fragment key={s}>
+                            <div className="flex items-center gap-1">
+                              <div
+                                className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
+                                  isCurrent
+                                    ? "bg-primary text-primary-foreground"
+                                    : isActive
+                                      ? "bg-primary/15 text-primary"
+                                      : "bg-muted text-muted-foreground/50"
+                                }`}
+                              >
+                                <span className="text-[7px] font-bold">{i + 1}</span>
+                              </div>
+                              <span
+                                className={`hidden truncate text-[9px] font-medium sm:inline ${
+                                  isActive ? "text-foreground" : "text-muted-foreground/50"
+                                }`}
+                              >
+                                {STATUS_CONFIG[s].label}
+                              </span>
                             </div>
-                            <span
-                              className={`hidden truncate text-[9px] font-medium sm:inline ${
-                                isActive ? "text-foreground" : "text-muted-foreground/50"
-                              }`}
-                            >
-                              {STATUS_CONFIG[s].label}
-                            </span>
-                          </div>
-                          {!isLast && <div className={`h-px flex-1 ${i < statusIndex ? "bg-primary/40" : "bg-border"}`} />}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
+                            {!isLast && <div className={`h-px flex-1 ${i < statusIndex ? "bg-primary/40" : "bg-border"}`} />}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </section>
 

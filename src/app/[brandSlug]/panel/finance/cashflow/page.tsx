@@ -124,13 +124,13 @@ export default function CashflowPage() {
   useEffect(() => {
     if (!brandSlug) return;
     setAccountsLoading(true);
-    listPaymentAccountsAction(brandSlug, null, null, "ALL").then((r) => {
+    listPaymentAccountsAction(brandSlug, activeBranchId, null, "ALL").then((r) => {
       if (r.success) {
         setAccounts(r.data.map((a) => ({ id: a.id, name: a.accountName })));
       }
       setAccountsLoading(false);
     });
-  }, [brandSlug]);
+  }, [brandSlug, activeBranchId]);
 
   /* Date preset handler */
   const handleDatePreset = useCallback((preset: DatePreset) => {

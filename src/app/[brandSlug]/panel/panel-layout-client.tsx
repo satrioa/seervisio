@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SeervisDynamicIsland } from "@/components/layout/seervis-dynamic-island";
 import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
-import { Bell, Moon, Sun } from "lucide-react";
+import { NotificationPopover } from "@/components/notifications/NotificationPopover";
+import { Moon, Sun } from "lucide-react";
 import { BrandThemeProvider } from "@/components/theme/brand-theme-provider";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { RightSidebarProvider } from "@/components/layout/right-sidebar-context";
@@ -28,6 +29,7 @@ import { ROLE_LABELS } from "@/lib/permissions/roles";
 import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { useThemeTransition } from "@/hooks/use-theme-transition";
 import { SystemLoader } from "@/components/system-loader/SystemLoader";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -362,7 +364,8 @@ function PanelLayoutShell({
     boot.start(tasks);
   }, [brandSlug, boot, setBrandColor]);
 
-  const { mode: theme, toggleTheme } = useBrandTheme();
+  const { mode: theme, toggleTheme: brandToggleTheme } = useBrandTheme();
+  const { toggleTheme } = useThemeTransition({ onToggle: brandToggleTheme });
 
   return (
     <>
@@ -423,16 +426,7 @@ function PanelLayoutShell({
                     <Moon className="size-4" />
                   )}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="relative size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  aria-label="Notifications"
-                >
-                  <Bell className="size-4" />
-                  <span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-500" />
-                </Button>
+                <NotificationPopover />
               </div>
             </header>
 

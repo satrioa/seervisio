@@ -143,7 +143,7 @@ export async function listPaymentAccountsAction(
       .eq("brand_id", session.brandId);
 
     if (branchId && branchId !== "ALL_BRANCHES") {
-      query = query.eq("branch_id", branchId);
+      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
     }
 
     if (scope === "GLOBAL") {

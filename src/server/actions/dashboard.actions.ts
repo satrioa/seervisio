@@ -370,15 +370,23 @@ export async function getDashboardOverviewAction(
 
     const NON_OPERATIONAL = new Set(["OPENING_BALANCE","BALANCE_ADJUSTMENT","TRANSFER_IN","TRANSFER_OUT"]);
 
-    /* ── Revenue ── */
+    /* ── Revenue (source of truth: finance_ledger) ── */
     const serviceRevenue = ledgerRows
       .filter((r: any) => r.entry_type === "SERVICE_REVENUE" && r.direction === "CREDIT")
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    const posRevenue = posSales.reduce((s: number, p: any) => s + Math.max(0, Number(p.paid_amount || p.gross_amount || 0) - Number(p.change_amount || 0)), 0);
-    const otherIncome = movements
+    const posRevenueLedger = ledgerRows
+      .filter((r: any) => r.entry_type === "POS_REVENUE" && r.direction === "CREDIT")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const otherIncomeLedger = ledgerRows
+      .filter((r: any) => r.direction === "CREDIT" && r.entry_type !== "SERVICE_REVENUE" && r.entry_type !== "POS_REVENUE")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const totalRevenue = serviceRevenue + posRevenueLedger + otherIncomeLedger;
+
+    /* Legacy pos_sales value for backward compat calculations */
+    const posRevenueRaw = posSales.reduce((s: number, p: any) => s + Math.max(0, Number(p.paid_amount || p.gross_amount || 0) - Number(p.change_amount || 0)), 0);
+    const otherIncomeRaw = movements
       .filter((m: any) => m.movement_type === "OTHER_INCOME" && m.direction === "IN")
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-    const totalRevenue = serviceRevenue + posRevenue + otherIncome;
 
     const totalExpense = movements
       .filter((m: any) => ["OPERATING_EXPENSE", "BANK_FEE", "STOCK_PURCHASE", "MDR_FEE"].includes(m.movement_type) && m.direction === "OUT")
@@ -810,7 +818,7 @@ export async function getDashboardOverviewAction(
     const totalOut = movements
       .filter((m: any) => m.direction === "OUT" && !NON_OPERATIONAL.has(m.movement_type))
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-    const effectiveCashIn = Math.max(totalIn, serviceRevenue + posRevenue);
+    const effectiveCashIn = Math.max(totalIn, serviceRevenue + posRevenueLedger);
     const effectiveCashOut = Math.max(totalOut, totalExpense);
 
     /* ══ INVENTORY TAB ══ */
@@ -893,10 +901,10 @@ export async function getDashboardOverviewAction(
       },
       finance: {
         revenueTrend,
-        totalRevenue: effectiveRevenue,
+        totalRevenue,
         serviceRevenue,
-        posRevenue,
-        otherIncome,
+        posRevenue: posRevenueLedger,
+        otherIncome: otherIncomeLedger,
         cashIn: effectiveCashIn,
         cashOut: effectiveCashOut,
         netCashflow: effectiveCashIn - effectiveCashOut,
@@ -913,9 +921,15 @@ export async function getDashboardOverviewAction(
       },
     };
 
+    /* Integrity check */
+    const sumCheck = serviceRevenue + posRevenueLedger + otherIncomeLedger;
+    if (sumCheck !== totalRevenue) {
+      console.error(`[Integrity] Dashboard revenue mismatch: ${serviceRevenue} + ${posRevenueLedger} + ${otherIncomeLedger} = ${sumCheck} ≠ totalRevenue=${totalRevenue}`);
+    }
+
     console.log("[dashboard] summary", {
-      revenue: effectiveRevenue,
-      posRevenue, serviceRevenue, otherIncome,
+      revenue: totalRevenue,
+      posRevenue: posRevenueLedger, serviceRevenue, otherIncome: otherIncomeLedger,
       totalActivity,
       netProfit: effectiveNetProfit,
       expenseCount: expenseCategoryRadar.length,

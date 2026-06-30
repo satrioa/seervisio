@@ -19,6 +19,7 @@ import {
   Loader2,
   UserPlus,
   UserCog,
+  BookOpen,
 } from "lucide-react";
 
 import {
@@ -178,7 +179,6 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     icon: Wrench,
     items: [
       { href: "services", label: "Service" },
-      { href: "customers", label: "Customers" },
       { href: "pos-v4", label: "POS" },
       { href: "store-shift", label: "Store Shift" },
     ],
@@ -206,6 +206,7 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     label: "Management",
     icon: Users,
     items: [
+      { href: "customers", label: "Customers" },
       { href: "branches", label: "Cabang" },
       { href: "accounts", label: "Account" },
       { href: "technician-performance", label: "Performa Teknisi" },
@@ -578,6 +579,25 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                   );
                 })}
               </SidebarMenu>
+
+                {/* Documentation */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("documentation")}
+                    tooltip="Documentation"
+                    className={
+                      isActive("documentation")
+                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }
+                    asChild
+                  >
+                    <Link href={`/${brandSlug}/panel/documentation`} onClick={handleNavClick}>
+                      <BookOpen />
+                      <span>Documentation</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>

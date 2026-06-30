@@ -334,21 +334,41 @@ export async function listFinanceTransactionsAction(
     const to = from + pageSize - 1;
     const paginated = allRows.slice(from, to + 1);
 
-    /* Summary */
-    const totalIncome = allRows
+    /* Summary from finance_ledger only (source of truth) */
+    const totalIncome = mappedLedger
       .filter((t) => t.direction === "IN")
       .reduce((s, t) => s + t.amount, 0);
-    const totalExpense = allRows
+    const totalExpense = mappedLedger
       .filter((t) => t.direction === "OUT")
       .reduce((s, t) => s + t.amount, 0);
+    /* Check for movement rows not yet in finance_ledger (legacy data) */
+    let extraIncome = 0;
+    let extraExpense = 0;
+    for (const m of mappedMovements) {
+      const dup = mappedLedger.some(
+        (l) =>
+          l.amount === m.amount &&
+          l.direction === m.direction &&
+          Math.abs(new Date(l.createdAt).getTime() - new Date(m.createdAt).getTime()) < 60000,
+      );
+      if (!dup) {
+        if (m.direction === "IN") extraIncome += m.amount;
+        else extraExpense += m.amount;
+      }
+    }
+    if (extraIncome > 0 || extraExpense > 0) {
+      console.warn(`[FinanceTransaction] ${extraIncome > 0 ? `${extraIncome} extra income` : ""}${extraIncome > 0 && extraExpense > 0 ? " " : ""}${extraExpense > 0 ? `${extraExpense} extra expense` : ""} from movements not in ledger`);
+    }
+    const totalIncomeAll = totalIncome + extraIncome;
+    const totalExpenseAll = totalExpense + extraExpense;
 
     return successResult({
       transactions: paginated,
       totalCount,
       summary: {
-        totalIncome,
-        totalExpense,
-        netManual: totalIncome - totalExpense,
+        totalIncome: totalIncomeAll,
+        totalExpense: totalExpenseAll,
+        netManual: totalIncomeAll - totalExpenseAll,
         totalTransactions: totalCount,
       },
     });

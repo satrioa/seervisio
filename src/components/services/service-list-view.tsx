@@ -2,14 +2,9 @@
 
 import * as React from "react";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   User,
-  Wrench,
-  CreditCard,
-  Clock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,12 +20,10 @@ import {
   type ServiceRecord,
   type ServiceStatus,
   STATUS_CONFIG,
-  STATUS_ORDER,
   formatCurrency,
   getPickupStatus,
   getPickupLabel,
   getPickupColor,
-  getPaymentStatusLabel,
 } from "@/components/services/service-data";
 
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
@@ -38,57 +31,9 @@ import { CancelServiceDialog } from "@/components/services/cancel-service-dialog
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
 import { AssignTechnicianDialog } from "@/components/services/assign-technician-dialog";
 import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
-import { XCircle, RotateCcw, ArrowRightCircle, UserPlus } from "lucide-react";
 import { StatusTransitionDialog, type PendingStatusTransition } from "@/components/services/status-transition-dialog";
 import { updateServiceStatusAction } from "@/server/actions/service-workflow.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
-
-/* ─── Status Stepper Mini ─── */
-
-function StatusStepper({ status }: { status: ServiceStatus }) {
-  const statusIndex = STATUS_ORDER.indexOf(status);
-  const visibleStatuses: ServiceStatus[] = ["masuk", "diagnosa", "menunggu_persetujuan", "perbaikan", "qc", "selesai"];
-
-  return (
-    <div className="flex items-center gap-1">
-      {visibleStatuses.map((s, i) => {
-        const isActive = i <= statusIndex;
-        const isCurrent = i === statusIndex;
-        const isLast = i === visibleStatuses.length - 1;
-        return (
-          <React.Fragment key={s}>
-            <div
-              className={`flex size-5 items-center justify-center rounded-full ${
-                isCurrent
-                  ? "bg-primary text-primary-foreground"
-                  : isActive
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-              }`}
-            >
-              <span className="text-[8px] font-bold">{i + 1}</span>
-            </div>
-            {!isLast && (
-              <div
-                className={`h-0.5 w-4 rounded-full ${
-                  i < statusIndex ? "bg-primary/40" : "bg-border"
-                }`}
-              />
-            )}
-          </React.Fragment>
-        );
-      })}
-      {status === "cancelled" && (
-        <>
-          <div className="h-0.5 w-2 rounded-full bg-border" />
-          <div className="flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
-            <span className="text-[8px] font-bold">X</span>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 /* ─── Device Icon Helper ─── */
 
@@ -228,7 +173,7 @@ function ServicePagination({
   );
 }
 
-const SERVICE_TABLE_GRID = "grid-cols-[28px_1fr_130px_120px_120px_100px_60px]";
+const SERVICE_TABLE_GRID = "grid-cols-[28px_1fr_130px_120px_120px_100px]";
 
 function ServiceTableSkeletonRows() {
   return (
@@ -419,7 +364,6 @@ export function ServiceListView({
   onOpenSparepart,
   onShowDetail,
 }: ServiceListViewProps) {
-  const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [pendingTransition, setPendingTransition] = React.useState<PendingStatusTransition | null>(null);
@@ -436,10 +380,6 @@ export function ServiceListView({
       sample: services[0] ?? null,
     });
   }, [services, role]);
-
-  const toggleExpand = React.useCallback((id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  }, []);
 
   const filteredServices = React.useMemo(() => {
     let result = services;
@@ -504,7 +444,6 @@ export function ServiceListView({
 
   React.useEffect(() => {
     setPage(1);
-    setExpandedId(null);
   }, [services, pageSize]);
 
   React.useEffect(() => {
@@ -560,7 +499,6 @@ export function ServiceListView({
             <ServiceTableSkeletonRows />
           ) : paginatedServices.length > 0 ? (
             paginatedServices.map((service) => {
-            const isExpanded = expandedId === service.id;
             const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
 
             return (
@@ -568,10 +506,7 @@ export function ServiceListView({
                 {/* Row */}
                 <button
                   type="button"
-                  onClick={() => {
-                    toggleExpand(service.id);
-                    onShowDetail?.(service);
-                  }}
+                  onClick={() => onShowDetail?.(service)}
                   className={`grid ${SERVICE_TABLE_GRID} gap-2 border-b px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/30`}
                 >
                   <div className="flex min-w-max items-center whitespace-nowrap">
@@ -651,218 +586,7 @@ export function ServiceListView({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center">
-                    {isExpanded ? (
-                      <ChevronUp className="size-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="size-4 text-muted-foreground" />
-                    )}
-                  </div>
                 </button>
-
-                {/* Expanded Inline Detail */}
-                {isExpanded && (
-                  <div className="border-b bg-muted/20 px-6 py-4">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {/* Issue */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          Issue
-                        </span>
-                        <p className="text-xs text-foreground">
-                          {service.issue}
-                        </p>
-                      </div>
-
-                      {/* Status Stepper */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          Progress
-                        </span>
-                        <StatusStepper status={service.status} />
-                      </div>
-
-                      {/* Spareparts */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          Sparepart
-                        </span>
-                        {service.spareparts.length > 0 ? (
-                          <div className="flex flex-col gap-0.5">
-                            {service.spareparts.map((sp, i) => (
-                              <span
-                                key={i}
-                                className="text-xs text-foreground"
-                              >
-                                {sp.qty}x {sp.name}
-                              </span>
-                            ))}
-                            <span className="text-[10px] font-medium text-muted-foreground">
-                              Total: {formatCurrency(totalBiaya)}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">
-                            Belum ada
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Payment */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          Pembayaran
-                        </span>
-                        {service.paymentSummary && service.paymentSummary.paymentStatus !== "UNPAID" ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                              {service.paymentSummary.paymentStatus === "PAID"
-                                ? "Sudah lunas"
-                                : `Dibayar ${formatCurrency(service.paymentSummary.totalPaid)}`}
-                            </span>
-                            {service.paymentSummary.paymentStatus === "PARTIAL" && (
-                              <span className="text-[10px] text-muted-foreground">
-                                Sisa: {formatCurrency(service.paymentSummary.remainingBalance)}
-                              </span>
-                            )}
-                            {service.payments.map((p, i) => (
-                              <span
-                                key={i}
-                                className="text-[10px] text-muted-foreground"
-                              >
-                                {p.method}: {formatCurrency(p.amount)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">
-                            Belum dibayar
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Quick Actions */}
-                      <div className="flex flex-col gap-1.5 md:col-span-2 lg:col-span-2">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          Aksi Cepat
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(workflow.getAllowedActions(service).allowedNext.length > 0) && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="h-7 gap-1 text-[10px]"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const allowedActions = workflow.getAllowedActions(service);
-                                if (allowedActions.allowedNext.length > 0) {
-                                  setPendingTransition({
-                                    serviceId: service.id,
-                                    serviceNumber: service.serviceNumber || service.deviceName,
-                                    fromUiStatus: service.status,
-                                    toUiStatus: allowedActions.allowedNext[0].toLowerCase(),
-                                  });
-                                  setStatusDialogOpen(true);
-                                }
-                              }}
-                            >
-                              <ArrowRightCircle className="size-3" />
-                              {workflow.getAllowedActions(service).nextLabel ?? "Update Status"}
-                            </Button>
-                          )}
-                          {workflow.getAllowedActions(service).canCancel && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1 text-[10px] text-destructive hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCancelTarget(service);
-                              }}
-                            >
-                              <XCircle className="size-3" />
-                              Batalkan
-                            </Button>
-                          )}
-                          {workflow.getAllowedActions(service).canReopen && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1 text-[10px]"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReopenTarget(service);
-                              }}
-                            >
-                              <RotateCcw className="size-3" />
-                              Buka Ulang
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 gap-1 text-[10px]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAssignTarget(service);
-                            }}
-                          >
-                            <UserPlus className="size-3" />
-                            {service.technicianName ? "Ubah Teknisi" : "Tugaskan Teknisi"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 gap-1 text-[10px]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              console.log("[services:quick-action] sparepart click", {
-                                serviceId: service.id,
-                                serviceNumber: service.serviceNumber,
-                                status: service.status,
-                              });
-                              onOpenSparepart?.(service.id);
-                            }}
-                          >
-                            <Wrench className="size-3" />
-                            Sparepart
-                          </Button>
-                          {(role !== "TECHNICIAN" && (service.paymentSummary?.remainingBalance ?? 0) > 0) && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1 text-[10px]"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                console.log("[services:quick-action] payment click", {
-                                  serviceId: service.id,
-                                  serviceNumber: service.serviceNumber,
-                                });
-                                onOpenPayment?.(service.id);
-                              }}
-                            >
-                              <CreditCard className="size-3" />
-                              Pembayaran
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1 text-[10px]"
-                            onClick={(e) => {
-                               e.stopPropagation();
-                               onShowDetail?.(service);
-                             }}>
-                               Lihat Detail
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })
@@ -881,7 +605,6 @@ export function ServiceListView({
         ) : paginatedServices.length > 0 ? (
           paginatedServices.map((service) => {
           const totalBiaya = Number(service.finalCost || service.estimatedCost || 0);
-          const isExpanded = expandedId === service.id;
 
           return (
             <div
@@ -891,10 +614,7 @@ export function ServiceListView({
               {/* Card Header */}
               <button
                 type="button"
-                onClick={() => {
-                  toggleExpand(service.id);
-                  onShowDetail?.(service);
-                }}
+                onClick={() => onShowDetail?.(service)}
                 className="flex items-start justify-between gap-2 text-left"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -935,159 +655,6 @@ export function ServiceListView({
                   {formatCurrency(totalBiaya)}
                 </span>
               </div>
-
-              {/* Expand Toggle */}
-              <button
-                type="button"
-                onClick={() => toggleExpand(service.id)}
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                {isExpanded ? "Sembunyikan detail" : "Lihat detail"}
-                {isExpanded ? (
-                  <ChevronUp className="size-3" />
-                ) : (
-                  <ChevronDown className="size-3" />
-                )}
-              </button>
-
-              {/* Expanded Mobile Detail */}
-              {isExpanded && (
-                <div className="flex flex-col gap-3 border-t pt-3">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Issue
-                    </span>
-                    <p className="text-xs text-foreground">{service.issue}</p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Progress
-                    </span>
-                    <StatusStepper status={service.status} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Sparepart
-                    </span>
-                    {service.spareparts.length > 0 ? (
-                      service.spareparts.map((sp, i) => (
-                        <span key={i} className="text-xs text-foreground">
-                          {sp.qty}x {sp.name}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">
-                        Belum ada
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Pembayaran
-                    </span>
-                    {service.paymentSummary && service.paymentSummary.paymentStatus !== "UNPAID" ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          {service.paymentSummary.paymentStatus === "PAID"
-                            ? "Sudah lunas"
-                            : `Dibayar ${formatCurrency(service.paymentSummary.totalPaid)}`}
-                        </span>
-                        {service.paymentSummary.paymentStatus === "PARTIAL" && (
-                          <span className="text-[10px] text-muted-foreground">
-                            Sisa: {formatCurrency(service.paymentSummary.remainingBalance)}
-                          </span>
-                        )}
-                        {service.payments.map((p, i) => (
-                          <span key={i} className="text-[10px] text-muted-foreground">
-                            {p.method}: {formatCurrency(p.amount)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">
-                        Belum dibayar
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 border-t pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-[10px]"
-                      onClick={() => {
-                        const allowedActions = workflow.getAllowedActions(service);
-                        if (allowedActions.allowedNext.length > 0) {
-                          setPendingTransition({
-                            serviceId: service.id,
-                            serviceNumber: service.serviceNumber || service.deviceName,
-                            fromUiStatus: service.status,
-                            toUiStatus: allowedActions.allowedNext[0].toLowerCase(),
-                          });
-                          setStatusDialogOpen(true);
-                        }
-                      }}
-                    >
-                      <ArrowRightCircle className="size-3" />
-                      {workflow.getAllowedActions(service).nextLabel ?? "Update Status"}
-                    </Button>
-                    {workflow.getAllowedActions(service).canCancel && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 text-[10px] text-destructive hover:text-destructive"
-                        onClick={() => setCancelTarget(service)}
-                      >
-                        <XCircle className="size-3" />
-                        Batalkan
-                      </Button>
-                    )}
-                    {workflow.getAllowedActions(service).canReopen && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 text-[10px]"
-                        onClick={() => setReopenTarget(service)}
-                      >
-                        <RotateCcw className="size-3" />
-                        Buka Ulang
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-[10px]"
-                      onClick={() => setAssignTarget(service)}
-                    >
-                      <UserPlus className="size-3" />
-                      {service.technicianName ? "Ubah Teknisi" : "Tugaskan Teknisi"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-[10px]"
-                      onClick={() => {
-                        console.log("[services:quick-action] sparepart click", {
-                          serviceId: service.id,
-                          serviceNumber: service.serviceNumber,
-                          status: service.status,
-                        });
-                        onOpenSparepart?.(service.id);
-                      }}
-                    >
-                      Tambah Sparepart
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 text-[10px]"
-                      onClick={() => onShowDetail?.(service)}
-                    >
-                      Lihat Detail
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })

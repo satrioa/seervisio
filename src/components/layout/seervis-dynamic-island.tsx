@@ -24,13 +24,13 @@ import {
   AlertTriangle,
   Info,
   Store,
-  Wallet,
   LogOut,
 } from "lucide-react";
 import { type DynamicIslandFeedbackPayload } from "@/lib/dynamic-island/dynamic-island-events";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { useStoreShift } from "@/features/store-shift/store-shift-provider";
 import { StoreShiftCloseModal } from "@/components/store-shift/StoreShiftCloseModal";
+import { getStoreShiftOverviewAction } from "@/server/actions/store-shift.actions";
 
 /* ── Types ── */
 type IslandMode = "welcome" | "idle" | "expanded" | "feedback";
@@ -104,6 +104,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
   const islandRef = useRef<HTMLDivElement | null>(null);
   const [errorShake, setErrorShake] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
+  const [computedExpectedCash, setComputedExpectedCash] = useState<number | null>(null);
 
   /* Feedback dynamic text */
   const [feedbackTitle, setFeedbackTitle] = useState("");
@@ -160,6 +161,30 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
     }, 1000);
     return () => clearInterval(interval);
   }, [hasActiveShift]);
+
+  /* ── Fetch expected cash for shift closing ── */
+  const fetchExpectedCash = useCallback(async () => {
+    if (!hasActiveShift || !activeShift?.branchId) {
+      setComputedExpectedCash(null);
+      return;
+    }
+    try {
+      const res = await getStoreShiftOverviewAction(brandSlug, activeShift.branchId);
+      if (res.success) setComputedExpectedCash(res.data.expectedCash);
+    } catch { /* ignore */ }
+  }, [hasActiveShift, activeShift?.branchId, brandSlug]);
+
+  useEffect(() => { fetchExpectedCash(); }, [fetchExpectedCash]);
+
+  useEffect(() => {
+    const handler = () => { fetchExpectedCash(); };
+    window.addEventListener("seervis:cash-transaction", handler);
+    window.addEventListener("seervis:shift-changed", handler);
+    return () => {
+      window.removeEventListener("seervis:cash-transaction", handler);
+      window.removeEventListener("seervis:shift-changed", handler);
+    };
+  }, [fetchExpectedCash]);
 
   /* Toggle expand/collapse */
   const handleToggle = useCallback(() => {
@@ -498,31 +523,21 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
               <InfoRow label="Duration" value={elapsed} />
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMode("idle");
-                  setSize("compact" as any);
-                  setIsExpanded(false);
-                  setShowCloseModal(true);
-                }}
-              >
-                <LogOut className="size-3.5" />
-                Akhiri Shift
-              </Button>
-              <Button
-                size="sm"
-                className="h-9 gap-1.5 rounded-full border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 dark:border-black/20 dark:bg-black/10 dark:text-black dark:hover:bg-black/20"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Wallet className="size-3.5" />
-                Lihat Kas
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-9 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMode("idle");
+                setSize("compact" as any);
+                setIsExpanded(false);
+                setShowCloseModal(true);
+              }}
+            >
+              <LogOut className="size-3.5" />
+              Akhiri Shift
+            </Button>
           </motion.div>
         )}
 
@@ -584,7 +599,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
         onOpenChange={setShowCloseModal}
         brandSlug={brandSlug}
         shiftId={activeShift.id}
-        expectedCash={activeShift.expectedClosingCash ?? null}
+        expectedCash={computedExpectedCash}
         onSuccess={() => { refreshShiftStatus(); }}
       />
     )}

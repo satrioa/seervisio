@@ -5,7 +5,7 @@ import { useCallback, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import {
   Search, AlertTriangle, ArrowUpRight, ArrowDownRight,
-  Calendar, Plus, ChevronLeft, ChevronRight,
+  Calendar, Plus, ChevronLeft, ChevronRight, ChevronDown,
   Ban, Loader2, ScrollText, List,
 } from "lucide-react";
 
@@ -25,6 +25,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -166,13 +169,13 @@ export default function FinanceTransactionsPage() {
   useEffect(() => {
     if (!brandSlug) return;
     setAccountsLoading(true);
-    listPaymentAccountsAction(brandSlug, null, null, "ALL").then((r) => {
+    listPaymentAccountsAction(brandSlug, activeBranchId, null, "ALL").then((r) => {
       if (r.success) {
         setAccounts(r.data.map((a) => ({ id: a.id, name: a.accountName })));
       }
       setAccountsLoading(false);
     });
-  }, [brandSlug]);
+  }, [brandSlug, activeBranchId]);
 
   /* Date preset */
   const handleDatePreset = useCallback((preset: DatePreset) => {
@@ -346,94 +349,125 @@ export default function FinanceTransactionsPage() {
         </Alert>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          {/* Source filter tabs */}
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-xs font-medium text-muted-foreground mr-1">Sumber:</span>
-            {SOURCE_FILTERS.map((sf) => (
-              <button
-                key={sf.value}
-                type="button"
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  sourceFilter === sf.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setSourceFilter(sf.value)}
-              >
-                {sf.label}
-              </button>
-            ))}
-          </div>
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Source chips */}
+        <div className="flex items-center gap-1">
+          {SOURCE_FILTERS.map((sf) => (
+            <button
+              key={sf.value}
+              type="button"
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                sourceFilter === sf.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              }`}
+              onClick={() => setSourceFilter(sf.value)}
+            >
+              {sf.label}
+            </button>
+          ))}
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground mr-1">Periode:</span>
-            {(["today", "7days", "month", "custom"] as const).map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  datePreset === preset
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => handleDatePreset(preset)}
-              >
-                {preset === "today" ? "Hari ini" : preset === "7days" ? "7 Hari" : preset === "month" ? "Bulan ini" : "Custom"}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+        {/* Period popover */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 font-normal"
+            >
+              <Calendar className="size-3.5 text-muted-foreground" />
+              {datePreset === "today" ? "Hari ini" : datePreset === "7days" ? "7 Hari" : datePreset === "month" ? "Bulan ini" : `${dateFrom} — ${dateTo}`}
+              <ChevronDown className="size-3 text-muted-foreground/60" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 p-1.5">
+            <div className="flex flex-col gap-0.5">
+              {(["today", "7days", "month", "custom"] as const).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors text-left ${
+                    datePreset === preset
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  }`}
+                  onClick={() => handleDatePreset(preset)}
+                >
+                  {preset === "today" ? "Hari ini" : preset === "7days" ? "7 Hari" : preset === "month" ? "Bulan ini" : "Custom"}
+                </button>
+              ))}
+            </div>
             {datePreset === "custom" && (
-              <div className="flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-muted-foreground" />
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
-                <span className="text-xs text-muted-foreground">—</span>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+              <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border/40">
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-7 w-auto min-w-0 flex-1 text-[11px]" />
+                <span className="text-[11px] text-muted-foreground">—</span>
+                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-7 w-auto min-w-0 flex-1 text-[11px]" />
               </div>
             )}
+          </PopoverContent>
+        </Popover>
 
-            <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue placeholder="Cabang" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL_BRANCHES">Semua Cabang</SelectItem>
-                {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        {/* Branch select */}
+        <Select value={branchFilter} onValueChange={setBranchFilter}>
+          <SelectTrigger className="h-8 w-[180px] text-xs">
+            <SelectValue placeholder="Cabang" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL_BRANCHES">Semua Cabang</SelectItem>
+            {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
 
-            <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as typeof directionFilter)}>
-              <SelectTrigger className="w-28 h-8 text-xs">
-                <SelectValue placeholder="Arah" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL_DIRECTIONS">Semua</SelectItem>
-                <SelectItem value="IN">Masuk</SelectItem>
-                <SelectItem value="OUT">Keluar</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="relative flex-1 max-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Cari..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-xs" />
+        {/* Transaction type popover */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 font-normal w-[140px] justify-between"
+            >
+              {directionFilter === "ALL_DIRECTIONS" ? "Semua" : directionFilter === "IN" ? "Masuk" : "Keluar"}
+              <ChevronDown className="size-3 text-muted-foreground/60 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-40 p-1.5">
+            <div className="flex flex-col gap-0.5">
+              {(["ALL_DIRECTIONS", "IN", "OUT"] as const).map((dir) => (
+                <button
+                  key={dir}
+                  type="button"
+                  className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors text-left ${
+                    directionFilter === dir
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  }`}
+                  onClick={() => setDirectionFilter(dir)}
+                >
+                  {dir === "ALL_DIRECTIONS" ? "Semua" : dir === "IN" ? "Masuk" : "Keluar"}
+                </button>
+              ))}
             </div>
-          </div>
+          </PopoverContent>
+        </Popover>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 pt-1">
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={openIncomeModal}>
-              <Plus className="size-3.5" /> Tambah Pendapatan
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={openExpenseModal}>
-              <Plus className="size-3.5" /> Tambah Pengeluaran
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Search */}
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Cari..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-xs" />
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 ml-auto">
+          <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0" onClick={openIncomeModal}>
+            <Plus className="size-3.5" /> Tambah Pendapatan
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 shrink-0" onClick={openExpenseModal}>
+            <Plus className="size-3.5" /> Tambah Pengeluaran
+          </Button>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
