@@ -253,6 +253,7 @@ export function ServicePaymentPanel({
         onPaymentRecorded?.();
         onOpenChange(false);
         resetForm();
+        window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
       } else {
         triggerDynamicIslandFeedback({
           type: "error",

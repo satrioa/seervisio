@@ -20,6 +20,11 @@ import {
   resolveBranchCashAccount,
 } from "@/repositories/store-shift.repository";
 import type { StoreShift } from "@/types/app";
+import {
+  getShiftFinancialSummary,
+  calculateExpectedCash,
+  type ShiftFinancialSummary,
+} from "@/server/lib/shift-financial-summary";
 
 export interface PaymentBreakdownItem {
   methodName: string;
@@ -50,6 +55,11 @@ export interface StoreShiftOverview {
   openingCash: number;
   paymentBreakdown: PaymentBreakdownItem[];
   transactions: TransactionItem[];
+  totalIncome: number;
+  totalExpense: number;
+  cashSales: number;
+  serviceCashPayments: number;
+  refunds: number;
 }
 
 export interface StoreShiftReport {
@@ -59,6 +69,11 @@ export interface StoreShiftReport {
   cashOutTotal: number;
   paymentBreakdown: PaymentBreakdownItem[];
   transactions: TransactionItem[];
+  totalIncome: number;
+  totalExpense: number;
+  cashSales: number;
+  serviceCashPayments: number;
+  refunds: number;
 }
 
 export async function getStoreShiftOverviewAction(
@@ -74,89 +89,24 @@ export async function getStoreShiftOverviewAction(
 
     const activeShift = await getActiveShift(supabase, branchId);
 
-    let expectedCash: number | null = null;
-    let cashInTotal = 0;
-    let cashOutTotal = 0;
-    let paymentBreakdown: PaymentBreakdownItem[] = [];
-    let transactions: TransactionItem[] = [];
-
+    let summary: ShiftFinancialSummary | null = null;
     if (activeShift) {
-      const { data: calcData } = await (supabase as any).rpc("calculate_shift_expected_cash", {
-        p_shift_id: activeShift.id,
-      });
-      expectedCash = calcData != null ? Number(calcData) : null;
-
-      const movements = await getShiftMovements(
-        supabase,
-        branchId,
-        activeShift.openedAt,
-        activeShift.closedAt,
-      );
-
-      const accountIds = [...new Set(movements.map((m: any) => m.payment_account_id))];
-
-      let accounts: any[] = [];
-      if (accountIds.length > 0) {
-        const { data: accData } = await supabase
-          .from("payment_accounts")
-          .select("id, type, account_name")
-          .in("id", accountIds);
-        accounts = accData || [];
-      }
-
-      const accountMap = new Map<string, { type: string; name: string }>();
-      for (const acc of accounts) {
-        accountMap.set(acc.id, { type: acc.type, name: acc.account_name });
-      }
-
-      const typeMap = new Map<string, { total: number; count: number }>();
-      const typeLabelMap = new Map<string, string>();
-
-      for (const m of movements as any[]) {
-        const accInfo = accountMap.get(m.payment_account_id);
-        const typeKey = accInfo?.type || "UNKNOWN";
-        const label = typeLabelMap.get(typeKey) || resolveAccountTypeLabel(typeKey);
-        if (!typeLabelMap.has(typeKey)) typeLabelMap.set(typeKey, label);
-
-        const entry = typeMap.get(typeKey) || { total: 0, count: 0 };
-        entry.total += Number(m.amount);
-        entry.count++;
-        typeMap.set(typeKey, entry);
-
-        if (m.movement_type === "CASH_IN") cashInTotal += Number(m.amount);
-        if (m.movement_type === "CASH_OUT") cashOutTotal += Number(m.amount);
-      }
-
-      paymentBreakdown = Array.from(typeMap.entries()).map(([typeKey, val]) => ({
-        methodName: typeLabelMap.get(typeKey) || typeKey,
-        methodType: typeKey,
-        total: val.total,
-        count: val.count,
-      }));
-
-      transactions = (movements as any[]).map((m: any) => ({
-        accountName: accountMap.get(m.payment_account_id)?.name,
-        accountType: accountMap.get(m.payment_account_id)?.type,
-        id: m.id,
-        type: resolveMovementTypeLabel(m.movement_type),
-        description: m.description || resolveMovementTypeLabel(m.movement_type),
-        movementType: m.movement_type,
-        direction: m.direction,
-        amount: Number(m.amount),
-        createdAt: m.created_at,
-        referenceType: m.reference_type,
-        referenceId: m.reference_id,
-      }));
+      summary = await getShiftFinancialSummary(supabase, activeShift.id);
     }
 
     return successResult({
       activeShift,
-      expectedCash,
-      cashInTotal,
-      cashOutTotal,
+      expectedCash: summary?.expectedCash ?? null,
+      cashInTotal: summary?.cashIn ?? 0,
+      cashOutTotal: summary?.cashOut ?? 0,
       openingCash: activeShift?.openingCash ?? 0,
-      paymentBreakdown,
-      transactions,
+      paymentBreakdown: summary?.paymentBreakdown ?? [],
+      transactions: summary?.transactions ?? [],
+      totalIncome: summary?.totalIncome ?? 0,
+      totalExpense: summary?.totalExpense ?? 0,
+      cashSales: summary?.cashSales ?? 0,
+      serviceCashPayments: summary?.serviceCashPayments ?? 0,
+      refunds: summary?.refunds ?? 0,
     });
   } catch (err: any) {
     console.error("[StoreShiftActions] getStoreShiftOverviewAction:", err.message);
@@ -181,94 +131,20 @@ export async function getStoreShiftReportAction(
 
     requireBranchAccess(session, shift.branchId, "getStoreShiftReportAction");
 
-    const { data: calcData } = await (supabase as any).rpc("calculate_shift_expected_cash", {
-      p_shift_id: shift.id,
-    });
-    const expectedCash =
-      calcData != null
-        ? Number(calcData)
-        : shift.expectedClosingCash != null
-          ? Number(shift.expectedClosingCash)
-          : null;
-
-    const movements = await getShiftMovements(
-      supabase,
-      shift.branchId,
-      shift.openedAt,
-      shift.closedAt,
-    );
-
-    const accountIds = [...new Set((movements as any[]).map((m: any) => m.payment_account_id).filter(Boolean))];
-
-    let accounts: any[] = [];
-    if (accountIds.length > 0) {
-      const { data: accData } = await supabase
-        .from("payment_accounts")
-        .select("id, type, account_name")
-        .in("id", accountIds);
-      accounts = accData || [];
-    }
-
-    const accountMap = new Map<string, { type: string; name: string }>();
-    for (const acc of accounts) {
-      accountMap.set(acc.id, { type: acc.type, name: acc.account_name });
-    }
-
-    let cashInTotal = 0;
-    let cashOutTotal = 0;
-    const typeMap = new Map<string, { total: number; count: number }>();
-    const typeLabelMap = new Map<string, string>();
-
-    for (const movement of movements as any[]) {
-      const amount = Number(movement.amount);
-      const accInfo = accountMap.get(movement.payment_account_id);
-      const typeKey = accInfo?.type || "UNKNOWN";
-      const label = typeLabelMap.get(typeKey) || resolveAccountTypeLabel(typeKey);
-
-      if (!typeLabelMap.has(typeKey)) typeLabelMap.set(typeKey, label);
-
-      if (movement.movement_type === "CASH_IN") cashInTotal += amount;
-      if (movement.movement_type === "CASH_OUT") cashOutTotal += amount;
-
-      if (movement.direction === "IN" || movement.movement_type === "CASH_IN") {
-        const entry = typeMap.get(typeKey) || { total: 0, count: 0 };
-        entry.total += amount;
-        entry.count += 1;
-        typeMap.set(typeKey, entry);
-      }
-    }
-
-    const paymentBreakdown = Array.from(typeMap.entries()).map(([typeKey, val]) => ({
-      methodName: typeLabelMap.get(typeKey) || typeKey,
-      methodType: typeKey,
-      total: val.total,
-      count: val.count,
-    }));
-
-    const transactions = (movements as any[]).map((movement: any) => {
-      const accInfo = accountMap.get(movement.payment_account_id);
-      return {
-        accountName: accInfo?.name,
-        accountType: accInfo?.type,
-        id: movement.id,
-        type: resolveMovementTypeLabel(movement.movement_type),
-        description: movement.description || resolveMovementTypeLabel(movement.movement_type),
-        movementType: movement.movement_type,
-        direction: movement.direction,
-        amount: Number(movement.amount),
-        createdAt: movement.created_at,
-        referenceType: movement.reference_type,
-        referenceId: movement.reference_id,
-      };
-    });
+    const summary = await getShiftFinancialSummary(supabase, shift.id);
 
     return successResult({
       shift,
-      expectedCash,
-      cashInTotal,
-      cashOutTotal,
-      paymentBreakdown,
-      transactions,
+      expectedCash: (summary.expectedCash || shift.expectedClosingCash) ?? null,
+      cashInTotal: summary.cashIn,
+      cashOutTotal: summary.cashOut,
+      paymentBreakdown: summary.paymentBreakdown,
+      transactions: summary.transactions,
+      totalIncome: summary.totalIncome,
+      totalExpense: summary.totalExpense,
+      cashSales: summary.cashSales,
+      serviceCashPayments: summary.serviceCashPayments,
+      refunds: summary.refunds,
     });
   } catch (err: any) {
     console.error("[StoreShiftActions] getStoreShiftReportAction:", err.message);
@@ -307,11 +183,7 @@ export async function openStoreShiftAction(
       created: false,
     });
 
-    const { data: shiftNumber } = await (supabase as any).rpc("generate_store_shift_number", {
-      p_brand_id: session.brandId,
-    });
-
-    const { data: shiftId, error } = await (supabase as any).rpc("open_store_shift", {
+    const { data: result, error } = await (supabase as any).rpc("open_store_shift", {
       p_brand_id: session.brandId,
       p_branch_id: branchId,
       p_opening_cash: openingCash,
@@ -320,27 +192,30 @@ export async function openStoreShiftAction(
       p_metadata: {},
     });
 
-    if (error || !shiftId) {
+    if (error || !result) {
       console.error("[StoreShiftActions] open_store_shift RPC error:", error);
       return errorResult("Gagal membuka shift. Silakan coba lagi.");
     }
+
+    let resultData: any = result;
+    if (typeof result === "string") {
+      try {
+        resultData = JSON.parse(result);
+      } catch (parseErr) {
+        console.error("[StoreShiftActions] open_store_shift JSON parse error:", parseErr, "raw:", result);
+        return errorResult("Gagal memproses hasil buka shift.");
+      }
+    }
+    const shiftId: string = resultData.shift_id ?? (typeof resultData === "string" ? resultData : "");
+    const shiftNumberStr: string = resultData.shift_number ?? "";
 
     console.log("[store-shift:open] created session", {
       sessionId: shiftId,
       branchId,
       openingCash,
+      lateOpenMinutes: resultData.late_open_minutes,
+      earlyOpenMinutes: resultData.early_open_minutes,
     });
-
-    await supabase.from("audit_logs").insert({
-      brand_id: session.brandId,
-      action: "STORE_SHIFT_OPENED",
-      target_type: "store_shift",
-      target_id: shiftId,
-      actor_id: session.profileId,
-      details: { opening_cash: openingCash, branch_id: branchId },
-    } as any);
-
-    const shiftNumberStr = shiftNumber ? String(shiftNumber) : "";
 
     try {
       const { data: branchRow } = await (supabase as any)
@@ -362,6 +237,8 @@ export async function openStoreShiftAction(
           branchName: branchRow?.name ?? "",
           shiftNumber: shiftNumberStr,
           openingCash,
+          lateOpenMinutes: resultData.late_open_minutes,
+          earlyOpenMinutes: resultData.early_open_minutes,
         },
       });
     } catch (notifErr: any) {
@@ -369,7 +246,7 @@ export async function openStoreShiftAction(
     }
 
     return successResult({
-      shiftId: shiftId as string,
+      shiftId,
       shiftNumber: shiftNumberStr,
     });
   } catch (err: any) {
@@ -398,10 +275,8 @@ export async function closeStoreShiftAction(
 
     await requireActiveStoreSession(supabase, session.brandId, shift.branchId);
 
-    const { data: expectedData } = await (supabase as any).rpc("calculate_shift_expected_cash", {
-      p_shift_id: shiftId,
-    });
-    const expectedCash = expectedData != null ? Number(expectedData) : 0;
+    const summary = await getShiftFinancialSummary(supabase, shiftId);
+    const expectedCash = summary.expectedCash;
     const cashDiff = actualCash - expectedCash;
 
     if (!notes && Math.abs(cashDiff) > 0) {
@@ -413,27 +288,13 @@ export async function closeStoreShiftAction(
       p_counted_closing_cash: actualCash,
       p_closing_notes: notes || null,
       p_closed_by: session.profileId,
-      p_metadata: {},
+      p_metadata: { auto_closed: false },
     });
 
     if (error) {
       console.error("[StoreShiftActions] close_store_shift RPC error:", error);
       return errorResult("Gagal menutup shift. Silakan coba lagi.");
     }
-
-    await supabase.from("audit_logs").insert({
-      brand_id: session.brandId,
-      action: "STORE_SHIFT_CLOSED",
-      target_type: "store_shift",
-      target_id: shiftId,
-      actor_id: session.profileId,
-      details: {
-        expected_closing_cash: expectedCash,
-        counted_closing_cash: actualCash,
-        cash_difference: cashDiff,
-        branch_id: shift.branchId,
-      },
-    } as any);
 
     if (Math.abs(cashDiff) > 0) {
       await (supabase as any).rpc("add_shift_cash_movement", {
@@ -538,37 +399,4 @@ export async function listStoreShiftsAction(
   }
 }
 
-function resolveAccountTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    CASH: "Cash Tunai",
-    BANK: "Transfer",
-    QRIS: "QRIS",
-    E_WALLET: "E-Wallet",
-    DEBIT: "Debit",
-    CREDIT: "Kredit",
-    UNKNOWN: "Lainnya",
-  };
-  return map[type] || type;
-}
 
-function resolveMovementTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    OPENING_BALANCE: "Saldo Awal",
-    BALANCE_ADJUSTMENT: "Penyesuaian Saldo",
-    SERVICE_PAYMENT: "Pembayaran Service",
-    POS_PAYMENT: "Penjualan POS",
-    OTHER_INCOME: "Pendapatan Lain",
-    OPERATING_EXPENSE: "Biaya Operasional",
-    STOCK_PURCHASE: "Pembelian Stok",
-    STOCK_PURCHASE_PAYMENT: "Pembayaran Stok",
-    TRANSFER_IN: "Transfer Masuk",
-    TRANSFER_OUT: "Transfer Keluar",
-    BANK_FEE: "Biaya Bank",
-    QRIS_SETTLEMENT: "Settlement QRIS",
-    SERVICE_REFUND: "Refund Service",
-    POS_REFUND: "Refund POS",
-    CASH_IN: "Kas Masuk",
-    CASH_OUT: "Kas Keluar",
-  };
-  return map[type] || type;
-}

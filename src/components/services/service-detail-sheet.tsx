@@ -12,8 +12,6 @@ import {
 import { ServiceDetailContent } from "@/components/services/service-detail-content";
 import type { ServiceRecord } from "@/components/services/service-data";
 
-/* ─── Props ─── */
-
 interface ServiceDetailSheetProps {
   service: ServiceRecord | null;
   open: boolean;
@@ -23,8 +21,6 @@ interface ServiceDetailSheetProps {
   onServiceUpdated?: () => void;
   role?: string;
 }
-
-/* ─── Component ─── */
 
 export function ServiceDetailSheet({
   service,
@@ -49,7 +45,7 @@ export function ServiceDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col p-0 sm:max-w-xl lg:max-w-2xl overflow-y-auto"
+        className="flex w-full flex-col p-0 sm:max-w-lg lg:max-w-xl [&>button.absolute]:hidden"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>{title}</SheetTitle>

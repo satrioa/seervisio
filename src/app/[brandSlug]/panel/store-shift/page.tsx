@@ -205,33 +205,40 @@ function ShiftStatusCard({
 /* ── Shift Summary Grid ── */
 function ShiftSummaryGrid({
   openingCash,
+  totalIncome,
+  totalExpense,
+  expectedCash,
+  cashSales,
+  serviceCashPayments,
   cashInTotal,
   cashOutTotal,
-  expectedCash,
-  transactions,
+  refunds,
 }: {
   openingCash: number;
+  totalIncome: number;
+  totalExpense: number;
+  expectedCash: number | null;
+  cashSales: number;
+  serviceCashPayments: number;
   cashInTotal: number;
   cashOutTotal: number;
-  expectedCash: number | null;
-  transactions: TransactionItem[];
+  refunds: number;
 }) {
-  const totalNonTunai = transactions
-    .filter((t) => t.movementType !== "CASH_IN" && t.movementType !== "CASH_OUT")
-    .reduce((sum, t) => sum + (t.direction === "IN" ? t.amount : 0), 0);
-
-  const items = [
+  const summaryCards = [
     { label: "Saldo awal kas tunai", value: formatCurrency(openingCash), icon: CircleDollarSign },
-    { label: "Kas masuk tunai", value: formatCurrency(cashInTotal), icon: ArrowUpRight },
-    { label: "Kas keluar tunai", value: formatCurrency(cashOutTotal), icon: ArrowDownRight },
+    { label: "Penjualan POS (tunai)", value: formatCurrency(cashSales), icon: ArrowUpRight },
+    { label: "Pembayaran Service (tunai)", value: formatCurrency(serviceCashPayments), icon: ArrowUpRight },
+    { label: "Kas Masuk manual", value: formatCurrency(cashInTotal), icon: ArrowUpRight },
+    { label: "Kas Keluar manual", value: formatCurrency(cashOutTotal), icon: ArrowDownRight },
+    { label: "Refund", value: formatCurrency(refunds), icon: ArrowDownRight },
     { label: "Expected cash", value: formatCurrency(expectedCash), icon: Wallet, highlight: true },
-    { label: "Total transaksi", value: transactions.length.toString(), icon: Clock },
-    { label: "Pendapatan non-tunai", value: formatCurrency(totalNonTunai), icon: Store },
+    { label: "Total Pemasukan", value: formatCurrency(totalIncome), icon: ArrowUpRight },
+    { label: "Total Pengeluaran", value: formatCurrency(totalExpense), icon: ArrowDownRight },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {items.map((item) => (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {summaryCards.map((item) => (
         <Card key={item.label} className={item.highlight ? "border-primary/30 bg-primary/5" : ""}>
           <CardContent className="flex flex-col gap-1.5 p-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -620,10 +627,14 @@ function StoreShiftPageContent() {
         <>
           <ShiftSummaryGrid
             openingCash={overview.openingCash}
+            totalIncome={overview.totalIncome}
+            totalExpense={overview.totalExpense}
+            expectedCash={overview.expectedCash}
+            cashSales={overview.cashSales}
+            serviceCashPayments={overview.serviceCashPayments}
             cashInTotal={overview.cashInTotal}
             cashOutTotal={overview.cashOutTotal}
-            expectedCash={overview.expectedCash}
-            transactions={overview.transactions}
+            refunds={overview.refunds}
           />
 
           <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">

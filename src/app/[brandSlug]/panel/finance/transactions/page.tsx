@@ -262,6 +262,7 @@ export default function FinanceTransactionsPage() {
     if (result.success) {
       setShowIncomeModal(false);
       void fetchTransactions();
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       setError(result.error);
     }
@@ -297,6 +298,7 @@ export default function FinanceTransactionsPage() {
     if (result.success) {
       setShowExpenseModal(false);
       void fetchTransactions();
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       setError(result.error);
     }

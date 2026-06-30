@@ -161,6 +161,7 @@ export interface PosProductResult {
   id: string;
   name: string;
   sku?: string;
+  imageUrl?: string | null;
   itemType: PosProductType;
   categoryName?: string;
   sellingPrice: number;

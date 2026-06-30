@@ -124,9 +124,8 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     return () => clearInterval(interval);
   }, [overview?.activeShift?.openedAt]);
 
-  /* Fetch overview when drawer opens */
-  const openDrawer = useCallback(async () => {
-    setDrawerOpen(true);
+  /* ── Shared overview fetcher ── */
+  const refreshOverview = useCallback(async () => {
     if (isGeneralMode) return;
     if (!activeBranchId) return;
 
@@ -140,6 +139,28 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     }
     setOverviewLoading(false);
   }, [brandSlug, activeBranchId, isGeneralMode]);
+
+  /* Pre-fetch overview on mount + when shift changes */
+  useEffect(() => {
+    refreshOverview();
+  }, [refreshOverview, activeShift?.id]);
+
+  /* Listen for shift-changed event to auto-refresh */
+  useEffect(() => {
+    const handler = () => { refreshOverview(); };
+    window.addEventListener("seervis:shift-changed", handler);
+    window.addEventListener("seervis:cash-transaction", handler);
+    return () => {
+      window.removeEventListener("seervis:shift-changed", handler);
+      window.removeEventListener("seervis:cash-transaction", handler);
+    };
+  }, [refreshOverview]);
+
+  /* Fetch overview when drawer opens */
+  const openDrawer = useCallback(async () => {
+    setDrawerOpen(true);
+    await refreshOverview();
+  }, [refreshOverview]);
 
   /* ── Income / Expense Quick Action Handlers ── */
 
@@ -180,7 +201,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     if (result.success) {
       setShowIncome(false);
       triggerDynamicIslandFeedback({ type: "success", title: "Pemasukan berhasil dicatat" });
-      openDrawer(); // refresh overview
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       setIncError(result.error);
     }
@@ -223,7 +244,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     if (result.success) {
       setShowExpense(false);
       triggerDynamicIslandFeedback({ type: "success", title: "Pengeluaran berhasil dicatat" });
-      openDrawer(); // refresh overview
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       setExpError(result.error);
     }
@@ -286,7 +307,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
       <Sheet open={drawerOpen} onOpenChange={(o) => { if (!o) setDrawerOpen(false); }}>
         <SheetContent
           side="left"
-          className="flex h-full w-[calc(100vw-1rem)] max-w-md flex-col overflow-y-auto p-0 sm:max-w-lg"
+          className="flex h-full w-[calc(100vw-1rem)] max-w-md flex-col overflow-y-auto p-0 sm:max-w-lg [-ms-overflow-style:none] [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:hover:bg-muted-foreground/40"
         >
           <SheetHeader className="border-b p-5 pr-12 text-left">
             <SheetTitle>Rincian Shift</SheetTitle>
@@ -361,21 +382,38 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
                 <p className="mt-1 text-base font-semibold">{formatCurrency(overview.openingCash)}</p>
               </section>
 
-              {/* Income / Expense */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl border bg-green-50/50 dark:bg-green-950/10 p-3">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <ArrowUpRight className="size-3 text-green-600" /> Pemasukan
-                  </span>
-                  <p className="mt-1 text-base font-semibold text-green-600">{formatCurrency(overview.cashInTotal)}</p>
+              {/* Cash breakdown */}
+              <section className="space-y-2 rounded-xl border bg-card p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Saldo awal kas tunai</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(overview.openingCash)}</span>
                 </div>
-                <div className="rounded-xl border bg-red-50/50 dark:bg-red-950/10 p-3">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <ArrowDownRight className="size-3 text-red-600" /> Pengeluaran
-                  </span>
-                  <p className="mt-1 text-base font-semibold text-red-600">{formatCurrency(overview.cashOutTotal)}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Penjualan POS (tunai)</span>
+                  <span className="font-semibold tabular-nums text-green-600">{formatCurrency(overview.cashSales)}</span>
                 </div>
-              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Pembayaran Service (tunai)</span>
+                  <span className="font-semibold tabular-nums text-green-600">{formatCurrency(overview.serviceCashPayments)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Kas Masuk manual</span>
+                  <span className="font-semibold tabular-nums text-green-600">{formatCurrency(overview.cashInTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Kas Keluar manual</span>
+                  <span className="font-semibold tabular-nums text-red-600">{formatCurrency(overview.cashOutTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Refund</span>
+                  <span className="font-semibold tabular-nums text-red-600">{formatCurrency(overview.refunds)}</span>
+                </div>
+                <hr className="border-border/50" />
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Kas yang Diharapkan</span>
+                  <span className="font-semibold tabular-nums text-primary">{formatCurrency(overview.expectedCash)}</span>
+                </div>
+              </section>
 
               {/* Payment breakdown */}
               {overview.paymentBreakdown && overview.paymentBreakdown.length > 0 && (
@@ -552,8 +590,8 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
           shiftId={overview.activeShift.id}
           expectedCash={overview.expectedCash}
           onSuccess={() => {
-            openDrawer(); // refresh overview
-            refreshShiftStatus();
+            window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
+            window.dispatchEvent(new CustomEvent("seervis:shift-changed"));
           }}
         />
       )}

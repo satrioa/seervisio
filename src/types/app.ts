@@ -404,6 +404,8 @@ export interface SparepartSnapshot {
 // ── Store Shift ────────────────────────────────────
 export type ShiftStatus = "OPEN" | "CLOSED" | "CANCELLED";
 
+export type ClosingReason = "MANUAL" | "AUTO_CLOSE" | "SYSTEM";
+
 export interface StoreShift {
   id: string;
   brandId: number;
@@ -420,4 +422,11 @@ export interface StoreShift {
   closedBy?: string;
   openedByName?: string;
   closedByName?: string;
+  autoClosed?: boolean;
+  closingReason?: ClosingReason;
+  scheduledOpenTime?: string;
+  scheduledCloseTime?: string;
+  lateOpenMinutes?: number;
+  earlyOpenMinutes?: number;
+  lateCloseMinutes?: number;
 }

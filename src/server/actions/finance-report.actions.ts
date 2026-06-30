@@ -321,11 +321,12 @@ export async function getFinanceReportAction(
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
     /* Keep net cashflow from payment_account_movements (actual cash flow) */
+    const NON_OPERATIONAL = new Set(["OPENING_BALANCE","BALANCE_ADJUSTMENT","TRANSFER_IN","TRANSFER_OUT"]);
     const totalIn = movements
-      .filter((m: any) => m.direction === "IN")
+      .filter((m: any) => m.direction === "IN" && !NON_OPERATIONAL.has(m.movement_type))
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
     const totalOut = movements
-      .filter((m: any) => m.direction === "OUT")
+      .filter((m: any) => m.direction === "OUT" && !NON_OPERATIONAL.has(m.movement_type))
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
     const netCashflow = totalIn - totalOut;
 

@@ -636,6 +636,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
       });
       clearCart();
       refreshAll();
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       triggerDynamicIslandFeedback({ title: res.error ?? "Transaksi gagal.", type: "error" });
     }
@@ -679,6 +680,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
       setDetailOpen(false);
       setDetailTx(null);
       refreshAll();
+      window.dispatchEvent(new CustomEvent("seervis:cash-transaction"));
     } else {
       triggerDynamicIslandFeedback({ title: res.error ?? "Gagal membatalkan.", type: "error" });
     }

@@ -26,6 +26,7 @@ import {
   getBrandSettingsAction, saveBrandSettingsAction, sendTestEmailAction,
   type OperationalHoursInput, type NotificationSettingsInput,
   type NotificationEventConfig, type WorkflowRulesInput,
+  type AutoCloseSettingsInput,
   type BrandSettingsResponse,
 } from "@/server/actions/brand-settings.actions";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
@@ -70,6 +71,8 @@ const NOTIF_EVENTS: { key: string; label: string }[] = [
   { key: "CASH_DIFFERENCE_DETECTED", label: "Selisih kas terdeteksi" },
   { key: "LOW_STOCK", label: "Stok menipis" },
   { key: "ACCOUNT_CHANGED", label: "Perubahan akun/user" },
+  { key: "AUTO_CLOSE", label: "Tutup toko otomatis" },
+  { key: "STORE_OVERDUE", label: "Toko melebihi jam operasional" },
 ];
 
 const DEFAULT_EVENT_CONFIG: NotificationEventConfig = {
@@ -292,6 +295,99 @@ function OperationalHoursTab({
         <Button onClick={() => onSave(form)} disabled={saving} size="sm">
           {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
           Simpan Jam Operasional
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Operational Compliance Tab ── */
+function OperationalComplianceTab({
+  data, onSave, saving,
+}: {
+  data: AutoCloseSettingsInput;
+  onSave: (d: AutoCloseSettingsInput) => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState<AutoCloseSettingsInput>(data);
+
+  useEffect(() => { setForm(data); }, [data]);
+
+  const graceOptions = [
+    { value: 60, label: "1 jam setelah jam tutup" },
+    { value: 120, label: "2 jam" },
+    { value: 180, label: "3 jam" },
+    { value: 0, label: "Custom" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <Card className="border-amber-100/60 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+            Penutupan Otomatis
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Tutup toko secara otomatis jika melebihi jam operasional + masa tenggang.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm cursor-pointer">Aktifkan Penutupan Otomatis</Label>
+              <p className="text-xs text-muted-foreground">
+                Tutup shift secara otomatis saat melebihi jam operasional + masa tenggang
+              </p>
+            </div>
+            <Switch
+              checked={form.enabled}
+              onCheckedChange={(v) => setForm((p) => ({ ...p, enabled: v }))}
+            />
+          </div>
+
+          {form.enabled && (
+            <div className="space-y-3 pl-0 border-t pt-3">
+              <Label className="text-xs">Tutup toko secara otomatis setelah</Label>
+              <div className="flex flex-wrap gap-2">
+                {graceOptions.map((opt) => (
+                  <Button
+                    key={opt.value}
+                    type="button"
+                    variant={form.gracePeriodMinutes === opt.value ? "default" : "outline"}
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setForm((p) => ({ ...p, gracePeriodMinutes: opt.value }))}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+              {form.gracePeriodMinutes === 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">Menit:</Label>
+                  <Input
+                    type="number"
+                    className="h-8 w-24 text-xs"
+                    value={form.gracePeriodMinutes}
+                    onChange={(e) => setForm((p) => ({ ...p, gracePeriodMinutes: Number(e.target.value) || 120 }))}
+                    min={1}
+                  />
+                  <span className="text-xs text-muted-foreground">menit</span>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Contoh: Jika jam tutup 21:00 dan masa tenggang 2 jam, shift akan otomatis ditutup pukul 23:01.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={() => onSave(form)} disabled={saving} size="sm">
+          {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
+          Simpan Pengaturan Penutupan
         </Button>
       </div>
     </div>
@@ -1190,6 +1286,7 @@ export function SystemSettings() {
   const [businessHours, setBusinessHours] = useState<OperationalHoursInput>(defaultOperationalHours());
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettingsInput>(defaultNotificationSettings());
   const [workflowRules, setWorkflowRules] = useState<WorkflowRulesInput>(defaultWorkflowRules());
+  const [autoCloseSettings, setAutoCloseSettings] = useState<AutoCloseSettingsInput>({ enabled: false, gracePeriodMinutes: 120 });
 
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1203,6 +1300,7 @@ export function SystemSettings() {
         if (result.data.businessHours) setBusinessHours(result.data.businessHours);
         if (result.data.notificationSettings) setNotificationSettings(result.data.notificationSettings);
         if (result.data.workflowRules) setWorkflowRules(result.data.workflowRules);
+        if (result.data.autoCloseSettings) setAutoCloseSettings(result.data.autoCloseSettings);
       }
     } catch (err: any) {
       console.error("Failed to load brand settings:", err);
@@ -1214,7 +1312,7 @@ export function SystemSettings() {
     void loadSettings();
   }, [loadSettings]);
 
-  async function handleSave(section: "operational_hours" | "notification_settings" | "workflow_rules", data: any) {
+  async function handleSave(section: "operational_hours" | "notification_settings" | "workflow_rules" | "auto_close_settings", data: any) {
     if (!isMasterAdmin) return;
     setSavingSection(section);
     setSaveSuccess(null);
@@ -1294,6 +1392,10 @@ export function SystemSettings() {
               <Clock className="mr-1.5 size-3.5" />
               Operational Hours
             </TabsTrigger>
+            <TabsTrigger value="compliance" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 pb-2 px-3 text-xs data-[state=active]:text-orange-700 data-[state=active]:shadow-none">
+              <AlertCircle className="mr-1.5 size-3.5" />
+              Compliance
+            </TabsTrigger>
             <TabsTrigger value="notifications" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 pb-2 px-3 text-xs data-[state=active]:text-orange-700 data-[state=active]:shadow-none">
               <Bell className="mr-1.5 size-3.5" />
               Notifications
@@ -1313,6 +1415,14 @@ export function SystemSettings() {
               data={businessHours}
               onSave={(d) => handleSave("operational_hours", d)}
               saving={savingSection === "operational_hours"}
+            />
+          </TabsContent>
+
+          <TabsContent value="compliance">
+            <OperationalComplianceTab
+              data={autoCloseSettings}
+              onSave={(d) => handleSave("auto_close_settings", d)}
+              saving={savingSection === "auto_close_settings"}
             />
           </TabsContent>
 

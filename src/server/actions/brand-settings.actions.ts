@@ -28,6 +28,11 @@ export type NotificationSettingsInput = {
   events: Record<string, NotificationEventConfig>;
 };
 
+export type AutoCloseSettingsInput = {
+  enabled: boolean;
+  gracePeriodMinutes: number;
+};
+
 export type WorkflowRulesInput = {
   requireTechnicianBeforeDiagnosis: boolean;
   requirePaidBeforePickup: boolean;
@@ -42,6 +47,7 @@ export type BrandSettingsResponse = {
   businessHours: OperationalHoursInput | null;
   notificationSettings: NotificationSettingsInput | null;
   workflowRules: WorkflowRulesInput | null;
+  autoCloseSettings: AutoCloseSettingsInput | null;
 };
 
 /* ── Helpers ── */
@@ -68,6 +74,7 @@ export async function getBrandSettingsAction(
         businessHours: null,
         notificationSettings: null,
         workflowRules: null,
+        autoCloseSettings: null,
       });
     }
 
@@ -77,6 +84,7 @@ export async function getBrandSettingsAction(
       businessHours: (settings.businessHours ?? null) as OperationalHoursInput | null,
       notificationSettings: getMetadataField(metadata, "notification_settings", null) as NotificationSettingsInput | null,
       workflowRules: getMetadataField(metadata, "workflow_rules", null) as WorkflowRulesInput | null,
+      autoCloseSettings: getMetadataField(metadata, "auto_close_settings", null) as AutoCloseSettingsInput | null,
     });
   } catch (err: any) {
     console.error("[getBrandSettingsAction]", err);
@@ -84,7 +92,7 @@ export async function getBrandSettingsAction(
   }
 }
 
-type SaveSection = "operational_hours" | "notification_settings" | "workflow_rules";
+type SaveSection = "operational_hours" | "notification_settings" | "workflow_rules" | "auto_close_settings";
 
 /* ── Save ── */
 
@@ -119,6 +127,10 @@ export async function saveBrandSettingsAction(
       const newMetadata = { ...currentMetadata, workflow_rules: data };
       updates.metadata = newMetadata;
       afterJson = data;
+    } else if (section === "auto_close_settings") {
+      const newMetadata = { ...currentMetadata, auto_close_settings: data };
+      updates.metadata = newMetadata;
+      afterJson = data;
     }
 
     await upsertBrandSettings(adminDb as any, session.brandId, updates);
@@ -128,6 +140,7 @@ export async function saveBrandSettingsAction(
       operational_hours: "Jam Operasional",
       notification_settings: "Notifikasi",
       workflow_rules: "Aturan Workflow",
+      auto_close_settings: "Penutupan Otomatis",
     };
 
     await (adminDb as any).from("audit_logs").insert({

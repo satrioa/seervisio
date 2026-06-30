@@ -66,7 +66,7 @@ import { logoutAction } from "@/server/actions/operator.actions";
 import { loadRememberedAccounts, type RememberedAccount } from "@/lib/auth/remembered-accounts";
 import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
-import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
+import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { ShiftCashWidget } from "@/components/layout/shift-cash-widget";
 
 // Permission key for each nav item
@@ -248,6 +248,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
   const [brandImageFailed, setBrandImageFailed] = React.useState(false);
   const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
   const { isMobile, setOpenMobile } = useSidebar();
+  const boot = useBootLoader();
 
   const handleNavClick = React.useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -258,40 +259,44 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
     if (branchId === activeBranchId) return;
 
     const targetBranch = branches.find(b => b.id === branchId);
-    const fromName = activeBranchName ?? "Semua Cabang";
     const toName = targetBranch?.name ?? "Semua Cabang";
 
     setIsSwitching(true);
-    triggerDynamicIslandFeedback({
-      type: "loading",
-      title: "Mengganti cabang...",
-      description: `${fromName} → ${toName}`,
-    });
 
     try {
-      // Simulate slight delay for better UX feel
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const tasks: BootTask[] = [
+      {
+        id: "switch",
+        label: "Switch Branch",
+        action: async () => {
+          setActiveBranchId(branchId);
+          await new Promise((r) => setTimeout(r, 400));
+        },
+      },
+      {
+        id: "workspace",
+        label: "Load Workspace",
+        action: async () => {
+          await new Promise((r) => setTimeout(r, 350));
+        },
+      },
+      {
+        id: "cache",
+        label: "Warm Cache",
+        action: async () => {
+          await new Promise((r) => setTimeout(r, 250));
+        },
+      },
+      ];
 
-      setActiveBranchId(branchId);
+      await boot.start(tasks);
       router.refresh();
-
-      triggerDynamicIslandFeedback({
-        type: "success",
-        title: "Berhasil pindah cabang",
-        description: `Sekarang: ${toName}`,
-        duration: 2000,
-      });
-    } catch (error) {
-      triggerDynamicIslandFeedback({
-        type: "error",
-        title: "Gagal pindah cabang",
-        description: "Cabang tidak dapat diakses",
-        duration: 3000,
-      });
+    } catch {
+      router.refresh();
     } finally {
       setIsSwitching(false);
     }
-  }, [isSwitching, activeBranchId, branches, activeBranchName, setIsSwitching, setActiveBranchId, router]);
+  }, [isSwitching, activeBranchId, branches, setIsSwitching, setActiveBranchId, router, boot]);
 
   const visibleGroups = React.useMemo(
     () => filterGroupsByRole(COLLAPSIBLE_GROUPS, role as Role),

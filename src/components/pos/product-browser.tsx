@@ -41,10 +41,12 @@ function ProductCard({
   const [showUnitDialog, setShowUnitDialog] = React.useState(false);
   const [units, setUnits] = React.useState<CartDeviceUnit[]>([]);
   const [loadingUnits, setLoadingUnits] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
 
   const isDeviceUnit = product.itemType === "DEVICE_UNIT";
   const outOfStock = product.availableStock <= 0 && !isDeviceUnit;
   const noUnitsAvailable = isDeviceUnit && product.availableUnitsCount <= 0;
+  const hasImage = !!product.imageUrl && !imageError;
 
   const handleAdd = async () => {
     if (isDeviceUnit) {
@@ -78,39 +80,69 @@ function ProductCard({
 
   return (
     <>
-      <div className={`rounded-lg border bg-card p-3 transition-colors ${outOfStock || noUnitsAvailable ? "opacity-50" : ""} ${isInCart ? "border-primary/50" : "hover:border-primary/50"}`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-sm font-medium truncate">{product.name}</span>
+      <div
+        className={`group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all duration-200 ${
+          outOfStock || noUnitsAvailable ? "opacity-50" : ""
+        } ${
+          isInCart
+            ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/0.5)]"
+            : "border-border hover:border-primary/30 hover:shadow-sm"
+        }`}
+      >
+        {/* Image Area — square aspect, muted bg, contain */}
+        <div className="relative aspect-square overflow-hidden bg-muted/40">
+          {hasImage ? (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-muted/20" />
+              <img
+                src={product.imageUrl!}
+                alt={product.name}
+                className="size-full object-contain p-5 drop-shadow-sm transition-transform duration-300 group-hover:scale-[1.03]"
+                onError={() => setImageError(true)}
+                loading="lazy"
+              />
+            </>
+          ) : (
+            <div className="flex size-full items-center justify-center p-8">
+              <Package className="size-10 text-muted-foreground/30" />
             </div>
-            <div className="flex items-center gap-2 mb-2">{typeBadge()}</div>
-            {product.sku && <p className="text-[10px] text-muted-foreground">SKU: {product.sku}</p>}
-          </div>
-          <Button
-            size="sm"
-            variant={isInCart ? "secondary" : "default"}
-            className="shrink-0 h-8 w-8 p-0"
-            disabled={outOfStock || noUnitsAvailable || isInCart}
-            onClick={handleAdd}
-          >
-            {loadingUnits ? (
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-          </Button>
+          )}
         </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t">
-          <span className="text-sm font-semibold">
-            Rp {product.sellingPrice.toLocaleString("id-ID")}
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            {isDeviceUnit
-              ? `${product.availableUnitsCount} unit`
-              : `Stok: ${product.availableStock}`}
-          </span>
+
+        {/* Info */}
+        <div className="flex flex-1 flex-col gap-1.5 p-3">
+          {/* Name + Add button row */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</span>
+            <Button
+              size="sm"
+              variant={isInCart ? "secondary" : "default"}
+              className="shrink-0 ml-1 mt-0.5 size-7 p-0"
+              disabled={outOfStock || noUnitsAvailable || isInCart}
+              onClick={handleAdd}
+            >
+              {loadingUnits ? (
+                <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <Plus className="size-3.5" />
+              )}
+            </Button>
+          </div>
+
+          {/* Badge row */}
+          <div className="flex items-center gap-1.5">{typeBadge()}</div>
+
+          {/* Price + stock */}
+          <div className="mt-auto flex items-baseline justify-between gap-2 pt-1.5">
+            <span className="text-sm font-bold tabular-nums tracking-tight">
+              Rp{product.sellingPrice.toLocaleString("id-ID")}
+            </span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">
+              {isDeviceUnit
+                ? `${product.availableUnitsCount} unit`
+                : `Stok: ${product.availableStock}`}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -186,10 +218,13 @@ export function ProductBrowser({
         {loading ? (
           <div className="grid grid-cols-2 gap-3 pr-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="rounded-lg border bg-card p-3 animate-pulse">
-                <div className="h-4 w-3/4 bg-muted rounded mb-2" />
-                <div className="h-3 w-1/2 bg-muted rounded mb-2" />
-                <div className="h-8 w-full bg-muted rounded mt-3" />
+              <div key={i} className="overflow-hidden rounded-xl border bg-card animate-pulse">
+                <div className="aspect-square bg-muted" />
+                <div className="space-y-2 p-3">
+                  <div className="h-3.5 w-3/4 rounded bg-muted" />
+                  <div className="h-3 w-1/2 rounded bg-muted" />
+                  <div className="h-3.5 w-1/3 rounded bg-muted pt-1" />
+                </div>
               </div>
             ))}
           </div>

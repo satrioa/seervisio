@@ -54,6 +54,7 @@ export interface CashflowFilterInput {
 /* ── Constants ── */
 
 const MDR_RELATED_TYPES = new Set(["BANK_FEE"]);
+const NON_OPERATIONAL_EVENTS = new Set(["OPENING_BALANCE","BALANCE_ADJUSTMENT","TRANSFER_IN","TRANSFER_OUT"]);
 
 /* ── Helpers ── */
 
@@ -208,10 +209,10 @@ export async function listCashflowMovementsAction(
     movements = await enrichReferenceLabels(supabase, movements);
 
     const totalIn = movements
-      .filter((m) => m.direction === "IN")
+      .filter((m) => m.direction === "IN" && !NON_OPERATIONAL_EVENTS.has(m.movementType))
       .reduce((s, m) => s + m.amount, 0);
     const totalOut = movements
-      .filter((m) => m.direction === "OUT")
+      .filter((m) => m.direction === "OUT" && !NON_OPERATIONAL_EVENTS.has(m.movementType))
       .reduce((s, m) => s + m.amount, 0);
     const totalMdr = movements
       .filter((m) => MDR_RELATED_TYPES.has(m.movementType))

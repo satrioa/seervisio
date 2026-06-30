@@ -73,6 +73,44 @@ function buildEmail(eventType: string, brandName: string, payload: Record<string
       };
     }
 
+    case "AUTO_CLOSE": {
+      const branch = payload.branchName ?? "";
+      const shiftNumber = payload.shiftNumber ?? "";
+      const lateMin = payload.lateMinutes ?? 0;
+      const hours = Math.floor(lateMin / 60);
+      const mins = lateMin % 60;
+      const shiftDurationText = `${hours}h ${mins}m`;
+      return {
+        subject: `[${brandName}] Store automatically closed — ${branch}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#dc2626;">Store Automatically Closed</h2>
+            <p>Store <strong>${branch}</strong> was automatically closed because it exceeded operational hours.</p>
+            <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+              <tr><td style="padding:4px 8px;color:#666;">Shift</td><td style="padding:4px 8px;font-weight:600;">${shiftNumber}</td></tr>
+              <tr><td style="padding:4px 8px;color:#666;">Shift Duration</td><td style="padding:4px 8px;font-weight:600;">${shiftDurationText}</td></tr>
+              <tr><td style="padding:4px 8px;color:#666;">Late By</td><td style="padding:4px 8px;font-weight:600;color:#dc2626;">${lateMin} minutes</td></tr>
+            </table>
+            <p style="color:#888;font-size:12px;">${new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+          </div>`,
+      };
+    }
+
+    case "STORE_OVERDUE": {
+      const branch = payload.branchName ?? "";
+      const lateMin = payload.lateMinutes ?? 0;
+      return {
+        subject: `[${brandName}] Store still open after hours — ${branch}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+            <h2 style="color:#f59e0b;">Store Still Open</h2>
+            <p>Store <strong>${branch}</strong> has exceeded operational hours by <strong>${lateMin} minutes</strong> and is still open.</p>
+            <p style="color:#666;font-size:13px;">The store will be automatically closed once the grace period is exceeded.</p>
+            <p style="color:#888;font-size:12px;">${new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+          </div>`,
+      };
+    }
+
     case "PAYMENT_RECEIVED": {
       const serviceNumber = payload.serviceNumber ?? "";
       const amount = formatRp(payload.amount ?? 0);

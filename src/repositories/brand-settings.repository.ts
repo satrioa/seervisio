@@ -24,6 +24,8 @@ export interface BrandSettingsData {
   themeAccentColor: string;
   themeMode: string;
   themeTokens: Record<string, any> | null;
+  aiProvider: string | null;
+  aiApiKeyEncrypted: string | null;
 }
 
 function mapRow(row: DbBrandSettings): BrandSettingsData {
@@ -47,6 +49,8 @@ function mapRow(row: DbBrandSettings): BrandSettingsData {
     themeAccentColor: r.theme_accent_color ?? "#D4A017",
     themeMode: r.theme_mode ?? "light",
     themeTokens: (r.theme_tokens as Record<string, any> | null) ?? null,
+    aiProvider: r.ai_provider ?? null,
+    aiApiKeyEncrypted: r.ai_api_key_encrypted ?? null,
   };
 }
 

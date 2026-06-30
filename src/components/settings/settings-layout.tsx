@@ -10,6 +10,7 @@ import { PaymentSettings } from "@/components/settings/payment-settings";
 import { PaymentMethodSettings } from "@/components/settings/payment-method-settings";
 import { SystemSettings } from "@/components/settings/system-settings";
 import { UserAccessSettings } from "@/components/settings/user-access-settings";
+import { AiSettings } from "@/components/settings/ai-settings";
 
 /* ─── Section Definition ─── */
 
@@ -26,6 +27,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "payment-methods", component: PaymentMethodSettings },
   { id: "system", component: SystemSettings },
   { id: "user-access", component: UserAccessSettings },
+  { id: "ai", component: AiSettings },
 ];
 
 /* ─── Component ─── */

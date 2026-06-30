@@ -19,6 +19,13 @@ interface DbStoreShift {
   metadata: unknown;
   created_at: string;
   updated_at: string;
+  auto_closed: boolean | null;
+  closing_reason: string | null;
+  scheduled_open_time: string | null;
+  scheduled_close_time: string | null;
+  late_open_minutes: number | null;
+  early_open_minutes: number | null;
+  late_close_minutes: number | null;
   opened_by_profile?: { name: string; email: string } | null;
   closed_by_profile?: { name: string; email: string } | null;
 }
@@ -56,6 +63,13 @@ function mapDbShiftToDomain(row: DbStoreShift): StoreShift {
     closedBy: row.closed_by ?? undefined,
     openedByName,
     closedByName,
+    autoClosed: row.auto_closed ?? undefined,
+    closingReason: (row.closing_reason as StoreShift["closingReason"]) ?? undefined,
+    scheduledOpenTime: row.scheduled_open_time ?? undefined,
+    scheduledCloseTime: row.scheduled_close_time ?? undefined,
+    lateOpenMinutes: row.late_open_minutes ?? undefined,
+    earlyOpenMinutes: row.early_open_minutes ?? undefined,
+    lateCloseMinutes: row.late_close_minutes ?? undefined,
   };
 }
 

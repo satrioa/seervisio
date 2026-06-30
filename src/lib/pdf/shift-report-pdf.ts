@@ -149,6 +149,9 @@ export interface ShiftDetailPdfInput {
     expectedCash: number | null;
     cashInTotal: number;
     cashOutTotal: number;
+    cashSales: number;
+    serviceCashPayments: number;
+    refunds: number;
     paymentBreakdown: PaymentBreakdownItem[];
     transactions: TransactionItem[];
   } | null;

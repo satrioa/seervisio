@@ -2,24 +2,21 @@
 
 import * as React from "react";
 import {
-  Smartphone,
-  CheckCircle2,
-  Clock,
-  User,
   Wrench,
   FileText,
   MessageSquare,
   Wallet,
-  PiggyBank,
-  CheckCircle,
-  RotateCcw,
   XCircle,
+  RotateCcw,
+  Check,
+  Plus,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   type ServiceRecord,
   type ServiceStatus,
@@ -41,22 +39,20 @@ import {
   getTotalPayment,
   getPaymentStatusLabel,
 } from "@/components/services/service-data";
+import {
+  getPickupStatus,
+  type PickupStatus,
+} from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
-import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
-import { ServicePortalShare } from "@/components/services/service-portal-share";
+import { ServiceSparepartPanel } from "@/components/services/service-sparepart-panel";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
-import {
-  getPickupStatus,
-  getPickupLabel,
-  getPickupColor,
-  type PickupStatus,
-} from "@/components/services/service-data";
+import { ServiceDetailHeader } from "@/components/services/service-detail-header";
+import { ServiceTimeline } from "@/components/services/service-detail-timeline";
 import { verifyServicePickupAction, getServicePaymentPanelDataAction } from "@/server/actions/service-workflow.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 import {
-  buildServicePaymentSummary,
   type PaymentSummaryRow,
   type ServicePaymentSummaryResult,
 } from "@/lib/services/payment-summary";
@@ -99,14 +95,11 @@ export function ServiceDetailContent({
   if (!service) return null;
 
   const [paymentOpen, setPaymentOpen] = React.useState(false);
+  const [sparepartOpen, setSparepartOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [reopenOpen, setReopenOpen] = React.useState(false);
-  const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(
-    service.status,
-  );
-  const [enrichedPayments, setEnrichedPayments] = React.useState<
-    ServicePaymentRecord[]
-  >(() => (service as any).__paymentRecords ?? []);
+  const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(service.status);
+  const [enrichedPayments, setEnrichedPayments] = React.useState<ServicePaymentRecord[]>(() => (service as any).__paymentRecords ?? []);
   const [pickupDialogOpen, setPickupDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -167,516 +160,342 @@ export function ServiceDetailContent({
   const isPaid = summary.paymentState === "PAID";
   const isCancelled = localStatus === "cancelled";
   const paymentStatusLabel = getPaymentStatusLabel(summary.paymentState);
+  const progressPercent = Math.round(((statusIndex + 1) / STATUS_ORDER.length) * 100);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* ── Header ── */}
-      <div className="border-b px-6 py-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-            <ServiceDeviceIcon iconKey={service.deviceIconKey} className="size-4 text-muted-foreground" />
-            {service.serviceNumber || service.id}
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ${STATUS_CONFIG[localStatus].color}`}
-            >
-              <span
-                className={`size-1.5 rounded-full ${STATUS_CONFIG[localStatus].dot}`}
-              />
-              {STATUS_CONFIG[localStatus].label}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {service.deviceName} · {service.customerName}
-          </p>
-        </div>
-      </div>
+    <div className="flex h-full flex-col">
+      <ServiceDetailHeader
+        service={service}
+        localStatus={localStatus}
+        onClose={onClose}
+      />
 
-      {/* ── Scrollable content ── */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-5 p-6 pt-4">
-          {/* ── Info Grid ── */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Customer Info */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-              <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <User className="size-3" />
-                Pelanggan
-              </h4>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">
-                  {service.customerName}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {service.customerPhone || "No. HP belum ada"}
-                </span>
-                {service.customerAddress && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {service.customerAddress}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Device Info */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-              <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Smartphone className="size-3" />
-                Perangkat
-              </h4>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">
-                  {service.deviceName}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {service.deviceType ?? "-"}
-                </span>
-                {service.serialNumber && (
-                  <span className="text-[10px] text-muted-foreground">
-                    SN: {service.serialNumber}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Service Info */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-              <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Clock className="size-3" />
-                Layanan
-              </h4>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">
-                  Masuk: {formatDateTime(service.intakeAt || service.createdAt)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Update: {formatDateTime(service.updatedAt)}
-                </span>
-                {service.technicianName && (
-                  <span className="text-xs text-foreground">
-                    Teknisi: {service.technicianName}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  Cabang: {service.branchName ?? "Cabang tidak diketahui"}
-                </span>
-              </div>
-            </div>
-
-            {/* Payment Summary */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-              <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Wallet className="size-3" />
-                Pembayaran
-              </h4>
-
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    Estimasi Biaya
-                  </span>
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(Number(service.estimatedCost || 0))}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-xs">
-                  <span className="font-medium text-foreground">
-                    Total Tagihan
-                  </span>
-                  <span className="font-semibold text-foreground">
-                    {formatCurrency(totalCost)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    Sudah Dibayar
-                  </span>
-                  <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(summary.totalPaid)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-t border-dashed border-border pt-1.5 text-sm">
-                  <span className="font-medium text-foreground">
-                    Sisa Tagihan
-                  </span>
-                  <span className="font-bold text-foreground">
-                    {formatCurrency(summary.remainingAmount)}
-                  </span>
-                </div>
-                <div className="mt-1">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${paymentStatusLabel.color}`}
-                  >
-                    {paymentStatusLabel.label}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Payment History */}
-              {summary.successfulPayments.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Riwayat Pembayaran
-                    </span>
-                    {summary.successfulPayments.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between rounded-md bg-muted/30 px-2 py-1.5"
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <CheckCircle className="size-3 text-emerald-500" />
-                            <span className="text-[10px] font-medium text-foreground">
-                              {p.paymentNumber}
-                            </span>
-                          </div>
-                          <span className="text-[9px] text-muted-foreground">
-                            {[p.methodType, p.accountName].filter(Boolean).join(" · ") || p.paymentStatus}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-medium tabular-nums text-foreground">
-                          {formatCurrency(p.grossAmount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {summary.successfulPayments.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">
-                  Belum ada pembayaran
-                </span>
-              )}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* ── Issue & Diagnosis ── */}
-          <div className="flex flex-col gap-3">
-            <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <FileText className="size-3" />
-              Issue & Diagnosis
-            </h4>
-            <div className="flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  Keluhan
-                </span>
-                <p className="text-xs text-foreground">{service.issue}</p>
-              </div>
-              {service.diagnosis && (
-                <>
-                  <Separator />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Diagnosis
-                    </span>
-                    <p className="text-xs text-foreground">
-                      {service.diagnosis}
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* ── Status Stepper ── */}
-          <div className="flex flex-col gap-3">
-            <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <CheckCircle2 className="size-3" />
-              Status Progress
-            </h4>
-            <div className="flex items-start gap-0">
-              {STATUS_ORDER.map((s, i) => {
-                const isActive = i <= statusIndex;
-                const isCurrent = i === statusIndex;
-                const isLast = i === STATUS_ORDER.length - 1;
-                return (
-                  <React.Fragment key={s}>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div
-                        className={`flex size-6 items-center justify-center rounded-full ${
-                          isCurrent
-                            ? "bg-primary text-primary-foreground ring-2 ring-primary/20"
-                            : isActive
-                              ? "bg-primary/20 text-primary"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {isActive && !isCurrent ? (
-                          <CheckCircle2 className="size-3.5" />
-                        ) : (
-                          <span className="text-[10px] font-bold">
-                            {i + 1}
-                          </span>
-                        )}
-                      </div>
-                      <span
-                        className={`text-[9px] font-medium ${
-                          isActive
-                            ? "text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {STATUS_CONFIG[s].label}
-                      </span>
-                    </div>
-                    {!isLast && (
-                      <div
-                        className={`mt-3 h-px flex-1 ${
-                          i < statusIndex ? "bg-primary/40" : "bg-border"
-                        }`}
-                      />
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* ── Timeline ── */}
-          <div className="flex flex-col gap-3">
-            <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Clock className="size-3" />
-              Aktivitas
-            </h4>
-            <div className="flex flex-col gap-0">
-              {service.timeline.length > 0 ? service.timeline.map((entry, i) => (
-                <div
-                  key={i}
-                  className="relative flex gap-3 pb-4 pl-4 last:pb-0"
-                >
-                  {i < service.timeline.length - 1 && (
-                    <div className="absolute bottom-0 left-[5px] top-[14px] w-px bg-border" />
-                  )}
-                  <div className="mt-1 flex size-2.5 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-background" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-xs font-medium text-foreground">
-                      {entry.status}
-                    </span>
-                    {entry.note && (
-                      <p className="text-xs text-muted-foreground">
-                        {entry.note}
-                      </p>
-                    )}
-                    <span className="text-[10px] text-muted-foreground">
-                      {entry.timestamp} — {entry.by}
-                    </span>
-                  </div>
-                </div>
-              )) : (
-                <p className="text-xs text-muted-foreground">Belum ada aktivitas</p>
-              )}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* ── Spareparts ── */}
-          <div className="flex flex-col gap-3">
-            <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Wrench className="size-3" />
-              Sparepart Digunakan
-            </h4>
-            {service.spareparts.length > 0 ? (
-              <div className="flex flex-col gap-1.5">
-                {service.spareparts.map((sp, i) => (
-                  <div
-                    key={sp.id ?? i}
-                    className="flex items-center justify-between rounded-lg border bg-card px-3 py-2"
-                  >
-                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <span className="text-xs font-medium text-foreground truncate">
-                        {sp.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {sp.qty}x @ {formatCurrency(sp.price)}
-                        {sp.imeiSnapshot && <span className="ml-1">· IMEI: {sp.imeiSnapshot}</span>}
-                        {sp.batteryHealthSnapshot != null && <span className="ml-1">· BH: {sp.batteryHealthSnapshot}%</span>}
-                        {sp.conditionGradeSnapshot && <span className="ml-1">· {sp.conditionGradeSnapshot}</span>}
-                        {sp.isReturned && <span className="ml-1 text-amber-500">· Dikembalikan</span>}
-                      </span>
-                    </div>
-                    <span className="shrink-0 text-xs font-medium tabular-nums text-foreground ml-2">
-                      {formatCurrency(sp.price * sp.qty)}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between px-3 py-1.5">
-                  <span className="text-xs font-semibold text-foreground">
-                    Nilai sparepart (internal)
-                  </span>
-                  <span className="text-xs font-semibold tabular-nums text-foreground">
-                    {formatCurrency(totalSparepart)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Belum ada sparepart digunakan
-              </p>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* ── Notes ── */}
-          <div className="flex flex-col gap-3">
-            <h4 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <MessageSquare className="size-3" />
-              Catatan
-            </h4>
-            {service.notes.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                {service.notes.map((n, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2"
-                  >
-                    <p className="text-xs text-foreground">{n.text}</p>
-                    <span className="text-[10px] text-muted-foreground">
-                      {n.timestamp} — {n.by}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Tidak ada catatan
-              </p>
-            )}
-          </div>
-          </div>
-
-          <Separator />
-
-          {/* ── Bagikan ke Pelanggan ── */}
-          <div className="px-6">
-            <ServicePortalShare
-              serviceId={service.id}
-              serviceNumber={service.serviceNumber || service.id}
-              customerName={service.customerName}
-              deviceInfo={service.deviceName}
+        {/* ═══ Pickup Banner (outside tabs) ═══ */}
+        {service.status === "selesai" && (
+          <div className="p-6 pb-0">
+            <PickupBanner
+              service={service}
+              pickupStatus={getPickupStatus(service)}
+              onVerify={() => setPickupDialogOpen(true)}
             />
           </div>
-
-          <Separator />
-
-          {/* ── Pickup Status ── */}
-        {service.status === "selesai" && (
-          (() => {
-            const pickupStatus = getPickupStatus(service);
-            if (pickupStatus === "PICKED_UP") {
-              return (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">Sudah Diambil</h4>
-                  <div className="space-y-1 text-sm text-blue-700">
-                    {service.pickupName && <p>Nama: {service.pickupName}</p>}
-                    {service.pickupPhone && <p>No. HP: {service.pickupPhone}</p>}
-                    {service.pickupRelation && <p>Relasi: {service.pickupRelation}</p>}
-                    {service.pickupNote && <p>Catatan: {service.pickupNote}</p>}
-                    {service.pickedUpAt && <p>Waktu: {new Date(service.pickedUpAt).toLocaleString("id-ID")}</p>}
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                <h4 className="font-medium text-green-900 mb-1">Unit Siap Diambil</h4>
-                <p className="text-sm text-green-700 mb-3">
-                  Status servis sudah selesai. Unit siap diserahkan ke pelanggan.
-                </p>
-                <button
-                  onClick={() => setPickupDialogOpen(true)}
-                  className="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-                >
-                  Verifikasi Pengambilan
-                </button>
-              </div>
-            );
-          })()
         )}
 
-        {/* ── Footer / Actions ── */}
-        <div className="border-t bg-background px-6 py-3">
-          <div className="flex flex-col gap-2">
-            {!isCancelled && (
-              <>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <UpdateServiceStatusDialog
-                    service={displayService}
-                    brandSlug={brandSlug}
-                    onStatusUpdated={(status) => {
-                      setLocalStatus(status);
-                      onServiceUpdated?.();
-                    }}
-                  />
+        {/* ═══ Tabs ═══ */}
+        <Tabs defaultValue="general" className={service.status === "selesai" ? "mt-5" : "mt-0"}>
+          <div className="sticky top-0 z-10 bg-background px-6">
+            <TabsList className="w-full">
+              <TabsTrigger value="general" className="flex-1 text-xs">General</TabsTrigger>
+              <TabsTrigger value="timeline" className="flex-1 text-xs">Timeline</TabsTrigger>
+              <TabsTrigger value="payment" className="flex-1 text-xs">Payment</TabsTrigger>
+              <TabsTrigger value="sparepart" className="flex-1 text-xs">Sparepart</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="p-6">
+            {/* ═══ General Tab ═══ */}
+            <TabsContent value="general" className="mt-0 space-y-5">
+              {/* Status Card */}
+              <section>
+                <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                    <SummaryRow label="Device" value={service.deviceName} />
+                    <SummaryRow label="Technician" value={service.technicianName || "—"} />
+                    <SummaryRow label="Estimated Cost" value={formatCurrency(Number(service.estimatedCost || 0))} />
+                    <SummaryRow label="Created" value={formatDateTime(service.intakeAt || service.createdAt)} />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-muted-foreground">Progress</span>
+                      <span className="text-[11px] tabular-nums text-muted-foreground">{Math.min(progressPercent, 100)}%</span>
+                    </div>
+                    <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {STATUS_ORDER.map((s, i) => {
+                      const isActive = i <= statusIndex;
+                      const isCurrent = i === statusIndex;
+                      const isLast = i === STATUS_ORDER.length - 1;
+                      return (
+                        <React.Fragment key={s}>
+                          <div className="flex items-center gap-1">
+                            <div
+                              className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
+                                isCurrent
+                                  ? "bg-primary text-primary-foreground"
+                                  : isActive
+                                    ? "bg-primary/15 text-primary"
+                                    : "bg-muted text-muted-foreground/50"
+                              }`}
+                            >
+                              <span className="text-[7px] font-bold">{i + 1}</span>
+                            </div>
+                            <span
+                              className={`hidden truncate text-[9px] font-medium sm:inline ${
+                                isActive ? "text-foreground" : "text-muted-foreground/50"
+                              }`}
+                            >
+                              {STATUS_CONFIG[s].label}
+                            </span>
+                          </div>
+                          {!isLast && <div className={`h-px flex-1 ${i < statusIndex ? "bg-primary/40" : "bg-border"}`} />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Customer Info */}
+              <section>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
+                    <SummaryRow label="Name" value={service.customerName} />
+                    <SummaryRow label="Phone" value={service.customerPhone || "—"} />
+                    {service.customerAddress && (
+                      <div className="col-span-2">
+                        <SummaryRow label="Address" value={service.customerAddress} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Issue & Diagnosis */}
+              <section>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="size-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Issue & Diagnosis</span>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <span className="text-[10px] font-medium text-muted-foreground">Complaint</span>
+                      <p className="mt-0.5 text-sm text-foreground">{service.issue}</p>
+                    </div>
+                    {service.diagnosis && (
+                      <div>
+                        <span className="text-[10px] font-medium text-muted-foreground">Diagnosis</span>
+                        <p className="mt-0.5 text-sm text-foreground">{service.diagnosis}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Notes */}
+              <section>
+                <SectionHeader icon={MessageSquare} label="Notes" />
+                <div className="mt-3">
+                  {service.notes.length > 0 ? (
+                    <div className="space-y-2">
+                      {service.notes.map((n, i) => (
+                        <div key={i} className="rounded-lg bg-muted/30 px-3 py-2">
+                          <p className="text-xs">{n.text}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{n.timestamp} — {n.by}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState icon={MessageSquare} text="No notes" />
+                  )}
+                </div>
+              </section>
+            </TabsContent>
+
+            {/* ═══ Timeline Tab ═══ */}
+            <TabsContent value="timeline" className="mt-0">
+              <ServiceTimeline entries={service.timeline} />
+            </TabsContent>
+
+            {/* ═══ Payment Tab ═══ */}
+            <TabsContent value="payment" className="mt-0 space-y-5">
+              <section>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center gap-1.5">
+                    <Wallet className="size-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</span>
+                    <Badge variant="outline" className={`ml-auto text-[10px] ${paymentStatusLabel.color}`}>
+                      {paymentStatusLabel.label}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground">Total Bill</span>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(summary.totalBill)}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground">Paid</span>
+                      <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(summary.totalPaid)}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground">Remaining</span>
+                      <p className="text-sm font-bold tabular-nums">{formatCurrency(summary.remainingAmount)}</p>
+                    </div>
+                  </div>
+
+                  {summary.successfulPayments.length > 0 && (
+                    <div className="mt-3 space-y-1.5 border-t pt-3">
+                      {summary.successfulPayments.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between rounded-md bg-muted/30 px-2.5 py-1.5">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-medium">{p.paymentNumber}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {[p.methodType, p.accountName].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-medium tabular-nums">{formatCurrency(p.grossAmount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {role !== "TECHNICIAN" && (
+                    <div className="mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => setPaymentOpen(true)}
+                      >
+                        <Wallet className="size-3.5 mr-1.5" />
+                        {isPaid ? "Payment Detail" : "Receive Payment"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </TabsContent>
+
+            {/* ═══ Sparepart Tab ═══ */}
+            <TabsContent value="sparepart" className="mt-0 space-y-5">
+              <section>
+                <SectionHeader icon={Wrench} label="Spareparts Used" />
+                <div className="mt-3">
+                  {service.spareparts.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {service.spareparts.map((sp, i) => (
+                        <div key={sp.id ?? i} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{sp.name}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {sp.qty}x @ {formatCurrency(sp.price)}
+                              {sp.imeiSnapshot && <span className="ml-1">· IMEI: {sp.imeiSnapshot}</span>}
+                              {sp.isReturned && <span className="ml-1 text-amber-500">· Returned</span>}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-medium tabular-nums ml-2">{formatCurrency(sp.price * sp.qty)}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between px-3 py-1">
+                        <span className="text-xs font-semibold">Total (internal)</span>
+                        <span className="text-xs font-semibold tabular-nums">{formatCurrency(totalSparepart)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <EmptyState icon={Wrench} text="No spareparts used" />
+                  )}
+                </div>
+
+                <div className="mt-4">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs"
-                    onClick={() => setCancelOpen(true)}
+                    className="w-full text-xs"
+                    onClick={() => setSparepartOpen(true)}
                   >
-                    <XCircle className="size-3.5" />
-                    Batalkan
+                    <Plus className="size-3.5 mr-1.5" />
+                    Manage Spareparts
                   </Button>
                 </div>
+              </section>
+            </TabsContent>
+          </div>
+        </Tabs>
 
-                {role !== "TECHNICIAN" && (
-                  <Button
-                    size="sm"
-                    className="w-full gap-1.5 text-xs"
-                    onClick={() => setPaymentOpen(true)}
-                  >
-                    <Wallet className="size-3.5" />
-                    {isPaid ? "Detail Pembayaran" : "Terima Pembayaran"}
-                  </Button>
-                )}
-              </>
-            )}
-            {isCancelled && (
+        <div className="h-2" />
+      </div>
+
+      {/* ── Sticky Footer ── */}
+      <div className="shrink-0 border-t bg-background px-6 py-3">
+        <div className="flex flex-col gap-2">
+          {!isCancelled ? (
+            <>
+              <div className="flex items-center gap-2">
+                <UpdateServiceStatusDialog
+                  service={displayService}
+                  brandSlug={brandSlug}
+                  onStatusUpdated={(status) => {
+                    setLocalStatus(status);
+                    onServiceUpdated?.();
+                  }}
+                />
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-9 text-xs"
+                  onClick={() => setCancelOpen(true)}
+                >
+                  <XCircle className="size-3.5 mr-1.5" />
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full text-xs"
+                className="h-9 flex-1 text-xs"
                 onClick={() => setReopenOpen(true)}
               >
-                <RotateCcw className="size-3.5" />
-                Buka Ulang
+                <RotateCcw className="size-3.5 mr-1.5" />
+                Reopen
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-xs"
-              onClick={onClose}
-            >
-              Tutup
-            </Button>
-          </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs"
+                onClick={onClose}
+              >
+                Close
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Payment Panel ── */}
+      {/* ── Dialogs ── */}
       <ServicePaymentPanel
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
         service={service}
         brandSlug={brandSlug}
-        onPaymentRecorded={() => {
-          onServiceUpdated?.();
-        }}
+        onPaymentRecorded={() => { onServiceUpdated?.(); }}
       />
 
-      {/* ── Cancel Dialog ── */}
+      <ServiceSparepartPanel
+        open={sparepartOpen}
+        onOpenChange={setSparepartOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onSparepartAdded={() => { onServiceUpdated?.(); }}
+      />
+
       <CancelServiceDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
@@ -688,7 +507,6 @@ export function ServiceDetailContent({
         }}
       />
 
-      {/* ── Reopen Dialog ── */}
       <ReopenServiceDialog
         open={reopenOpen}
         onOpenChange={setReopenOpen}
@@ -700,7 +518,6 @@ export function ServiceDetailContent({
         }}
       />
 
-      {/* ── Pickup Dialog ── */}
       <PickupVerificationDialog
         open={pickupDialogOpen}
         onOpenChange={setPickupDialogOpen}
@@ -711,6 +528,85 @@ export function ServiceDetailContent({
           onServiceUpdated?.();
         }}
       />
+    </div>
+  );
+}
+
+/* ─── Sub-components ─── */
+
+function SectionHeader({ icon: Icon, label }: { icon: any; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon className="size-3.5 text-muted-foreground" />
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <p className="mt-0.5 truncate text-sm font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+      <Icon className="size-3.5 text-muted-foreground/40" />
+      <span className="text-xs text-muted-foreground">{text}</span>
+    </div>
+  );
+}
+
+/* ─── Pickup Banner (compact) ─── */
+
+function PickupBanner({
+  service,
+  pickupStatus,
+  onVerify,
+}: {
+  service: ServiceRecord;
+  pickupStatus: PickupStatus;
+  onVerify: () => void;
+}) {
+  if (pickupStatus === "PICKED_UP") {
+    return (
+      <div className="rounded-xl border bg-card p-3">
+        <div className="flex items-center gap-2">
+          <div className="flex size-6 items-center justify-center rounded-full bg-blue-100">
+            <Check className="size-3 text-blue-600" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">Picked up</p>
+            <p className="text-[10px] text-muted-foreground">
+              {service.pickupName} {service.pickupRelation ? `(${service.pickupRelation})` : ""}
+              {service.pickedUpAt ? ` · ${new Date(service.pickedUpAt).toLocaleString("id-ID")}` : ""}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <div className="flex items-center gap-3">
+        <div>
+          <p className="text-sm font-medium">Ready for Pickup</p>
+          <p className="text-xs text-muted-foreground">Device is ready to be handed over to the customer.</p>
+        </div>
+        <Button
+          size="sm"
+          className="shrink-0 h-8 gap-1.5 text-xs ml-auto"
+          onClick={onVerify}
+        >
+          <Check className="size-3.5" />
+          Verify
+        </Button>
+      </div>
     </div>
   );
 }
@@ -759,204 +655,83 @@ function PickupVerificationDialog({
   const allChecklistDone = unitChecked && paymentConfirmed && customerAcceptedCondition;
 
   const handleSubmit = async () => {
-    if (!pickupName.trim()) {
-      setError("Nama pengambil wajib diisi.");
-      return;
-    }
-    if (!pickupRelation.trim()) {
-      setError("Relasi pengambil wajib diisi.");
-      return;
-    }
-    if (!allChecklistDone) {
-      setError("Semua checklist harus dicentang.");
-      return;
-    }
-
+    if (!pickupName.trim()) { setError("Pickup name is required."); return; }
+    if (!pickupRelation.trim()) { setError("Relation is required."); return; }
+    if (!allChecklistDone) { setError("All checkboxes must be checked."); return; }
     setError(null);
     setSubmitting(true);
-
-    triggerDynamicIslandFeedback({
-      type: "loading",
-      title: "Memverifikasi pengambilan",
-      description: "Memproses verifikasi pengambilan unit...",
-    });
-
+    triggerDynamicIslandFeedback({ type: "loading", title: "Verifying pickup", description: "Processing..." });
     try {
       const response = await verifyServicePickupAction({
-        brandSlug,
-        serviceId: service.id,
-        pickupName: pickupName.trim(),
-        pickupPhone: pickupPhone.trim() || undefined,
-        pickupRelation: pickupRelation.trim(),
+        brandSlug, serviceId: service.id, pickupName: pickupName.trim(),
+        pickupPhone: pickupPhone.trim() || undefined, pickupRelation: pickupRelation.trim(),
         pickupNote: pickupNote.trim() || undefined,
-        checklist: {
-          unitChecked,
-          paymentConfirmed,
-          customerAcceptedCondition,
-        },
+        checklist: { unitChecked, paymentConfirmed, customerAcceptedCondition },
       });
-
       if (response.success) {
-        triggerDynamicIslandFeedback({
-          type: "success",
-          title: "Pengambilan diverifikasi",
-          description: `Unit diserahkan kepada ${pickupName.trim()}.`,
-          duration: 1800,
-        });
+        triggerDynamicIslandFeedback({ type: "success", title: "Pickup verified", description: `Device handed to ${pickupName.trim()}.`, duration: 1800 });
         onSuccess();
       } else {
-        triggerDynamicIslandFeedback({
-          type: "error",
-          title: "Gagal verifikasi",
-          description: response.error ?? "Gagal memverifikasi pengambilan.",
-          duration: 2400,
-        });
-        setError(response.error ?? "Gagal memverifikasi pengambilan.");
+        triggerDynamicIslandFeedback({ type: "error", title: "Verification failed", description: response.error ?? "Failed.", duration: 2400 });
+        setError(response.error ?? "Failed.");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Terjadi kesalahan tidak terduga.";
-      triggerDynamicIslandFeedback({
-        type: "error",
-        title: "Gagal verifikasi",
-        description: msg,
-        duration: 2400,
-      });
+      const msg = err instanceof Error ? err.message : "Unexpected error.";
+      triggerDynamicIslandFeedback({ type: "error", title: "Verification failed", description: msg, duration: 2400 });
       setError(msg);
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="size-5 text-green-600" />
-            Verifikasi Pengambilan
-          </DialogTitle>
-          <DialogDescription>
-            {service.deviceName} — {service.serviceNumber || service.id}
-          </DialogDescription>
+          <DialogTitle className="flex items-center gap-2 text-base">Pickup Verification</DialogTitle>
+          <DialogDescription className="text-xs">{service.deviceName} — {service.serviceNumber || service.id}</DialogDescription>
         </DialogHeader>
-
         <div className="space-y-4 py-2">
           <div className="space-y-3">
+            {[
+              { label: "Pickup Name", value: pickupName, onChange: setPickupName, placeholder: "Full name", required: true },
+              { label: "Phone", value: pickupPhone, onChange: setPickupPhone, placeholder: "Phone (optional)", required: false },
+            ].map((f) => (
+              <div key={f.label} className="space-y-1.5">
+                <Label className="text-xs font-medium">{f.label}{f.required && <span className="text-destructive ml-0.5">*</span>}</Label>
+                <Input value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder} className="text-xs h-9" />
+              </div>
+            ))}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Nama Pengambil <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={pickupName}
-                onChange={(e) => setPickupName(e.target.value)}
-                placeholder="Nama lengkap pengambil"
-                className="text-xs"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">No. HP Pengambil</Label>
-              <Input
-                value={pickupPhone}
-                onChange={(e) => setPickupPhone(e.target.value)}
-                placeholder="Nomor telepon (opsional)"
-                className="text-xs"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Relasi <span className="text-destructive">*</span>
-              </Label>
-              <select
-                value={pickupRelation}
-                onChange={(e) => setPickupRelation(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="" disabled>Pilih relasi</option>
-                <option value="Diri Sendiri">Diri Sendiri</option>
-                <option value="Keluarga">Keluarga</option>
-                <option value="Teman">Teman</option>
-                <option value="Kurir">Kurir</option>
-                <option value="Lainnya">Lainnya</option>
+              <Label className="text-xs font-medium">Relation <span className="text-destructive">*</span></Label>
+              <select value={pickupRelation} onChange={(e) => setPickupRelation(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <option value="" disabled>Select relation</option>
+                {["Self", "Family", "Friend", "Courier", "Other"].map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Catatan</Label>
-              <textarea
-                value={pickupNote}
-                onChange={(e) => setPickupNote(e.target.value)}
-                placeholder="Catatan tambahan (opsional)"
-                className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              />
+              <Label className="text-xs font-medium">Note</Label>
+              <textarea value={pickupNote} onChange={(e) => setPickupNote(e.target.value)} placeholder="Optional note" className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
             </div>
           </div>
-
           <Separator />
-
           <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Checklist Verifikasi
-            </p>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={unitChecked}
-                onChange={(e) => setUnitChecked(e.target.checked)}
-                className="mt-0.5 size-3.5"
-              />
-              <span className="text-xs text-foreground leading-relaxed">
-                Unit sudah diperiksa dan dalam kondisi sesuai
-              </span>
-            </label>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={paymentConfirmed}
-                onChange={(e) => setPaymentConfirmed(e.target.checked)}
-                className="mt-0.5 size-3.5"
-              />
-              <span className="text-xs text-foreground leading-relaxed">
-                Pembayaran sudah lunas
-              </span>
-            </label>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={customerAcceptedCondition}
-                onChange={(e) => setCustomerAcceptedCondition(e.target.checked)}
-                className="mt-0.5 size-3.5"
-              />
-              <span className="text-xs text-foreground leading-relaxed">
-                Pelanggan menyetujui kondisi unit
-              </span>
-            </label>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Verification Checklist</p>
+            {[
+              { label: "Unit has been checked and is in proper condition", checked: unitChecked, onChange: setUnitChecked },
+              { label: "Payment has been settled", checked: paymentConfirmed, onChange: setPaymentConfirmed },
+              { label: "Customer accepts the unit condition", checked: customerAcceptedCondition, onChange: setCustomerAcceptedCondition },
+            ].map((c) => (
+              <label key={c.label} className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={c.checked} onChange={(e) => c.onChange(e.target.checked)} className="mt-0.5 size-3.5" />
+                <span className="text-xs leading-relaxed">{c.label}</span>
+              </label>
+            ))}
           </div>
-
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={submitting}
-          >
-            Batal
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSubmit}
-            disabled={!pickupName.trim() || !pickupRelation.trim() || !allChecklistDone || submitting}
-          >
-            {submitting ? "Memproses..." : "Konfirmasi Pengambilan"}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+          <Button size="sm" onClick={handleSubmit} disabled={!pickupName.trim() || !pickupRelation.trim() || !allChecklistDone || submitting}>
+            {submitting ? "Processing..." : "Confirm Pickup"}
           </Button>
         </DialogFooter>
       </DialogContent>
