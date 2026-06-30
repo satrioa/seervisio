@@ -164,3 +164,46 @@
     display: none;
   }
 }
+
+/* ── View Transition API ── */
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0% at var(--transition-origin-x, 50%) var(--transition-origin-y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--transition-origin-x, 50%) var(--transition-origin-y, 50%));
+  }
+}
+
+::view-transition-old(root) {
+  animation: none;
+}
+
+::view-transition-new(root) {
+  animation: theme-reveal 300ms ease-in-out both;
+  will-change: clip-path;
+}
+
+/* Exclude Dynamic Island from view transition so it stays crisp */
+[data-island-root] {
+  view-transition-name: dynamic-island;
+}
+
+::view-transition-old(dynamic-island),
+::view-transition-new(dynamic-island) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ── Dynamic Island Glow ── */
+[data-island-root][data-island-glow="true"] {
+  scale: 1.03;
+  filter: drop-shadow(0 0 32px hsl(var(--primary) / 0.5));
+  transition: scale 0.2s ease, filter 0.2s ease;
+}
+
+[data-island-root][data-island-glow="fading"] {
+  scale: 1;
+  filter: drop-shadow(0 0 0px hsl(var(--primary) / 0));
+  transition: scale 0.15s ease, filter 0.15s ease;
+}

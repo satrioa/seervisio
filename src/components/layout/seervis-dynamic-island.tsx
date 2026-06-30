@@ -310,6 +310,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
     <>
     <motion.div
       ref={islandRef}
+      data-island-root
       className="flex origin-center cursor-pointer items-center justify-center rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-black/10 dark:bg-white dark:text-black dark:hover:border-black/20"
       initial={{
         width: initialDims.width,

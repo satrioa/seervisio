@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import {
-  TrendingUp,
   Wallet,
   Receipt,
   Activity,
@@ -10,6 +9,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { SummaryCard } from "@/components/dashboard/summary-card";
+import { RevenueBreakdownCard } from "@/components/dashboard/revenue-breakdown-card";
 import {
   ChartContainer,
   ChartTooltip,
@@ -82,11 +82,11 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
     <div className="space-y-6">
       {/* ── KPI Cards ── */}
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          label="Pendapatan"
-          value={formatRp(data?.totalRevenue ?? 0)}
-          helper="total revenue dari servis, POS, dan income lain"
-          icon={TrendingUp}
+        <RevenueBreakdownCard
+          totalRevenue={data?.totalRevenue ?? 0}
+          serviceRevenue={data?.serviceRevenue ?? 0}
+          posRevenue={data?.posRevenue ?? 0}
+          otherIncome={data?.otherIncome ?? 0}
         />
         <SummaryCard
           label="Cash In"

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -28,6 +28,9 @@ import { ROLE_LABELS } from "@/lib/permissions/roles";
 import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { SystemLoader } from "@/components/system-loader/SystemLoader";
+import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
+import { createClient } from "@/lib/supabase/client";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -241,9 +244,129 @@ function PanelLayoutShell({
     }
   }, []);
 
+  /* ── Boot loader ── */
+  const boot = useBootLoader();
+  const bootStarted = useRef(false);
+  const { setBrandColor } = boot;
+
+  useEffect(() => {
+    if (bootStarted.current) return;
+    bootStarted.current = true;
+
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const supabase = createClient();
+    const tasks: BootTask[] = [
+      {
+        id: "session",
+        label: "Validate Session",
+        action: async () => {
+          const s = Date.now();
+          await supabase.auth.getSession();
+          const e = Date.now() - s;
+          if (e < 300) await wait(300 - e);
+        },
+      },
+      {
+        id: "profile",
+        label: "Load User",
+        action: async () => {
+          await wait(350);
+        },
+      },
+      {
+        id: "branch",
+        label: "Set Branch",
+        action: async () => {
+          await wait(300);
+        },
+      },
+      {
+        id: "permissions",
+        label: "Load Permissions",
+        action: async () => {
+          await wait(300);
+        },
+      },
+      {
+        id: "theme",
+        label: "Apply Theme",
+        action: async () => {
+          const s = Date.now();
+          try {
+            const { getBrandThemeAction } = await import(
+              "@/server/actions/brand-theme.actions"
+            );
+            const result = await getBrandThemeAction(brandSlug);
+            if (result.success) {
+              setBrandColor(result.data.primaryColor);
+            }
+          } catch {
+            // Non-critical
+          }
+          const e = Date.now() - s;
+          if (e < 400) await wait(400 - e);
+        },
+      },
+      {
+        id: "shift",
+        label: "Check Shift",
+        action: async () => {
+          await wait(350);
+        },
+      },
+      {
+        id: "payments",
+        label: "Load Payment Methods",
+        action: async () => {
+          await wait(320);
+        },
+      },
+      {
+        id: "cache",
+        label: "Warm Cache",
+        action: async () => {
+          await wait(300);
+        },
+      },
+      {
+        id: "dashboard",
+        label: "Load Dashboard",
+        action: async () => {
+          await wait(350);
+        },
+      },
+      {
+        id: "sidebar",
+        label: "Build Navigation",
+        action: async () => {
+          await wait(280);
+        },
+      },
+      {
+        id: "features",
+        label: "Load Feature Flags",
+        action: async () => {
+          await wait(250);
+        },
+      },
+      {
+        id: "ready",
+        label: "Prepare Workspace",
+        action: async () => {
+          await wait(200);
+        },
+      },
+    ];
+
+    boot.start(tasks);
+  }, [brandSlug, boot, setBrandColor]);
+
   const { mode: theme, toggleTheme } = useBrandTheme();
 
   return (
+    <>
+    <SystemLoader />
     <StoreShiftProvider>
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
@@ -367,5 +490,6 @@ function PanelLayoutShell({
       )}
     </div>
     </StoreShiftProvider>
+    </>
   );
 }

@@ -134,6 +134,9 @@ export interface DashboardFinance {
   expenseCategoryRadar?: { category: string; amount: number; percentage: number }[];
   paymentMethodRadar?: { method: string; grossAmount: number; transactionCount: number; mdrAmount: number; netAmount: number; percentage: number }[];
   totalRevenue: number;
+  serviceRevenue: number;
+  posRevenue: number;
+  otherIncome: number;
   cashIn: number;
   cashOut: number;
   netCashflow: number;
@@ -365,6 +368,8 @@ export async function getDashboardOverviewAction(
 
     const branchMap = new Map(allBranches.map((b: any) => [b.id, b.name || b.id]));
 
+    const NON_OPERATIONAL = new Set(["OPENING_BALANCE","BALANCE_ADJUSTMENT","TRANSFER_IN","TRANSFER_OUT"]);
+
     /* ── Revenue ── */
     const serviceRevenue = ledgerRows
       .filter((r: any) => r.entry_type === "SERVICE_REVENUE" && r.direction === "CREDIT")
@@ -419,6 +424,7 @@ export async function getDashboardOverviewAction(
     }
     for (const m of movements) {
       if (m.direction !== "OUT") continue;
+      if (NON_OPERATIONAL.has(m.movement_type)) continue;
       const d = (m.created_at || "").split("T")[0];
       if (!d) continue;
       const e = revMap.get(d) || { svc: 0, pos: 0, oi: 0, co: 0 };
@@ -531,6 +537,7 @@ export async function getDashboardOverviewAction(
     const expenseMap = new Map<string, number>();
     for (const m of movements) {
       if (m.direction !== "OUT") continue;
+      if (NON_OPERATIONAL.has(m.movement_type)) continue;
       const type = m.movement_type || "OTHER";
       expenseMap.set(type, (expenseMap.get(type) || 0) + Number(m.amount || 0));
     }
@@ -798,12 +805,11 @@ export async function getDashboardOverviewAction(
 
     /* ══ FINANCE TAB ══ */
     const totalIn = movements
-      .filter((m: any) => m.direction === "IN")
+      .filter((m: any) => m.direction === "IN" && !NON_OPERATIONAL.has(m.movement_type))
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
     const totalOut = movements
-      .filter((m: any) => m.direction === "OUT")
+      .filter((m: any) => m.direction === "OUT" && !NON_OPERATIONAL.has(m.movement_type))
       .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
-    // Ensure cash in/out reflects real revenue even when movement records are sparse
     const effectiveCashIn = Math.max(totalIn, serviceRevenue + posRevenue);
     const effectiveCashOut = Math.max(totalOut, totalExpense);
 
@@ -888,6 +894,9 @@ export async function getDashboardOverviewAction(
       finance: {
         revenueTrend,
         totalRevenue: effectiveRevenue,
+        serviceRevenue,
+        posRevenue,
+        otherIncome,
         cashIn: effectiveCashIn,
         cashOut: effectiveCashOut,
         netCashflow: effectiveCashIn - effectiveCashOut,
