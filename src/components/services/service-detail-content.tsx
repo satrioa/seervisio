@@ -10,6 +10,8 @@ import {
   RotateCcw,
   Check,
   Plus,
+  Store,
+  QrCode,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 
@@ -17,16 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 import {
   type ServiceRecord,
@@ -56,6 +48,9 @@ import {
   type PaymentSummaryRow,
   type ServicePaymentSummaryResult,
 } from "@/lib/services/payment-summary";
+import { SlideToVerify } from "@/components/ui/slide-to-verify";
+import { RepresentativePickupDialog } from "@/components/services/pickup/representative-pickup-dialog";
+import { QRVerifyPickupDialog } from "@/components/services/pickup/qr-verify-pickup-dialog";
 
 /* ─── Props ─── */
 
@@ -102,7 +97,8 @@ export function ServiceDetailContent({
   const [reopenOpen, setReopenOpen] = React.useState(false);
   const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(service.status);
   const [enrichedPayments, setEnrichedPayments] = React.useState<ServicePaymentRecord[]>(() => (service as any).__paymentRecords ?? []);
-  const [pickupDialogOpen, setPickupDialogOpen] = React.useState(false);
+  const [repDialogOpen, setRepDialogOpen] = React.useState(false);
+  const [qrDialogOpen, setQrDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
     setLocalStatus(service.status);
@@ -179,7 +175,11 @@ export function ServiceDetailContent({
             <PickupBanner
               service={service}
               pickupStatus={getPickupStatus(service)}
-              onVerify={() => setPickupDialogOpen(true)}
+              isPaid={isPaid}
+              brandSlug={brandSlug}
+              onPickupSuccess={() => onServiceUpdated?.()}
+              onRepPickup={() => setRepDialogOpen(true)}
+              onQRPickup={() => setQrDialogOpen(true)}
             />
           </div>
         )}
@@ -522,13 +522,24 @@ export function ServiceDetailContent({
         }}
       />
 
-      <PickupVerificationDialog
-        open={pickupDialogOpen}
-        onOpenChange={setPickupDialogOpen}
+      <RepresentativePickupDialog
+        open={repDialogOpen}
+        onOpenChange={setRepDialogOpen}
         service={service}
         brandSlug={brandSlug}
         onSuccess={() => {
-          setPickupDialogOpen(false);
+          setRepDialogOpen(false);
+          onServiceUpdated?.();
+        }}
+      />
+
+      <QRVerifyPickupDialog
+        open={qrDialogOpen}
+        onOpenChange={setQrDialogOpen}
+        service={service}
+        brandSlug={brandSlug}
+        onSuccess={() => {
+          setQrDialogOpen(false);
           onServiceUpdated?.();
         }}
       />
@@ -565,17 +576,27 @@ function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
   );
 }
 
-/* ─── Pickup Banner (compact) ─── */
+/* ─── Pickup Banner ─── */
 
 function PickupBanner({
   service,
   pickupStatus,
-  onVerify,
+  isPaid,
+  brandSlug,
+  onPickupSuccess,
+  onRepPickup,
+  onQRPickup,
 }: {
   service: ServiceRecord;
   pickupStatus: PickupStatus;
-  onVerify: () => void;
+  isPaid: boolean;
+  brandSlug: string;
+  onPickupSuccess: () => void;
+  onRepPickup: () => void;
+  onQRPickup: () => void;
 }) {
+  const [selfSubmitting, setSelfSubmitting] = React.useState(false);
+
   if (pickupStatus === "PICKED_UP") {
     return (
       <div className="rounded-xl border bg-card p-3">
@@ -595,150 +616,103 @@ function PickupBanner({
     );
   }
 
-  return (
-    <div className="rounded-xl border bg-card p-3">
-      <div className="flex items-center gap-3">
-        <div>
-          <p className="text-sm font-medium">Ready for Pickup</p>
-          <p className="text-xs text-muted-foreground">Device is ready to be handed over to the customer.</p>
-        </div>
-        <Button
-          size="sm"
-          className="shrink-0 h-8 gap-1.5 text-xs ml-auto"
-          onClick={onVerify}
-        >
-          <Check className="size-3.5" />
-          Verify
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Pickup Verification Dialog ─── */
-
-interface PickupVerificationDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  service: ServiceRecord;
-  brandSlug: string;
-  onSuccess: () => void;
-}
-
-function PickupVerificationDialog({
-  open,
-  onOpenChange,
-  service,
-  brandSlug,
-  onSuccess,
-}: PickupVerificationDialogProps) {
-  const [pickupName, setPickupName] = React.useState("");
-  const [pickupPhone, setPickupPhone] = React.useState("");
-  const [pickupRelation, setPickupRelation] = React.useState("");
-  const [pickupNote, setPickupNote] = React.useState("");
-  const [unitChecked, setUnitChecked] = React.useState(false);
-  const [paymentConfirmed, setPaymentConfirmed] = React.useState(false);
-  const [customerAcceptedCondition, setCustomerAcceptedCondition] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (open) {
-      setPickupName("");
-      setPickupPhone("");
-      setPickupRelation("");
-      setPickupNote("");
-      setUnitChecked(false);
-      setPaymentConfirmed(false);
-      setCustomerAcceptedCondition(false);
-      setError(null);
-      setSubmitting(false);
-    }
-  }, [open]);
-
-  const allChecklistDone = unitChecked && paymentConfirmed && customerAcceptedCondition;
-
-  const handleSubmit = async () => {
-    if (!pickupName.trim()) { setError("Pickup name is required."); return; }
-    if (!pickupRelation.trim()) { setError("Relation is required."); return; }
-    if (!allChecklistDone) { setError("All checkboxes must be checked."); return; }
-    setError(null);
-    setSubmitting(true);
-    triggerDynamicIslandFeedback({ type: "loading", title: "Verifying pickup", description: "Processing..." });
+  const handleSelfPickup = async () => {
+    if (selfSubmitting) return;
+    setSelfSubmitting(true);
+    triggerDynamicIslandFeedback({
+      type: "loading",
+      title: "Verifying pickup",
+      description: "Processing...",
+    });
     try {
-      const response = await verifyServicePickupAction({
-        brandSlug, serviceId: service.id, pickupName: pickupName.trim(),
-        pickupPhone: pickupPhone.trim() || undefined, pickupRelation: pickupRelation.trim(),
-        pickupNote: pickupNote.trim() || undefined,
-        checklist: { unitChecked, paymentConfirmed, customerAcceptedCondition },
+      const result = await verifyServicePickupAction({
+        brandSlug,
+        serviceId: service.id,
+        pickupName: service.customerName,
+        pickupRelation: "Self",
+        checklist: {
+          unitChecked: true,
+          paymentConfirmed: true,
+          customerAcceptedCondition: true,
+        },
       });
-      if (response.success) {
-        triggerDynamicIslandFeedback({ type: "success", title: "Pickup verified", description: `Device handed to ${pickupName.trim()}.`, duration: 1800 });
-        onSuccess();
+      if (result.success) {
+        triggerDynamicIslandFeedback({
+          type: "success",
+          title: "Pickup verified",
+          description: `Device picked up by customer.`,
+          duration: 1800,
+        });
+        onPickupSuccess();
       } else {
-        triggerDynamicIslandFeedback({ type: "error", title: "Verification failed", description: response.error ?? "Failed.", duration: 2400 });
-        setError(response.error ?? "Failed.");
+        triggerDynamicIslandFeedback({
+          type: "error",
+          title: "Verification failed",
+          description: result.error ?? "Failed.",
+          duration: 2400,
+        });
+        setSelfSubmitting(false);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unexpected error.";
-      triggerDynamicIslandFeedback({ type: "error", title: "Verification failed", description: msg, duration: 2400 });
-      setError(msg);
-    } finally { setSubmitting(false); }
+      triggerDynamicIslandFeedback({
+        type: "error",
+        title: "Verification failed",
+        description: msg,
+        duration: 2400,
+      });
+      setSelfSubmitting(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">Pickup Verification</DialogTitle>
-          <DialogDescription className="text-xs">{service.deviceName} — {service.serviceNumber || service.id}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-3">
-            {[
-              { label: "Pickup Name", value: pickupName, onChange: setPickupName, placeholder: "Full name", required: true },
-              { label: "Phone", value: pickupPhone, onChange: setPickupPhone, placeholder: "Phone (optional)", required: false },
-            ].map((f) => (
-              <div key={f.label} className="space-y-1.5">
-                <Label className="text-xs font-medium">{f.label}{f.required && <span className="text-destructive ml-0.5">*</span>}</Label>
-                <Input value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder} className="text-xs h-9" />
-              </div>
-            ))}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Relation <span className="text-destructive">*</span></Label>
-              <select value={pickupRelation} onChange={(e) => setPickupRelation(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                <option value="" disabled>Select relation</option>
-                {["Self", "Family", "Friend", "Courier", "Other"].map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Note</Label>
-              <textarea value={pickupNote} onChange={(e) => setPickupNote(e.target.value)} placeholder="Optional note" className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
-            </div>
+    <div className="rounded-xl border bg-card p-3">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-6 items-center justify-center rounded-full bg-emerald-100">
+            <Check className="size-3 text-emerald-600" />
           </div>
-          <Separator />
-          <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Verification Checklist</p>
-            {[
-              { label: "Unit has been checked and is in proper condition", checked: unitChecked, onChange: setUnitChecked },
-              { label: "Payment has been settled", checked: paymentConfirmed, onChange: setPaymentConfirmed },
-              { label: "Customer accepts the unit condition", checked: customerAcceptedCondition, onChange: setCustomerAcceptedCondition },
-            ].map((c) => (
-              <label key={c.label} className="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" checked={c.checked} onChange={(e) => c.onChange(e.target.checked)} className="mt-0.5 size-3.5" />
-                <span className="text-xs leading-relaxed">{c.label}</span>
-              </label>
-            ))}
+          <div>
+            <p className="text-sm font-medium">Ready for Pickup</p>
+            <p className="text-xs text-muted-foreground">
+              Device is ready to be handed over.
+            </p>
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!pickupName.trim() || !pickupRelation.trim() || !allChecklistDone || submitting}>
-            {submitting ? "Processing..." : "Confirm Pickup"}
+
+        <SlideToVerify
+          onComplete={handleSelfPickup}
+          disabled={!isPaid}
+          disabledMessage={
+            !isPaid
+              ? "Payment must be completed before device pickup."
+              : undefined
+          }
+          label="Slide to confirm pickup"
+          loading={selfSubmitting}
+        />
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 flex-1 gap-1.5 text-xs"
+            onClick={onRepPickup}
+          >
+            <Store className="size-3.5" />
+            Picked up by representative
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onQRPickup}
+          >
+            <QrCode className="size-3.5" />
+            QR
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

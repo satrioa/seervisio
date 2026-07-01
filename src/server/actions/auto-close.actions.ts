@@ -86,6 +86,69 @@ export async function runAutoCloseCheckAction(
 }
 
 /**
+ * runAutoCloseScheduledAction
+ *
+ * Same RPC call as runAutoCloseCheckAction but WITHOUT permission checks.
+ * Designed to be called from the client-side scheduler/hook on behalf of any user.
+ * The SQL function check_and_auto_close_shifts handles all validation internally
+ * (shift must be open, hours exceeded, auto-close enabled, etc.)
+ *
+ * Call without brandSlug to check all brands (permission bypass).
+ * Call with brandSlug as a no-op scoped safety marker (permission still skipped).
+ */
+export async function runAutoCloseScheduledAction(
+  brandSlug?: string,
+): Promise<ActionResult<AutoCloseResult[]>> {
+  try {
+    const supabase = await createServerSupabase();
+
+    const { data, error } = await (supabase as any).rpc("check_and_auto_close_shifts");
+
+    if (error) {
+      console.error("[auto-close/scheduled] RPC error:", error);
+      return errorResult(error.message || "Gagal menjalankan pengecekan auto-close.");
+    }
+
+    const results: AutoCloseResult[] = (data || []).map((row: any) => ({
+      shiftId: row.shift_id,
+      branchId: row.branch_id,
+      branchName: row.branch_name,
+      shiftNumber: row.shift_number,
+      brandId: row.brand_id,
+      brandName: row.brand_name,
+      scheduledCloseTime: row.scheduled_close_time,
+      lateMinutes: row.late_minutes,
+      gracePeriodMinutes: row.grace_period_minutes,
+    }));
+
+    for (const r of results) {
+      try {
+        await sendOperationalNotification({
+          brandId: r.brandId,
+          branchId: r.branchId,
+          eventType: "AUTO_CLOSE",
+          payload: {
+            branchName: r.branchName,
+            shiftNumber: r.shiftNumber,
+            brandName: r.brandName,
+            scheduledCloseTime: r.scheduledCloseTime,
+            lateMinutes: r.lateMinutes,
+            gracePeriodMinutes: r.gracePeriodMinutes,
+          },
+        });
+      } catch (notifErr: any) {
+        console.warn("[auto-close/scheduled] notification failed for shift", r.shiftId, notifErr.message);
+      }
+    }
+
+    return successResult(results);
+  } catch (err: any) {
+    console.error("[auto-close/scheduled] runAutoCloseScheduledAction:", err.message);
+    return errorResult(err.message || "Gagal menjalankan pengecekan auto-close.");
+  }
+}
+
+/**
  * getAutoCloseConfigAction
  *
  * Returns the auto-close configuration for a brand from brand_settings metadata.

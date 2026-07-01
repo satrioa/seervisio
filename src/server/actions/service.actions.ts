@@ -24,6 +24,7 @@ import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServiceP
 import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
 import { getServicesPaymentSummary } from "@/server/domain/service-payment-summary";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
+import { ROLES } from "@/lib/permissions/roles";
 
 /* ─── List Services ─── */
 
@@ -594,7 +595,15 @@ export async function createServiceAction(
     requireActionPermission(session.role, "service.create");
 
     const brandId = session.brandId;
-    const branchId = input.branchId ?? session.defaultBranchId;
+
+    // Non-master roles cannot choose branch — always force to their default branch
+    let branchId: string | null;
+    if (session.role !== ROLES.MASTER_ADMIN && session.role !== ROLES.PLATFORM_OWNER) {
+      branchId = session.defaultBranchId;
+      if (!branchId) return errorResult("Tidak ada cabang default. Hubungi admin.");
+    } else {
+      branchId = input.branchId ?? session.defaultBranchId;
+    }
 
     console.log("[service:create] input", {
       branchId,

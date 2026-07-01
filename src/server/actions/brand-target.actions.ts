@@ -7,11 +7,13 @@ import {
   getBranchTargets,
   upsertBrandTarget,
 } from "@/repositories/brand-target.repository";
+import { getBranchesByBrandId } from "@/repositories/branch.repository";
 
 export type BrandTargetResponse = {
   brandMonthly: number;
   brandYearly: number;
   branches: {
+    branchId: string;
     name: string;
     monthly: number;
     yearly: number;
@@ -29,15 +31,23 @@ export async function getBrandTargetAction(
 
     const brandTarget = await getBrandTarget(adminDb as any, session.brandId);
     const branchTargets = await getBranchTargets(adminDb as any, session.brandId);
+    const allBranches = await getBranchesByBrandId(adminDb as any, session.brandId);
+
+    const targetMap = new Map(branchTargets.map((bt) => [bt.branchId, bt]));
+    const branches = allBranches.map((b) => {
+      const target = targetMap.get(b.id);
+      return {
+        branchId: b.id,
+        name: b.name,
+        monthly: target?.monthlyAmount ?? 0,
+        yearly: target?.yearlyAmount ?? 0,
+      };
+    });
 
     return successResult({
       brandMonthly: brandTarget?.monthlyAmount ?? 0,
       brandYearly: brandTarget?.yearlyAmount ?? 0,
-      branches: branchTargets.map((bt) => ({
-        name: bt.branchId ?? "",
-        monthly: bt.monthlyAmount,
-        yearly: bt.yearlyAmount,
-      })),
+      branches,
     });
   } catch (err: any) {
     console.error("[getBrandTargetAction]", err);

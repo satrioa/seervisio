@@ -116,7 +116,8 @@ export function CreateServiceForm({
   const brandSlug = params.brandSlug as string;
   const [submitting, setSubmitting] = React.useState(false);
   const [deviceTypeOpen, setDeviceTypeOpen] = React.useState(false);
-  const { activeBranchId, branches } = useActiveBranch();
+  const { activeBranchId, branches, userRole } = useActiveBranch();
+  const canChangeBranch = userRole === "MASTER_ADMIN" || userRole === "PLATFORM_OWNER";
 
   const selectedBranchName = React.useMemo(
     () => branches.find((b) => b.id === formData.branch)?.name ?? "",
@@ -137,12 +138,13 @@ export function CreateServiceForm({
     return () => { cancelled = true; };
   }, [brandSlug, formData.branch]);
 
-  // Auto-fill branch on mount if active branch scope is set
+  // Auto-fill branch on mount — non-master roles always use active branch
   React.useEffect(() => {
-    if (activeBranchId && !formData.branch) {
+    if (!activeBranchId) return;
+    if (!canChangeBranch || !formData.branch) {
       onFormChange({ ...formData, branch: activeBranchId });
     }
-  }, [activeBranchId]);
+  }, [activeBranchId, canChangeBranch, formData.branch]);
 
   const updateField = (field: keyof CreateServiceFormData, value: any) => {
     onFormChange({ ...formData, [field]: value });
@@ -514,31 +516,42 @@ export function CreateServiceForm({
         {/* Step 4: Biaya & Konfirmasi */}
         {currentStep === 4 && (
           <div className="flex flex-col gap-5">
-            {/* Branch */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cs-branch" className="text-xs font-medium">
-                Cabang <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.branch}
-                onValueChange={(v) => updateField("branch", v)}
-              >
-                <SelectTrigger className="h-10 text-sm" id="cs-branch">
-                  <SelectValue placeholder={
-                    activeBranchId
-                      ? branches.find((b) => b.id === activeBranchId)?.name ?? "Pilih cabang"
-                      : "Pilih cabang"
-                  } />
-                </SelectTrigger>
-                <SelectContent className="z-[1001]">
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id} className="text-sm">
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Branch — only Master Admin / Platform Owner can change */}
+            {canChangeBranch ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cs-branch" className="text-xs font-medium">
+                  Cabang <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.branch}
+                  onValueChange={(v) => updateField("branch", v)}
+                >
+                  <SelectTrigger className="h-10 text-sm" id="cs-branch">
+                    <SelectValue placeholder={
+                      activeBranchId
+                        ? branches.find((b) => b.id === activeBranchId)?.name ?? "Pilih cabang"
+                        : "Pilih cabang"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1001]">
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id} className="text-sm">
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs font-medium">
+                  Cabang
+                </Label>
+                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
+                  {branches.find((b) => b.id === formData.branch)?.name ?? "—"}
+                </div>
+              </div>
+            )}
 
             {/* Assigned Technician */}
             <div className="flex flex-col gap-1.5">

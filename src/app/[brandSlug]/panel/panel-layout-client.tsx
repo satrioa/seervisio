@@ -33,6 +33,7 @@ import { useThemeTransition } from "@/hooks/use-theme-transition";
 import { SystemLoader } from "@/components/system-loader/SystemLoader";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { createClient } from "@/lib/supabase/client";
+import { useAutoClose } from "@/hooks/use-auto-close";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -134,6 +135,8 @@ function PanelLayoutShell({
   const { activeBranchId, branches, activeBranchName } = useActiveBranch();
   const [openShiftModal, setOpenShiftModal] = React.useState(false);
   const isMobile = useIsMobile();
+
+  useAutoClose();
 
   const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
   const resolvedBranchName = resolvedBranchId

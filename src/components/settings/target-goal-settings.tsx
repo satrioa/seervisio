@@ -74,7 +74,7 @@ export function TargetGoalSettings() {
         setBrandMonthly(result.data.brandMonthly);
         setBrandYearly(result.data.brandYearly);
         setBranches(result.data.branches.map((b) => ({
-          branchId: b.name,
+          branchId: b.branchId,
           name: b.name,
           monthly: b.monthly,
           yearly: b.yearly,
@@ -133,7 +133,7 @@ export function TargetGoalSettings() {
           setBrandMonthly(result.data.brandMonthly);
           setBrandYearly(result.data.brandYearly);
           setBranches(result.data.branches.map((b) => ({
-            branchId: b.name,
+            branchId: b.branchId,
             name: b.name,
             monthly: b.monthly,
             yearly: b.yearly,
