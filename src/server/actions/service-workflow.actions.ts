@@ -31,6 +31,7 @@ import {
 import { getServicePaymentSummary, type PaymentSummaryResult } from "@/repositories/payment-summary.repository";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
+import { insertBrandNotification } from "@/server/repositories/notification.repository";
 
 /* ─── Update Service Status ─── */
 
@@ -326,6 +327,13 @@ export async function updateServiceStatusAction(
           deviceModel: service.device_model ?? "",
         },
       });
+      await insertBrandNotification(
+        service.brand_id,
+        "Service Status Changed",
+        `${service.service_number} moved to ${dbNextStatus ?? ""}`,
+        "activity",
+        "info",
+      );
     } catch (notifErr: any) {
       console.warn("[updateServiceStatusAction] SERVICE_STATUS_CHANGED notification error:", notifErr.message);
     }
@@ -378,6 +386,13 @@ export async function updateServiceStatusAction(
             deviceModel: svc?.device_model ?? "",
           },
         });
+        await insertBrandNotification(
+          service.brand_id,
+          "Service Completed",
+          `${service.service_number} completed — ready for pickup`,
+          "activity",
+          "info",
+        );
       } catch (notifErr: any) {
         console.warn("[notification:error] SERVICE_COMPLETED failed:", notifErr.message);
       }
@@ -867,6 +882,13 @@ export async function receiveServicePaymentAction(
           paymentType: input.paymentType,
         },
       });
+      await insertBrandNotification(
+        service.brand_id,
+        "Payment Received",
+        `Rp${(input.amount ?? 0).toLocaleString("id-ID")} received for ${service.service_number}`,
+        "activity",
+        "info",
+      );
     } catch (notifErr: any) {
       console.warn("[notification:error] PAYMENT_RECEIVED failed:", notifErr.message);
     }

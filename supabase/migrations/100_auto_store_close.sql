@@ -77,7 +77,9 @@ comment on function public.get_branch_scheduled_hours is
 
 -- ── 4. Enhanced open_store_shift with compliance tracking ──
 
-create or replace function public.open_store_shift(
+drop function if exists public.open_store_shift(p_brand_id integer, p_branch_id uuid, p_opening_cash numeric, p_opening_notes text, p_opened_by uuid, p_metadata jsonb);
+
+create function public.open_store_shift(
   p_brand_id integer,
   p_branch_id uuid,
   p_opening_cash numeric,

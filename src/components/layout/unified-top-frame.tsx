@@ -10,6 +10,8 @@ import { NotificationPopover } from "@/components/notifications/NotificationPopo
 interface UnifiedTopFrameProps {
   brandLogoUrl: string | null;
   brandName: string;
+  brandSlug: string;
+  brandId: number;
   theme: "light" | "dark";
   onToggleTheme: () => void;
   userName?: string;
@@ -22,6 +24,8 @@ const GOOEY_ID = "top-frame-gooey";
 export function UnifiedTopFrame({
   brandLogoUrl,
   brandName,
+  brandSlug,
+  brandId,
   theme,
   onToggleTheme,
   userName,
@@ -108,7 +112,7 @@ export function UnifiedTopFrame({
                 <Moon className="size-4" />
               )}
             </Button>
-            <NotificationPopover />
+            <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
           </div>
         </div>
       </div>

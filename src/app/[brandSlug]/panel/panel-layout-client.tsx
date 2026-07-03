@@ -34,10 +34,12 @@ import { SystemLoader } from "@/components/system-loader/SystemLoader";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoClose } from "@/hooks/use-auto-close";
+import { TourProvider, useTour } from "@/components/onboarding/tour-provider";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
   brandSlug: string;
+  brandId: number;
   brandName: string;
   brandLogoUrl: string | null;
   branches: ActiveBranchOption[];
@@ -51,6 +53,9 @@ interface PanelLayoutClientProps {
   userEmail: string;
   userAvatarUrl: string | null;
   isImpersonating?: boolean;
+  profileId: string;
+  onboardingCompleted?: boolean;
+  onboardingCompletedTasks?: string[];
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -79,6 +84,7 @@ function getPageTitle(pathname: string | null) {
 export function PanelLayoutClient({
   children,
   brandSlug,
+  brandId,
   brandName,
   brandLogoUrl,
   branches,
@@ -92,13 +98,16 @@ export function PanelLayoutClient({
   userEmail,
   userAvatarUrl,
   isImpersonating = false,
+  profileId,
+  onboardingCompleted,
+  onboardingCompletedTasks,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
           <PosCartProvider>
-            <PanelLayoutShell brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks}>{children}</PanelLayoutShell>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -109,6 +118,7 @@ export function PanelLayoutClient({
 function PanelLayoutShell({
   children,
   brandSlug,
+  brandId,
   brandName,
   brandLogoUrl,
   role,
@@ -120,6 +130,9 @@ function PanelLayoutShell({
   userEmail,
   userAvatarUrl,
   isImpersonating,
+  profileId,
+  onboardingCompleted,
+  onboardingCompletedTasks,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -137,6 +150,11 @@ function PanelLayoutShell({
   const isMobile = useIsMobile();
 
   useAutoClose();
+  const { startTour } = useTour();
+
+  React.useEffect(() => {
+    if (!onboardingCompleted) startTour();
+  }, []);
 
   const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
   const resolvedBranchName = resolvedBranchId
@@ -373,6 +391,13 @@ function PanelLayoutShell({
   return (
     <>
     <SystemLoader />
+    <TourProvider
+      role={role}
+      profileId={profileId}
+      brandSlug={brandSlug}
+      onboardingCompleted={onboardingCompleted ?? false}
+      initialTasks={onboardingCompletedTasks ?? []}
+    >
     <StoreShiftProvider>
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
@@ -429,7 +454,7 @@ function PanelLayoutShell({
                     <Moon className="size-4" />
                   )}
                 </Button>
-                <NotificationPopover />
+                <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
               </div>
             </header>
 
@@ -487,6 +512,7 @@ function PanelLayoutShell({
       )}
     </div>
     </StoreShiftProvider>
+    </TourProvider>
     </>
   );
 }

@@ -24,6 +24,7 @@ import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServiceP
 import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
 import { getServicesPaymentSummary } from "@/server/domain/service-payment-summary";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
+import { insertBrandNotification } from "@/server/repositories/notification.repository";
 import { ROLES } from "@/lib/permissions/roles";
 
 /* ─── List Services ─── */
@@ -763,6 +764,13 @@ export async function createServiceAction(
           deviceModel: input.deviceModel?.trim() ?? "",
         },
       });
+      await insertBrandNotification(
+        brandId,
+        "Service Created",
+        `${serviceNumber} — ${input.customerName?.trim() ?? ""} (${input.deviceBrand?.trim() ?? ""} ${input.deviceModel?.trim() ?? ""})`,
+        "activity",
+        "info",
+      );
       console.log("[notification:event] SERVICE_CREATED triggered", {
         serviceNumber,
         brandId,
@@ -1048,6 +1056,15 @@ export async function assignServiceTechnicianAction(
             customerName: techCustName,
           },
         });
+        if (technicianName) {
+          await insertBrandNotification(
+            session.brandId,
+            "Technician Assigned",
+            `${technicianName} assigned to ${service.service_number}`,
+            "activity",
+            "info",
+          );
+        }
       }
     } catch (notifErr: any) {
       console.warn("[assignServiceTechnicianAction] notification error:", notifErr.message);

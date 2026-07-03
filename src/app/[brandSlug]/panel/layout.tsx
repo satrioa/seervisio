@@ -56,9 +56,20 @@ export default async function PanelLayout({
           .filter((branch) => effectiveContext.accessibleBranchIds.includes(branch.id))
           .map((branch) => ({ id: branch.id, name: branch.name }));
 
+    // Step 5: Fetch onboarding progress
+    const { data: onboardingData } = await (supabase as any)
+      .from("profiles")
+      .select("onboarding_completed, onboarding_completed_tasks")
+      .eq("id", effectiveContext.profileId)
+      .maybeSingle();
+
+    const onboardingCompleted = onboardingData?.onboarding_completed ?? false;
+    const onboardingCompletedTasks = onboardingData?.onboarding_completed_tasks ?? [];
+
     return (
       <PanelLayoutClient
         brandSlug={brandSlug}
+        brandId={effectiveContext.brandId}
         brandName={effectiveContext.brandName}
         brandLogoUrl={effectiveContext.brandLogoUrl}
         branches={accessibleBranches}
@@ -72,6 +83,9 @@ export default async function PanelLayout({
         userEmail={effectiveContext.email}
         userAvatarUrl={effectiveContext.avatarUrl}
         isImpersonating={isImpersonating}
+        profileId={effectiveContext.profileId}
+        onboardingCompleted={onboardingCompleted}
+        onboardingCompletedTasks={onboardingCompletedTasks}
       >
         {children}
       </PanelLayoutClient>

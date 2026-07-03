@@ -17,6 +17,7 @@ export async function getNotifications(
   limit = 50,
   status?: string,
   category?: string,
+  brandId?: number,
 ): Promise<NotificationRow[]> {
   const supabase = createServiceRoleSupabaseClient();
 
@@ -31,6 +32,9 @@ export async function getNotifications(
   }
   if (category && category !== "all") {
     query = query.eq("category", category);
+  }
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
   }
 
   const { data, error } = await query;
@@ -54,13 +58,19 @@ export async function getNotifications(
   }));
 }
 
-export async function getUnreadNotificationCount(): Promise<number> {
+export async function getUnreadNotificationCount(brandId?: number): Promise<number> {
   const supabase = createServiceRoleSupabaseClient();
 
-  const { count, error } = await (supabase as any)
+  let query = (supabase as any)
     .from("notifications")
     .select("*", { count: "exact", head: true })
     .eq("status", "unread");
+
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
+  }
+
+  const { count, error } = await query;
 
   if (error) {
     console.error("getUnreadNotificationCount error:", error);
@@ -72,13 +82,20 @@ export async function getUnreadNotificationCount(): Promise<number> {
 
 export async function markNotificationRead(
   notificationId: string,
+  brandId?: number,
 ): Promise<boolean> {
   const supabase = createServiceRoleSupabaseClient();
 
-  const { error } = await (supabase as any)
+  let query = (supabase as any)
     .from("notifications")
     .update({ status: "read", read_at: new Date().toISOString() })
     .eq("id", notificationId);
+
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
+  }
+
+  const { error } = await query;
 
   if (error) {
     console.error("markNotificationRead error:", error);
@@ -88,13 +105,19 @@ export async function markNotificationRead(
   return true;
 }
 
-export async function markAllNotificationsRead(): Promise<boolean> {
+export async function markAllNotificationsRead(brandId?: number): Promise<boolean> {
   const supabase = createServiceRoleSupabaseClient();
 
-  const { error } = await (supabase as any)
+  let query = (supabase as any)
     .from("notifications")
     .update({ status: "read", read_at: new Date().toISOString() })
     .eq("status", "unread");
+
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
+  }
+
+  const { error } = await query;
 
   if (error) {
     console.error("markAllNotificationsRead error:", error);
@@ -106,13 +129,20 @@ export async function markAllNotificationsRead(): Promise<boolean> {
 
 export async function deleteNotification(
   notificationId: string,
+  brandId?: number,
 ): Promise<boolean> {
   const supabase = createServiceRoleSupabaseClient();
 
-  const { error } = await (supabase as any)
+  let query = (supabase as any)
     .from("notifications")
     .delete()
     .eq("id", notificationId);
+
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
+  }
+
+  const { error } = await query;
 
   if (error) {
     console.error("deleteNotification error:", error);
@@ -145,4 +175,22 @@ export async function insertNotification(
   }
 
   return true;
+}
+
+export async function insertBrandNotification(
+  brandId: number,
+  title: string,
+  description: string,
+  category = "activity",
+  severity = "info",
+  metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  return insertNotification({
+    title,
+    description,
+    category,
+    severity,
+    brand_id: brandId,
+    metadata,
+  });
 }

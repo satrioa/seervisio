@@ -20,6 +20,7 @@ import {
   UserPlus,
   UserCog,
   BookOpen,
+  Compass,
 } from "lucide-react";
 
 import {
@@ -69,6 +70,8 @@ import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { ShiftCashWidget } from "@/components/layout/shift-cash-widget";
+import { useTour } from "@/components/onboarding/tour-provider";
+
 
 // Permission key for each nav item
 function itemPermission(href: string): string | null {
@@ -250,6 +253,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
   const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
   const { isMobile, setOpenMobile } = useSidebar();
   const boot = useBootLoader();
+  const { restartTour } = useTour();
 
   const handleNavClick = React.useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -921,6 +925,19 @@ function AccountSwitcher({
                 <UserCog className="size-4" />
               </span>
               Pengaturan Akun
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-sidebar-accent"
+              onClick={() => {
+                const { restartTour } = useTour();
+                restartTour();
+              }}
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted-foreground/30">
+                <Compass className="size-4" />
+              </span>
+              Restart Guided Tour
             </button>
             <button
               type="button"

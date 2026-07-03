@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { handleGoogleCallbackAction } from "@/server/actions/auth.actions";
 
 export function AuthCallbackContent() {
   const router = useRouter();
@@ -26,11 +27,19 @@ export function AuthCallbackContent() {
           return;
         }
 
+        // Handle Google OAuth callback — creates profile/brand/branch for new users
+        const result = await handleGoogleCallbackAction(code);
+        if (!result.success) {
+          setStatus("error");
+          setMessage("Failed to set up your account.");
+          return;
+        }
+
         setStatus("success");
         setMessage("Autentikasi berhasil! Mengarahkan...");
 
         setTimeout(() => {
-          router.push(next);
+          router.push(result.data.redirectTo);
           router.refresh();
         }, 500);
       } else {

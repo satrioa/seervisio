@@ -12,6 +12,7 @@ import {
   type ActionResult,
 } from "./action-helper";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
+import { insertBrandNotification } from "@/server/repositories/notification.repository";
 import {
   getActiveShift,
   getShiftById,
@@ -241,6 +242,13 @@ export async function openStoreShiftAction(
           earlyOpenMinutes: resultData.early_open_minutes,
         },
       });
+      await insertBrandNotification(
+        session.brandId,
+        "Shift Opened",
+        `Shift #${shiftNumberStr} opened at ${branchRow?.name ?? ""} with Rp${(openingCash ?? 0).toLocaleString("id-ID")}`,
+        "activity",
+        "info",
+      );
     } catch (notifErr: any) {
       console.warn("[notification:error] OPEN_SHIFT failed:", notifErr.message);
     }
@@ -331,6 +339,13 @@ export async function closeStoreShiftAction(
           cashDifference: cashDiff,
         },
       });
+      await insertBrandNotification(
+        session.brandId,
+        "Shift Closed",
+        `Shift #${shift.shiftNumber} closed at ${branchRow?.name ?? ""}. Cash: Rp${actualCash.toLocaleString("id-ID")}`,
+        "activity",
+        "info",
+      );
 
       if (Math.abs(cashDiff) > 0) {
         console.log("[notification:event] CASH_DIFFERENCE_DETECTED triggered", {
@@ -348,6 +363,13 @@ export async function closeStoreShiftAction(
             countedCash: actualCash,
           },
         });
+        await insertBrandNotification(
+          session.brandId,
+          "Cash Difference Detected",
+          `${branchRow?.name ?? ""}: Cash difference of Rp${Math.abs(cashDiff).toLocaleString("id-ID")} (${cashDiff >= 0 ? "surplus" : "shortfall"})`,
+          "activity",
+          cashDiff >= 0 ? "info" : "warning",
+        );
       }
     } catch (notifErr: any) {
       console.warn("[notification:error] store-shift notification failed:", notifErr.message);

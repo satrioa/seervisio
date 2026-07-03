@@ -8,6 +8,10 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Seervisio — Repair Shop Management",
   description: "Repair shop management system",
+  icons: {
+    icon: "/images/icon-app.svg",
+    apple: "/images/icon-app.svg",
+  },
 };
 
 export default function RootLayout({

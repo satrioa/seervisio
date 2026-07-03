@@ -30,6 +30,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { SeervisioLogo } from "@/components/brand/logo";
 
 interface NavItem {
   href: string;
@@ -67,11 +68,8 @@ export function PlatformSidebar({ userName, userEmail }: PlatformSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/platform/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-platform text-platform-foreground">
-                  <span className="text-sm font-bold">S</span>
-                </div>
+                <SeervisioLogo height={32} />
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Seervisio</span>
                   <span className="truncate text-xs text-muted-foreground">Platform Owner</span>
                 </div>
               </Link>
