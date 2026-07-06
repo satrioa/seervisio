@@ -158,202 +158,10 @@ export async function checkAuthAction(): Promise<ActionResult<{
       return successResult({ isAuthenticated: true, needsOnboarding: true, redirectTo: "/onboarding" });
     }
 
-    // Profile exists and onboarding complete → redirect to dashboard
-    const { data: membership } = await (supabase as any)
-      .from("user_brand_memberships")
-      .select("brand_id")
-      .eq("profile_id", profile.id)
-      .eq("is_active", true)
-      .not("brand_id", "is", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (membership) {
-      const { data: brand } = await (supabase as any)
-        .from("brands")
-        .select("slug")
-        .eq("id", membership.brand_id)
-        .maybeSingle();
-
-      if (brand?.slug) {
-        return successResult({
-          isAuthenticated: true,
-          needsOnboarding: false,
-          redirectTo: `/${brand.slug}/panel/dashboard`,
-        });
-      }
-    }
-
+    // Profile exists and onboarding complete
     return successResult({ isAuthenticated: true, needsOnboarding: false, redirectTo: "/" });
   } catch {
     return successResult({ isAuthenticated: false, needsOnboarding: false, redirectTo: "/login" });
-  }
-}
-
-export async function googleSignInAction(): Promise<ActionResult<{ url: string }>> {
-  try {
-    const supabase = await createServerSupabase();
-
-    const origin = process.env.NEXT_PUBLIC_SITE_URL
-      ? process.env.NEXT_PUBLIC_SITE_URL
-      : process.env.NEXT_PUBLIC_VERCEL_URL
-        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-        : "http://localhost:3006";
-
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${origin}/auth/callback`,
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    });
-
-    if (error) return errorResult(error.message);
-    if (!data.url) return errorResult("Failed to initialize Google sign in.");
-
-    return successResult({ url: data.url });
-  } catch (err: any) {
-    console.error("[auth] googleSignInAction error:", err.message);
-    return errorResult("Failed to initialize Google sign in.");
-  }
-}
-
-export async function handleGoogleCallbackAction(code: string): Promise<ActionResult<{
-  isNewUser: boolean;
-  redirectTo: string;
-}>> {
-  try {
-    const supabase = await createServerSupabase();
-    const adminDb = createServiceRoleSupabaseClient();
-
-    const { data: { user }, error } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return errorResult("Authentication failed.");
-    }
-
-    // Check if profile already exists
-    const profile = await getProfileByAuthUserId(supabase as any, user.id) as any;
-
-    if (profile) {
-      // Existing user — update last_login, check onboarding
-      await (supabase as any)
-        .from("profiles")
-        .update({ last_login_at: new Date().toISOString() })
-        .eq("id", profile.id);
-
-      if (!profile.onboarding_completed) {
-        return successResult({ isNewUser: false, redirectTo: "/onboarding" });
-      }
-
-      // Find brand slug
-      const { data: membership } = await (supabase as any)
-        .from("user_brand_memberships")
-        .select("brand_id")
-        .eq("profile_id", profile.id)
-        .eq("is_active", true)
-        .not("brand_id", "is", null)
-        .limit(1)
-        .maybeSingle();
-
-      if (membership) {
-        const { data: brand } = await (supabase as any)
-          .from("brands")
-          .select("slug")
-          .eq("id", membership.brand_id)
-          .maybeSingle();
-
-        if (brand?.slug) {
-          return successResult({ isNewUser: false, redirectTo: `/${brand.slug}/panel/dashboard` });
-        }
-      }
-
-      return successResult({ isNewUser: false, redirectTo: "/" });
-    }
-
-    // New user — create profile
-    const fullName = user.user_metadata?.name ?? user.email?.split("@")[0] ?? "User";
-    const email = user.email ?? "";
-
-    const { data: newProfile, error: profileError } = await (adminDb as any)
-      .from("profiles")
-      .insert({
-        auth_user_id: user.id,
-        email,
-        name: fullName,
-        is_active: true,
-        onboarding_completed: false,
-        onboarding_current_step: 0,
-      })
-      .select("id")
-      .single();
-
-    if (profileError) {
-      console.error("[auth] Google callback — profile creation failed:", profileError);
-      return successResult({ isNewUser: true, redirectTo: "/onboarding" });
-    }
-
-    // Create default brand from email domain
-    const domain = email.split("@")[1]?.split(".")[0] ?? "my-shop";
-    const brandSlug = domain.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-
-    const { data: brand } = await (adminDb as any)
-      .from("brands")
-      .insert({
-        name: `${fullName}'s Shop`,
-        slug: `${brandSlug}-${Date.now()}`,
-        status: "active",
-        owner_name: fullName,
-        owner_email: email,
-      })
-      .select("id")
-      .single();
-
-    if (!brand) {
-      return successResult({ isNewUser: true, redirectTo: "/onboarding" });
-    }
-
-    await (adminDb as any)
-      .from("brand_settings")
-      .insert({ brand_id: brand.id, store_name: `${fullName}'s Shop` });
-
-    const { data: membership } = await (adminDb as any)
-      .from("user_brand_memberships")
-      .insert({
-        profile_id: newProfile.id,
-        brand_id: brand.id,
-        role: "MASTER_ADMIN",
-        is_active: true,
-      })
-      .select("id")
-      .single();
-
-    if (membership) {
-      const { data: branch } = await (adminDb as any)
-        .from("branches")
-        .insert({ brand_id: brand.id, name: "Main Branch", is_active: true })
-        .select("id")
-        .single();
-
-      if (branch) {
-        await (adminDb as any)
-          .from("user_branch_access")
-          .insert({
-            membership_id: membership.id,
-            branch_id: branch.id,
-            is_active: true,
-            is_default: true,
-          });
-      }
-    }
-
-    return successResult({ isNewUser: true, redirectTo: "/onboarding" });
-  } catch (err: any) {
-    console.error("[auth] handleGoogleCallbackAction error:", err.message);
-    return errorResult("Authentication failed.");
   }
 }
 
@@ -377,5 +185,15 @@ export async function completeOnboardingAction(): Promise<ActionResult> {
     return successResult(null as any);
   } catch (err: any) {
     return errorResult("Failed to complete onboarding.");
+  }
+}
+
+export async function landingLogoutAction(): Promise<ActionResult<void>> {
+  try {
+    const supabase = await createServerSupabase();
+    await supabase.auth.signOut();
+    return successResult(undefined);
+  } catch (err: any) {
+    return errorResult(err.message ?? "Gagal logout.");
   }
 }

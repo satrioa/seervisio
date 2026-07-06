@@ -62,6 +62,19 @@
     --safe-area-right: env(safe-area-inset-right, 0px);
   }
 
+  .theme-landing {
+    --primary: 153.1 60% 52.7%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 153.1 60% 52.7%;
+    --chart-1: 153.1 60% 52.7%;
+  }
+  .dark .theme-landing {
+    --primary: 153.1 70% 65%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --ring: 153.1 70% 65%;
+    --chart-1: 153.1 70% 65%;
+  }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;

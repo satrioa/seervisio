@@ -7,7 +7,6 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
-  requireActiveStoreSession,
   handleActionError,
   type ActionResult,
 } from "./action-helper";
@@ -237,9 +236,6 @@ export async function createPaymentAccountAction(
 
     const supabase = await createServerSupabase();
     const guardBranchId = isGlobal ? session.defaultBranchId : input.branchId;
-    if (guardBranchId) {
-      await requireActiveStoreSession(supabase, session.brandId, guardBranchId);
-    }
 
     const internalType = input.bankName ? "BANK" : "OTHER";
 
@@ -347,12 +343,6 @@ export async function updatePaymentAccountAction(
 
     if (!existing) return errorResult("Akun tidak ditemukan.");
 
-    if (existing.branch_id) {
-      await requireActiveStoreSession(supabase, session.brandId, existing.branch_id);
-    } else if (session.defaultBranchId) {
-      await requireActiveStoreSession(supabase, session.brandId, session.defaultBranchId);
-    }
-
     if (existing.is_system_account || existing.is_cash_account) {
       if (input.isActive === false) {
         return errorResult("Akun kas sistem tidak dapat dinonaktifkan.");
@@ -427,9 +417,6 @@ export async function deletePaymentAccountAction(
     }
 
     const guardDeleteBranchId = existing.branch_id || session.defaultBranchId;
-    if (guardDeleteBranchId) {
-      await requireActiveStoreSession(supabase, session.brandId, guardDeleteBranchId);
-    }
 
     await (supabase as any)
       .from("branch_payment_methods")
@@ -519,9 +506,6 @@ export async function adjustPaymentAccountBalanceAction(
     if (!account) return errorResult("Akun tidak ditemukan.");
 
     const adjBranchId = account.branch_id || session.defaultBranchId;
-    if (adjBranchId) {
-      await requireActiveStoreSession(supabase, session.brandId, adjBranchId);
-    }
 
     const { error: movError } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.accountId,
@@ -611,7 +595,6 @@ export async function repairBranchCashAccountAction(
     requireBranchAccess(session, branchId, "repairBranchCashAccountAction");
 
     const supabase = await createServerSupabase();
-    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: existing } = await (supabase as any)
       .from("payment_accounts")

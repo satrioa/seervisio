@@ -47,7 +47,7 @@ export function useUserSession(): UserSessionHookResult {
       const { data: membership, error: memErr } = await supabase
         .from("user_brand_memberships" as any)
         .select("role")
-        .eq("profile_id", (profile as { id: string }).id)
+        .eq("profile_id", (profile as unknown as { id: string }).id)
         .order("is_active", { ascending: false })
         .limit(1)
         .single();

@@ -5034,6 +5034,7 @@ export type Database = {
           sidebar_collapsed: boolean
           theme: string
           timezone: string
+          tour_state: Json
           updated_at: string
           user_id: string
         }
@@ -5045,6 +5046,7 @@ export type Database = {
           sidebar_collapsed?: boolean
           theme?: string
           timezone?: string
+          tour_state?: Json
           updated_at?: string
           user_id: string
         }
@@ -5056,6 +5058,7 @@ export type Database = {
           sidebar_collapsed?: boolean
           theme?: string
           timezone?: string
+          tour_state?: Json
           updated_at?: string
           user_id?: string
         }

@@ -75,7 +75,7 @@ export function FeatureGrid() {
               </div>
               <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{feature.desc}</p>
-              <div className="absolute inset-x-0 bottom-0 h-px scale-x-0 bg-gradient-to-r from-primary/50 to-blue-500/50 transition-transform group-hover:scale-x-100" />
+              <div className="absolute inset-x-0 bottom-0 h-px scale-x-0 bg-gradient-to-r from-primary/50 to-[#3ecf8e]/50 transition-transform group-hover:scale-x-100" />
             </motion.div>
           ))}
         </div>

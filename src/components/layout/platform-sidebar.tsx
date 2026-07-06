@@ -67,11 +67,8 @@ export function PlatformSidebar({ userName, userEmail }: PlatformSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/platform/dashboard">
-                <SeervisioLogo height={32} />
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate text-xs text-muted-foreground">Platform Owner</span>
-                </div>
+              <Link href="/platform/dashboard" className="py-2">
+                <SeervisioLogo height={20} showText={false} />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -8,7 +8,6 @@ import {
   errorResult,
   requireActionPermission,
   requireBranchAccess,
-  requireActiveStoreSession,
   handleActionError,
   type ActionResult,
 } from "./action-helper";
@@ -186,7 +185,6 @@ export async function linkPaymentMethodAccountAction(
 
     /* ── Validate payment account ── */
     const supabase = await createServerSupabase();
-    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
     const { data: account, error: accountErr } = await (supabase as any)
       .from("payment_accounts")
@@ -327,7 +325,6 @@ export async function togglePaymentMethodActiveAction(
     requireActionPermission(session.role, "payment_method.toggle_active");
 
     const supabase = await createServerSupabase();
-    await requireActiveStoreSession(supabase, session.brandId, branchId);
     const methodType = methodCodeToType(methodCode);
 
     if (methodType === "CASH" && !isActive) {
@@ -398,7 +395,6 @@ export async function ensureSystemPaymentMethodsAction(
     requireActionPermission(session.role, "payment_method.repair");
 
     const supabase = await createServerSupabase();
-    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: branch } = await (supabase as any)
       .from("branches")
@@ -569,7 +565,6 @@ export async function repairBranchCashMethodAction(
     requireActionPermission(session.role, "payment_method.link_account");
 
     const supabase = await createServerSupabase();
-    await requireActiveStoreSession(supabase, session.brandId, branchId);
 
     const { data: branch } = await (supabase as any)
       .from("branches")
@@ -679,7 +674,6 @@ export async function updateMethodMdrAction(
     if (!branchId) return errorResult("Cabang belum dipilih.");
 
     const sup = await createServerSupabase();
-    await requireActiveStoreSession(sup, session.brandId, branchId);
 
     const normalizedType = methodCodeToType(methodType);
 

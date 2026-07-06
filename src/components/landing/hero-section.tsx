@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import Typewriter from "@/components/fancy/text/typewriter";
 
 const FloatingShape = ({ className, delay = 0 }: { className: string; delay?: number }) => (
   <motion.div
@@ -13,6 +14,8 @@ const FloatingShape = ({ className, delay = 0 }: { className: string; delay?: nu
     transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay }}
   />
 );
+
+
 
 export function HeroSection() {
   return (
@@ -25,11 +28,11 @@ export function HeroSection() {
         />
         <FloatingShape
           delay={2}
-          className="absolute -right-32 top-1/3 size-[400px] rounded-full bg-blue-500/5 blur-3xl"
+          className="absolute -right-32 top-1/3 size-[400px] rounded-full bg-[#3ecf8e]/5 blur-3xl"
         />
         <FloatingShape
           delay={4}
-          className="absolute bottom-0 left-1/3 size-[350px] rounded-full bg-purple-500/5 blur-3xl"
+          className="absolute bottom-0 left-1/3 size-[350px] rounded-full bg-[#007d46]/5 blur-3xl"
         />
       </div>
 
@@ -40,43 +43,83 @@ export function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/50 px-4 py-1.5 text-xs font-medium text-muted-foreground"
+            className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[#3ecf8e]/20 bg-[#3ecf8e]/5 px-4 py-1.5 text-xs font-medium text-primary"
           >
-            <span className="size-1.5 rounded-full bg-green-500" />
-            Now in public beta
+            <span className="size-1.5 rounded-full bg-primary" />
+            Modern Operating System for Repair Shop
           </motion.div>
 
-          {/* Headline */}
+          {/* Heading */}
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl"
+            className="text-5xl font-black leading-[0.95] tracking-tight text-foreground sm:text-6xl md:text-7xl"
           >
-            The Modern Operating System
+            Solusi Cerdas
             <br />
-            <span className="bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
-              for Repair Shops
-            </span>
+            Toko Servis Gadget-mu
           </motion.h1>
 
-          {/* Subtitle */}
+          {/* Highlight */}
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl"
+            transition={{ duration: 0.5, delay: 0.15 }}
+            className="mt-4 text-5xl font-black leading-[0.95] tracking-tight text-transparent sm:text-6xl md:text-7xl"
+            style={{
+              backgroundImage: "linear-gradient(to right, hsl(var(--primary)), #3ecf8e, #007d46)",
+              backgroundClip: "text",
+            }}
           >
-            Everything your repair business needs. Service management, POS, inventory, finance,
-            CRM, and AI — all in one beautiful platform.
+            Tetap Terkontrol.
+          </motion.p>
+
+          {/* Typewriter Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+            className="mt-8 text-center"
+          >
+            <span className="block text-3xl font-semibold text-foreground md:text-4xl whitespace-pre-wrap">
+              <span>{"Manage "}</span>
+              <Typewriter
+                text={[
+                  "Data Servis",
+                  "Tracking Servis",
+                  "Data Penjualan",
+                  "Inventori Stok",
+                  "Laporan Keuangan",
+                  "Performa Teknisi",
+                  "CRM Pelanggan",
+                ]}
+                speed={80}
+                className="text-[#57dca0] text-pretty"
+                waitTime={1500}
+                deleteSpeed={40}
+                cursorChar={"_"}
+              />
+            </span>
+            
+          </motion.div>
+
+          {/* Description */}
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mx-auto mt-8 max-w-xl text-sm text-muted-foreground sm:text-base"
+          >
+            Semua kebutuhan operasional toko servis dalam satu platform modern.
           </motion.p>
 
           {/* CTA buttons */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row"
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
             <Button asChild size="lg" className="h-12 gap-2 px-8 text-base">
               <Link href="/login">
@@ -98,7 +141,7 @@ export function HeroSection() {
           id="demo"
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.4 }}
+          transition={{ duration: 0.7, delay: 0.45 }}
           className="relative mx-auto mt-16 max-w-6xl"
         >
           <div className="relative rounded-2xl border border-border/50 bg-card shadow-2xl">
@@ -110,7 +153,7 @@ export function HeroSection() {
                 dashboard.seervisio.com
               </div>
             </div>
-            <div className="aspect-video bg-gradient-to-br from-muted/50 via-background to-muted/30 flex items-center justify-center">
+            <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-muted/50 via-background to-muted/30">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10">
                   <div className="size-8 rounded-lg bg-primary" />
@@ -120,7 +163,7 @@ export function HeroSection() {
             </div>
           </div>
           {/* Glow behind */}
-          <div className="absolute -inset-4 -z-10 rounded-3xl bg-gradient-to-b from-primary/10 via-blue-500/5 to-purple-500/10 blur-2xl" />
+          <div className="absolute -inset-4 -z-10 rounded-3xl bg-gradient-to-b from-primary/10 via-[#3ecf8e]/5 to-[#007d46]/10 blur-2xl" />
         </motion.div>
       </div>
     </section>

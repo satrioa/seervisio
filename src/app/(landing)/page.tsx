@@ -30,7 +30,7 @@ export default function LandingPage() {
   return (
     <>
       <HeroSection />
-      <TrustedBy />
+      {/* <TrustedBy /> */}
       <FeatureGrid />
       <AiSection />
       <WorkflowSection />

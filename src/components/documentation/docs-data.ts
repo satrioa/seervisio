@@ -67,3 +67,11 @@ export const DOCS_TITLES: Record<string, string> = {
 export const DOCS_FILE_TO_SLUG: Record<string, string> = Object.fromEntries(
   Object.entries(DOCS_SLUG_TO_FILE).map(([slug, file]) => [file.replace(/\.md$/, ""), slug])
 );
+
+export const DOC_SLUG_TO_MISSION: Record<string, string> = {
+  "getting-started": "business-setup",
+  "inventory": "inventory-setup",
+  "settings": "payment-setup",
+  "store-shift": "shift-setup",
+  "service": "first-service",
+};

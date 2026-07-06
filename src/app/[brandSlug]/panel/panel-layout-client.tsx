@@ -34,7 +34,8 @@ import { SystemLoader } from "@/components/system-loader/SystemLoader";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoClose } from "@/hooks/use-auto-close";
-import { TourProvider, useTour } from "@/components/onboarding/tour-provider";
+import { LanguageProviderWrapper } from "@/components/settings/language-provider-wrapper";
+import { OnboardingProvider, useOnboarding } from "@/components/onboarding/onboarding-provider";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -106,8 +107,10 @@ export function PanelLayoutClient({
     <BrandThemeProvider brandSlug={brandSlug}>
       <RightSidebarProvider>
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
-          <PosCartProvider>
+            <PosCartProvider>
+          <OnboardingProvider brandSlug={brandSlug} role={role} onboardingCompleted={onboardingCompleted ?? false}>
             <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks}>{children}</PanelLayoutShell>
+          </OnboardingProvider>
           </PosCartProvider>
         </ActiveBranchProvider>
       </RightSidebarProvider>
@@ -150,11 +153,6 @@ function PanelLayoutShell({
   const isMobile = useIsMobile();
 
   useAutoClose();
-  const { startTour } = useTour();
-
-  React.useEffect(() => {
-    if (!onboardingCompleted) startTour();
-  }, []);
 
   const resolvedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES" ? activeBranchId : null;
   const resolvedBranchName = resolvedBranchId
@@ -391,14 +389,8 @@ function PanelLayoutShell({
   return (
     <>
     <SystemLoader />
-    <TourProvider
-      role={role}
-      profileId={profileId}
-      brandSlug={brandSlug}
-      onboardingCompleted={onboardingCompleted ?? false}
-      initialTasks={onboardingCompletedTasks ?? []}
-    >
     <StoreShiftProvider>
+    <LanguageProviderWrapper brandSlug={brandSlug}>
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
       )}
@@ -511,8 +503,8 @@ function PanelLayoutShell({
         />
       )}
     </div>
+    </LanguageProviderWrapper>
     </StoreShiftProvider>
-    </TourProvider>
     </>
   );
 }

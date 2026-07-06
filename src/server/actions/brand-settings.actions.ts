@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
@@ -105,8 +105,6 @@ export async function saveBrandSettingsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "settings.manage");
 
-    await requireActiveStoreSession(createServerSupabase(), session.brandId, session.defaultBranchId);
-
     const adminDb = createServiceRoleSupabaseClient();
 
     const settings = await getBrandSettings(adminDb as any, session.brandId);
@@ -175,8 +173,6 @@ export async function sendTestEmailAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "settings.manage");
-
-    await requireActiveStoreSession(createServerSupabase(), session.brandId, session.defaultBranchId);
 
     const supabase = await createServerSupabase();
     const { data: { user } } = await supabase.auth.getUser();

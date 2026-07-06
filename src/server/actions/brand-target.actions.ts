@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import {
   getBrandTarget,
@@ -74,9 +74,6 @@ export async function saveBrandTargetAction(
     requireActionPermission(session.role, "settings.manage");
 
     const adminDb = createServiceRoleSupabaseClient();
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
-    }
 
     if (data.brandMonthly < 0 || data.brandYearly < 0) {
       return errorResult("Target tidak boleh negatif.");

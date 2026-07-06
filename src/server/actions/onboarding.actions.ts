@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
-import { getProfileByAuthUserId } from "@/repositories/profile.repository";
+import { loadTourState, saveTourState, resetTourState } from "@/lib/tour/storage";
 
 async function getServerClient() {
   const supabase = await createServerSupabase();
@@ -12,17 +12,16 @@ async function getServerClient() {
 
 export async function getOnboardingProgressAction() {
   try {
-    const { supabase, user } = await getServerClient();
-    const profile = await getProfileByAuthUserId(supabase as any, user.id);
-    if (!profile) return { success: false as const, error: "Profile not found" };
+    const { user } = await getServerClient();
+    const state = await loadTourState(user.id);
 
     return {
       success: true as const,
       data: {
-        onboarding_completed: (profile as any).onboarding_completed ?? false,
-        onboarding_current_step: (profile as any).onboarding_current_step ?? 0,
-        onboarding_completed_tasks: (profile as any).onboarding_completed_tasks ?? [],
-        onboarding_earned_badges: (profile as any).onboarding_earned_badges ?? [],
+        onboarding_completed: !!state.completed_at,
+        onboarding_current_step: state.last_step,
+        onboarding_completed_tasks: state.completed_missions,
+        onboarding_earned_badges: [],
       },
     };
   } catch {
@@ -32,12 +31,8 @@ export async function getOnboardingProgressAction() {
 
 export async function updateOnboardingStepAction(step: number) {
   try {
-    const { supabase, user } = await getServerClient();
-    const { error } = await (supabase as any)
-      .from("profiles")
-      .update({ onboarding_current_step: step })
-      .eq("auth_user_id", user.id);
-    if (error) return { success: false as const, error: error.message };
+    const { user } = await getServerClient();
+    await saveTourState(user.id, { last_step: step });
     return { success: true as const };
   } catch {
     return { success: false as const, error: "Failed to update step" };
@@ -46,23 +41,16 @@ export async function updateOnboardingStepAction(step: number) {
 
 export async function completeOnboardingTaskAction(taskId: string) {
   try {
-    const { supabase, user } = await getServerClient();
+    const { user } = await getServerClient();
+    const state = await loadTourState(user.id);
 
-    const profile = await getProfileByAuthUserId(supabase as any, user.id);
-    if (!profile) return { success: false as const, error: "Profile not found" };
-
-    const currentTasks: string[] = (profile as any).onboarding_completed_tasks ?? [];
-    if (currentTasks.includes(taskId)) {
-      return { success: true as const };
+    if (state.completed_missions.includes(taskId)) {
+      return { success: true as const, data: state.completed_missions };
     }
 
-    const updatedTasks = [...currentTasks, taskId];
-    const { error } = await (supabase as any)
-      .from("profiles")
-      .update({ onboarding_completed_tasks: updatedTasks })
-      .eq("auth_user_id", user.id);
+    const updatedTasks = [...state.completed_missions, taskId];
+    await saveTourState(user.id, { completed_missions: updatedTasks });
 
-    if (error) return { success: false as const, error: error.message };
     return { success: true as const, data: updatedTasks };
   } catch {
     return { success: false as const, error: "Failed to complete task" };
@@ -71,15 +59,11 @@ export async function completeOnboardingTaskAction(taskId: string) {
 
 export async function completeOnboardingAction() {
   try {
-    const { supabase, user } = await getServerClient();
-    const { error } = await (supabase as any)
-      .from("profiles")
-      .update({
-        onboarding_completed: true,
-        onboarding_current_step: 0,
-      })
-      .eq("auth_user_id", user.id);
-    if (error) return { success: false as const, error: error.message };
+    const { user } = await getServerClient();
+    await saveTourState(user.id, {
+      completed_at: new Date().toISOString(),
+      last_step: 0,
+    });
     return { success: true as const };
   } catch {
     return { success: false as const, error: "Failed to complete onboarding" };
@@ -88,17 +72,8 @@ export async function completeOnboardingAction() {
 
 export async function restartOnboardingAction() {
   try {
-    const { supabase, user } = await getServerClient();
-    const { error } = await (supabase as any)
-      .from("profiles")
-      .update({
-        onboarding_completed: false,
-        onboarding_current_step: 0,
-        onboarding_completed_tasks: [],
-        onboarding_earned_badges: [],
-      })
-      .eq("auth_user_id", user.id);
-    if (error) return { success: false as const, error: error.message };
+    const { user } = await getServerClient();
+    await resetTourState(user.id);
     return { success: true as const };
   } catch {
     return { success: false as const, error: "Failed to restart onboarding" };

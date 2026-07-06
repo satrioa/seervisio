@@ -59,7 +59,10 @@ export interface BranchRevenueTrendPoint {
 
 export interface ActivityLogItem {
   id: string;
+  action: string;
+  description: string | null;
   type: string;
+  category: "service" | "payment" | "inventory" | "finance" | "account" | "system";
   user: string;
   text: string;
   tag: string;
@@ -270,7 +273,7 @@ export async function getDashboardOverviewAction(
 
       (supabase as any)
         .from("audit_logs")
-        .select("id, action, target_type, target_id, target_label, actor_id, details, created_at, profiles!audit_logs_actor_id_fkey(name)")
+        .select("id, action, target_type, target_id, target_label, actor_id, description, details, created_at, profiles!audit_logs_actor_id_fkey(name)")
         .eq("brand_id", session.brandId)
         .gte("created_at", dateFromStr)
         .lte("created_at", dateToEndOfDay)
@@ -585,53 +588,135 @@ export async function getDashboardOverviewAction(
       .map(([hour, count]) => ({ hour, count }));
     const maxHeatmapCount = operationalHeatmap.reduce((m, h) => Math.max(m, h.count), 0);
 
-    /* ── Activity log ── */
+    /* ── Activity log mapping ── */
+    const ACTION_MAP: Record<string, { type: string; tag: string; category: ActivityLogItem["category"] }> = {
+      SERVICE_CREATED:              { type: "service_created",      tag: "Servis Baru",     category: "service" },
+      SERVICE_STATUS_UPDATED:       { type: "status_changed",       tag: "Update Status",   category: "service" },
+      SERVICE_CANCELLED:            { type: "service_cancelled",    tag: "Servis Batal",     category: "service" },
+      SERVICE_REOPENED:             { type: "service_reopened",     tag: "Servis Dibuka",    category: "service" },
+      SERVICE_DP_RECEIVED:          { type: "dp_received",          tag: "DP Servis",        category: "payment" },
+      SERVICE_TECHNICIAN_ASSIGNED:  { type: "technician_assigned",  tag: "Teknisi",          category: "service" },
+      SERVICE_SPAREPART_ADDED:      { type: "sparepart_used",       tag: "Sparepart",        category: "inventory" },
+      SERVICE_PAYMENT_RECEIVED:     { type: "payment_received",     tag: "Pembayaran",       category: "payment" },
+      SERVICE_PICKUP_VERIFIED:      { type: "pickup_verified",      tag: "Pengambilan",      category: "service" },
+      STOCK_ADJUSTMENT_IN:          { type: "stock_in",             tag: "Stok Masuk",       category: "inventory" },
+      STOCK_ADJUSTMENT_OUT:         { type: "stock_out",            tag: "Stok Keluar",      category: "inventory" },
+      STOCK_OPNAME_ADJUSTMENT:      { type: "stock_opname",         tag: "Opname Stok",      category: "inventory" },
+      POS_CHECKOUT:                 { type: "pos_sale",             tag: "POS",              category: "inventory" },
+      POS_VOID:                     { type: "pos_void",             tag: "Void POS",         category: "inventory" },
+      PAYMENT_ACCOUNT_GLOBAL_CREATED: { type: "account_created",    tag: "Akun",             category: "finance" },
+      PAYMENT_ACCOUNT_BRANCH_CREATED:  { type: "account_created",    tag: "Akun",           category: "finance" },
+      PAYMENT_ACCOUNT_UPDATED:      { type: "account_updated",      tag: "Akun",             category: "finance" },
+      PAYMENT_ACCOUNT_ARCHIVED:     { type: "account_archived",     tag: "Akun",             category: "finance" },
+      PAYMENT_ACCOUNT_DELETED:      { type: "account_deleted",      tag: "Akun",             category: "finance" },
+      PAYMENT_ACCOUNT_BALANCE_ADJUSTED: { type: "balance_adjusted", tag: "Penyesuaian",      category: "finance" },
+      CASH_ACCOUNT_CREATED:         { type: "account_created",      tag: "Akun",             category: "finance" },
+      PAYMENT_METHOD_LINKED:        { type: "payment_method",       tag: "Metode Bayar",     category: "finance" },
+      VOID_SERVICE_PAYMENT:         { type: "void_payment",         tag: "Void",             category: "payment" },
+      REFUND_SERVICE_PAYMENT:       { type: "refund_payment",       tag: "Refund",           category: "payment" },
+      VOID_POS_SALE:                { type: "void_pos",             tag: "Void POS",         category: "inventory" },
+      REFUND_POS_SALE:              { type: "refund_pos",           tag: "Refund POS",       category: "inventory" },
+      OPEN_SHIFT:                   { type: "shift_opened",         tag: "Shift",            category: "system" },
+      CLOSE_SHIFT:                  { type: "shift_closed",         tag: "Akhiri Shift",     category: "system" },
+      STORE_SHIFT_OPENED:           { type: "shift_opened",         tag: "Shift",            category: "system" },
+      STORE_SHIFT_CLOSED:           { type: "shift_closed",         tag: "Shift Tutup",      category: "system" },
+      STORE_LATE_OPEN:              { type: "shift_opened",         tag: "Shift",            category: "system" },
+      STORE_EARLY_OPEN:             { type: "shift_opened",         tag: "Shift",            category: "system" },
+      STORE_AUTO_CLOSED:            { type: "shift_closed",         tag: "Shift Tutup",      category: "system" },
+      STORE_LATE_CLOSE:             { type: "shift_closed",         tag: "Shift Tutup",      category: "system" },
+      TARGET_GOAL_UPDATED:          { type: "target_updated",       tag: "Target",           category: "system" },
+      SYSTEM_SETTINGS_UPDATED:      { type: "settings_updated",     tag: "Pengaturan",       category: "system" },
+      BRAND_PROFILE_UPDATED:        { type: "profile_updated",      tag: "Profil",           category: "system" },
+      BRANCH_CREATED:               { type: "branch_created",       tag: "Cabang",           category: "system" },
+      BRANCH_UPDATED:               { type: "branch_updated",       tag: "Cabang",           category: "system" },
+      BRANCH_ACTIVATED:             { type: "branch_activated",     tag: "Cabang",           category: "system" },
+      BRANCH_DEACTIVATED:           { type: "branch_deactivated",   tag: "Cabang",           category: "system" },
+      CACHE_CLEARED:                { type: "cache_cleared",        tag: "Cache",            category: "system" },
+      RESET_DEMO_DATA:              { type: "data_reset",           tag: "Reset Demo",       category: "system" },
+      DELETE_ALL_DATA:              { type: "data_delete",          tag: "Hapus Data",       category: "system" },
+      FACTORY_RESET:                { type: "factory_reset",        tag: "Factory Reset",    category: "system" },
+    };
+
+    /* ── Account / user actions (lowercase keys) ── */
+    const ACCOUNT_ACTION_MAP: Record<string, { type: string; tag: string; category: ActivityLogItem["category"] }> = {
+      "account.create":            { type: "user_created",     tag: "Akun Pengguna",  category: "account" },
+      "account.reset_password":    { type: "password_reset",   tag: "Keamanan",       category: "account" },
+      "account.delete_from_brand": { type: "user_deleted",     tag: "Akun",           category: "account" },
+      "account.link_auth":         { type: "auth_linked",      tag: "Autentikasi",    category: "account" },
+      "account.update":            { type: "user_updated",     tag: "Akun",           category: "account" },
+      "account.activate":          { type: "user_activated",   tag: "Akun",           category: "account" },
+      "account.deactivate":        { type: "user_deactivated", tag: "Akun",           category: "account" },
+    };
+
+    const EXPORT_IMPORT_ACTIONS = new Set([
+      "EXPORT_BRAND_CONFIG", "EXPORT_USERS", "EXPORT_CUSTOMERS", "EXPORT_SERVICES",
+      "EXPORT_INVENTORY", "EXPORT_FINANCE", "EXPORT_FULL_BACKUP", "IMPORT_BACKUP",
+    ]);
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const lastWeek = new Date(today);
+    lastWeek.setDate(lastWeek.getDate() - 7);
+
+    function getGroupKey(createdAt: string): string {
+      const d = new Date(createdAt);
+      if (d.toDateString() === today.toDateString()) return "today";
+      if (d.toDateString() === yesterday.toDateString()) return "yesterday";
+      if (d >= lastWeek) return "thisWeek";
+      return "older";
+    }
+
     const actLog: ActivityLogItem[] = [];
     for (const log of auditLogs) {
-      const action = (log.action || "").toLowerCase();
+      const rawAction = (log.action || "").trim();
       const actorName = log.profiles?.name || "System";
-      let type = "alert";
-      let tag = "Aktivitas";
-      let text = `${action}`;
+      let mapped = ACTION_MAP[rawAction];
 
-      if (action.includes("service") && action.includes("create")) {
-        type = "service_created"; tag = "Servis Baru";
-        text = `membuat servis baru`;
-      } else if (action.includes("service") && action.includes("status")) {
-        type = "status_changed"; tag = "Update Status";
-        text = `memindahkan status servis`;
-      } else if (action.includes("service") && (action.includes("cancel") || action.includes("delete"))) {
-        type = "service_cancelled"; tag = "Servis Dibatalkan";
-        text = `membatalkan servis`;
-      } else if (action.includes("payment") || action.includes("income") || action.includes("expense")) {
-        type = "payment_received"; tag = "Pembayaran";
-        text = `mencatat pembayaran`;
-      } else if (action.includes("shift") && action.includes("open")) {
-        type = "shift_opened"; tag = "Shift";
-        text = `membuka shift toko`;
-      } else if (action.includes("shift") && action.includes("close")) {
-        type = "shift_closed"; tag = "Akhiri Shift";
-        text = `menutup shift`;
-      } else if (action.includes("stock") || action.includes("sparepart")) {
-        type = "stock_used"; tag = "Sparepart";
-        text = `mencatat penggunaan sparepart`;
-      } else if (action.includes("pos") && action.includes("sale")) {
-        type = "purchase_created"; tag = "POS";
-        text = `membuat penjualan POS`;
-      } else if (action.includes("adjust")) {
-        type = "note_added"; tag = "Penyesuaian";
-        text = `melakukan penyesuaian saldo`;
+      if (!mapped && ACCOUNT_ACTION_MAP[rawAction]) {
+        mapped = ACCOUNT_ACTION_MAP[rawAction];
+      }
+
+      /* Finance CREATE / VOID — differentiate by description */
+      if (!mapped && (rawAction === "CREATE" || rawAction === "VOID")) {
+        const desc = (log.description || "").toLowerCase();
+        if (rawAction === "CREATE") {
+          if (desc.includes("pendapatan") || desc.includes("income") || desc.includes("pemasukan")) {
+            mapped = { type: "income_created", tag: "Pemasukan", category: "finance" };
+          } else {
+            mapped = { type: "expense_created", tag: "Pengeluaran", category: "finance" };
+          }
+        } else {
+          mapped = { type: "finance_void", tag: "Pembatalan", category: "finance" };
+        }
+      }
+
+      /* Export / Import */
+      if (!mapped && EXPORT_IMPORT_ACTIONS.has(rawAction)) {
+        const isExport = rawAction.startsWith("EXPORT");
+        mapped = {
+          type: isExport ? "export" : "import",
+          tag: isExport ? "Ekspor" : "Impor",
+          category: "system",
+        };
+      }
+
+      if (!mapped) {
+        mapped = { type: "alert", tag: "Aktivitas", category: "system" };
       }
 
       const details = log.details || null;
       actLog.push({
         id: log.id,
-        type,
+        action: rawAction,
+        description: log.description || null,
+        type: mapped.type,
+        category: mapped.category,
         user: actorName,
-        text,
-        tag,
-        time: new Date(log.created_at).toLocaleString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-        groupKey: "today",
+        text: log.description || rawAction,
+        tag: mapped.tag,
+        time: log.created_at,
+        groupKey: getGroupKey(log.created_at),
         details,
         targetLabel: log.target_label || null,
       });

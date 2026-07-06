@@ -1,9 +1,12 @@
 "use server";
 
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import {
   getSubscriptionsList,
+  getPackagesList,
   type SubscriptionRow,
+  type PackageRow,
 } from "@/server/repositories/platform.repository";
 import {
   successResult,
@@ -33,5 +36,72 @@ export async function getSubscriptionsListAction(): Promise<ActionResult<Subscri
   } catch (err: any) {
     console.error("[Subscription] getSubscriptionsListAction:", err.message);
     return errorResult(err.message || "Gagal memuat daftar subscription.");
+  }
+}
+
+export async function updateSubscriptionStatusAction(
+  subscriptionId: string,
+  status: string
+): Promise<ActionResult<null>> {
+  try {
+    await requirePlatformOwner();
+    const supabase = createServiceRoleSupabaseClient();
+    const { error } = await (supabase as any)
+      .from("brand_subscriptions")
+      .update({ status })
+      .eq("id", subscriptionId);
+    if (error) throw new Error(error.message);
+    return successResult(null);
+  } catch (err: any) {
+    console.error("[Subscription] updateSubscriptionStatusAction:", err.message);
+    return errorResult(err.message || "Gagal mengubah status subscription.");
+  }
+}
+
+export async function getPackagesListAction(): Promise<ActionResult<PackageRow[]>> {
+  try {
+    await requirePlatformOwner();
+    const data = await getPackagesList();
+    return successResult(data);
+  } catch (err: any) {
+    console.error("[Subscription] getPackagesListAction:", err.message);
+    return errorResult(err.message || "Gagal memuat daftar paket.");
+  }
+}
+
+export async function changeSubscriptionPackageAction(
+  subscriptionId: string,
+  packageId: string,
+  startDate: string,
+  endDate: string | null
+): Promise<ActionResult<null>> {
+  try {
+    await requirePlatformOwner();
+    const supabase = createServiceRoleSupabaseClient();
+
+    const pkg = await getPackagesList().then((list) => list.find((p) => p.id === packageId));
+    if (!pkg) throw new Error("Paket tidak ditemukan.");
+
+    if (endDate && new Date(endDate) <= new Date(startDate)) {
+      throw new Error("Tanggal selesai harus setelah tanggal mulai.");
+    }
+
+    const { error } = await (supabase as any)
+      .from("brand_subscriptions")
+      .update({
+        package_id: packageId,
+        plan: pkg.slug,
+        max_branches: pkg.maxBranches,
+        max_users: pkg.maxUsers,
+        started_at: startDate,
+        expires_at: endDate,
+      })
+      .eq("id", subscriptionId);
+
+    if (error) throw new Error(error.message);
+    return successResult(null);
+  } catch (err: any) {
+    console.error("[Subscription] changeSubscriptionPackageAction:", err.message);
+    return errorResult(err.message || "Gagal mengubah paket subscription.");
   }
 }

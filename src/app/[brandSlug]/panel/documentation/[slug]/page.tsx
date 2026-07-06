@@ -4,8 +4,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, FileText } from "lucide-react";
 import { markdownToHtml } from "@/lib/markdown";
-import { DOCS_CHAPTERS, DOCS_SLUG_TO_FILE, DOCS_TITLES } from "@/components/documentation/docs-data";
+import { DOCS_CHAPTERS, DOCS_SLUG_TO_FILE, DOCS_TITLES, DOC_SLUG_TO_MISSION } from "@/components/documentation/docs-data";
 import { DocsSidebar } from "@/components/documentation/docs-sidebar";
+import { ReplayTourButton } from "@/components/onboarding/replay-tour-button";
 
 interface PageProps {
   params: Promise<{ slug: string; brandSlug: string }>;
@@ -58,10 +59,15 @@ export default async function DocumentationPage({ params }: PageProps) {
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 <FileText className="size-5 text-primary" />
               </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  {title}
-                </h1>
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                    {title}
+                  </h1>
+                  {DOC_SLUG_TO_MISSION[slug] && (
+                    <ReplayTourButton missionId={DOC_SLUG_TO_MISSION[slug]} />
+                  )}
+                </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {DOCS_CHAPTERS.find((ch) => ch.slug === slug)?.desc ?? ""}
                 </p>

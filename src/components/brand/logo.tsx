@@ -42,20 +42,20 @@ export function SeervisioLogo({ className, height = 32, showText = true }: LogoP
         />
         <defs>
           <linearGradient id="lg" x1="88.61" y1="104.58" x2="165.6" y2="104.58">
-            <stop offset="0" stop-color="#007d46"/>
-            <stop offset="1" stop-color="#3ecf8e"/>
+            <stop offset="0" stopColor="#007d46"/>
+            <stop offset="1" stopColor="#3ecf8e"/>
           </linearGradient>
           <linearGradient id="lg2" x1="7.66" y1="62.76" x2="84.66" y2="62.76">
-            <stop offset="0" stop-color="#007d46"/>
-            <stop offset="1" stop-color="#3ecf8e"/>
+            <stop offset="0" stopColor="#007d46"/>
+            <stop offset="1" stopColor="#3ecf8e"/>
           </linearGradient>
           <linearGradient id="lg3" x1="-11.46" y1="-20.3" x2="65.54" y2="-20.3">
-            <stop offset="0" stop-color="#007d46"/>
-            <stop offset="1" stop-color="#3ecf8e"/>
+            <stop offset="0" stopColor="#007d46"/>
+            <stop offset="1" stopColor="#3ecf8e"/>
           </linearGradient>
           <linearGradient id="lg4" x1="-61.02" y1="81.19" x2="14.36" y2="81.19">
-            <stop offset="0" stop-color="#007d46"/>
-            <stop offset="1" stop-color="#3ecf8e"/>
+            <stop offset="0" stopColor="#007d46"/>
+            <stop offset="1" stopColor="#3ecf8e"/>
           </linearGradient>
         </defs>
       </svg>
@@ -135,20 +135,20 @@ export function SeervisioLogo({ className, height = 32, showText = true }: LogoP
 
       <defs>
         <linearGradient id="l1" x1="88.61" y1="104.58" x2="165.6" y2="104.58">
-          <stop offset="0" stop-color="#007d46"/>
-          <stop offset="1" stop-color="#3ecf8e"/>
+          <stop offset="0" stopColor="#007d46"/>
+          <stop offset="1" stopColor="#3ecf8e"/>
         </linearGradient>
         <linearGradient id="l2" x1="7.66" y1="62.76" x2="84.66" y2="62.76">
-          <stop offset="0" stop-color="#007d46"/>
-          <stop offset="1" stop-color="#3ecf8e"/>
+          <stop offset="0" stopColor="#007d46"/>
+          <stop offset="1" stopColor="#3ecf8e"/>
         </linearGradient>
         <linearGradient id="l3" x1="-11.46" y1="-20.3" x2="65.54" y2="-20.3">
-          <stop offset="0" stop-color="#007d46"/>
-          <stop offset="1" stop-color="#3ecf8e"/>
+          <stop offset="0" stopColor="#007d46"/>
+          <stop offset="1" stopColor="#3ecf8e"/>
         </linearGradient>
         <linearGradient id="l4" x1="-61.02" y1="81.19" x2="14.36" y2="81.19">
-          <stop offset="0" stop-color="#007d46"/>
-          <stop offset="1" stop-color="#3ecf8e"/>
+          <stop offset="0" stopColor="#007d46"/>
+          <stop offset="1" stopColor="#3ecf8e"/>
         </linearGradient>
       </defs>
     </svg>

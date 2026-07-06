@@ -27,12 +27,26 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  MoreHorizontal,
+  Ban,
+  Package,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   getSubscriptionsListAction,
+  updateSubscriptionStatusAction,
+  getPackagesListAction,
+  changeSubscriptionPackageAction,
 } from "@/server/actions/subscription.actions";
-import type { SubscriptionRow } from "@/server/repositories/platform.repository";
+import type { SubscriptionRow, PackageRow } from "@/server/repositories/platform.repository";
+import { ChangePackageDialog } from "./change-package-dialog";
 
 const PAGE_SIZE = 20;
 const STATUS_OPTIONS = ["all", "active", "expired", "cancelled", "trial"] as const;
@@ -53,6 +67,7 @@ export function SubscriptionsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [changePkgSub, setChangePkgSub] = useState<SubscriptionRow | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -148,6 +163,7 @@ export function SubscriptionsContent() {
                   <TableHead>Expire Date</TableHead>
                   <TableHead className="text-center">Max Branches</TableHead>
                   <TableHead className="text-center">Max Users</TableHead>
+                  <TableHead className="w-[50px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -206,6 +222,46 @@ export function SubscriptionsContent() {
                     <TableCell className="text-center">
                       <span className="text-xs tabular-nums">{sub.maxUsers}</span>
                     </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-8">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            onClick={() => setChangePkgSub(sub)}
+                          >
+                            <Package className="mr-2 size-4" /> Change Package
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {sub.status === "active" || sub.status === "trial" ? (
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={async () => {
+                                if (!confirm("Nonaktifkan subscription ini?")) return;
+                                await updateSubscriptionStatusAction(sub.id, "cancelled");
+                                loadData();
+                              }}
+                            >
+                              <Ban className="mr-2 size-4" /> Inactive
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              className="text-emerald-600"
+                              onClick={async () => {
+                                if (!confirm("Aktifkan kembali subscription ini?")) return;
+                                await updateSubscriptionStatusAction(sub.id, "active");
+                                loadData();
+                              }}
+                            >
+                              <Ban className="mr-2 size-4" /> Activate
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -230,6 +286,15 @@ export function SubscriptionsContent() {
           </>
         )}
       </div>
+
+      {changePkgSub && (
+        <ChangePackageDialog
+          open
+          onOpenChange={(open) => { if (!open) setChangePkgSub(null); }}
+          subscription={changePkgSub}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 }

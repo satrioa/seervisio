@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import * as repo from "@/repositories/branch.repository";
 import type { BranchDetail, BranchStats, BranchSubscription, BranchCreateInput, BranchUpdateInput } from "@/repositories/branch.repository";
@@ -92,9 +92,6 @@ export async function createBranchAction(
     }
 
     const adminDb = createServiceRoleSupabaseClient();
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
-    }
 
     /* Check subscription limit */
     const [count, sub] = await Promise.all([
@@ -158,9 +155,6 @@ export async function updateBranchAction(
     }
 
     const adminDb = createServiceRoleSupabaseClient();
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
-    }
 
     const existing = await repo.getBranchById(adminDb as any, branchId);
     if (!existing) {
@@ -201,9 +195,6 @@ export async function toggleBranchActiveAction(
     requireActionPermission(session.role, "branch.manage");
 
     const adminDb = createServiceRoleSupabaseClient();
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
-    }
 
     const existing = await repo.getBranchById(adminDb as any, branchId);
     if (!existing) {

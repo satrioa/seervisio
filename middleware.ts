@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database.types";
 
@@ -10,11 +10,18 @@ import type { Database } from "@/types/database.types";
  * 2. Protects /[brandSlug]/panel/* routes — redirects to /login if not authenticated
  * 3. Protects /[brandSlug]/panel/* routes — redirects to /login if profile not linked
  * 4. Redirects authenticated users away from /login
- * 5. Handles /auth/callback route (no redirect, just pass through)
+ * 5. Short-circuits early for /callback routes (protects PKCE code verifier cookie)
  *
  * Matcher in config: applies to everything except static files, _next, and API
  */
 export async function middleware(request: NextRequest) {
+  // SHORT-CIRCUIT: For OAuth callback, bypass ALL Supabase client creation.
+  // The middleware's setAll() creates a new NextResponse on auth token refresh,
+  // which destroys the PKCE code verifier cookie context.
+  if (request.nextUrl.pathname.startsWith("/callback")) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -26,7 +33,8 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(
-          cookiesToSet: { name: string; value: string; options?: { path?: string; maxAge?: number; domain?: string; secure?: boolean; httpOnly?: boolean; sameSite?: "lax" | "strict" | "none" } }[]
+          cookiesToSet: { name: string; value: string; options: CookieOptions }[],
+          headers: Record<string, string>,
         ) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
@@ -34,6 +42,9 @@ export async function middleware(request: NextRequest) {
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
+          );
+          Object.entries(headers).forEach(([key, value]) =>
+            supabaseResponse.headers.set(key, value)
           );
         },
       },
@@ -57,7 +68,6 @@ export async function middleware(request: NextRequest) {
   // Public routes that don't need auth
   const isPublicRoute =
     pathname === "/login" ||
-    pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/";
@@ -68,55 +78,10 @@ export async function middleware(request: NextRequest) {
 
   // If it's a public route, pass through
   if (isPublicRoute) {
-    // If user is already logged in and visiting /login, redirect to their brand or platform
+    // If user is already logged in and visiting /login, redirect to landing page
     if (pathname === "/login" && user) {
-      const { data: profile } = await (
-        supabase
-          .from("profiles")
-          .select("id")
-          .eq("auth_user_id", user.id)
-          .single() as unknown as Promise<{
-          data: { id: string } | null;
-        }>
-      );
-
-      if (profile) {
-        const { data: memberships } = await (
-          supabase
-            .from("user_brand_memberships")
-            .select("brand_id, role")
-            .eq("profile_id", profile.id)
-            .eq("is_active", true) as unknown as Promise<{
-            data: Array<{ brand_id: number | null; role: string }> | null;
-          }>
-        );
-
-        if (memberships && memberships.length > 0) {
-          const platformOwner = memberships.find(
-            (m) => m.role === "PLATFORM_OWNER" && m.brand_id === null
-          );
-          if (platformOwner) {
-            url.pathname = "/platform/dashboard";
-            return NextResponse.redirect(url);
-          }
-
-          const brandMembership = memberships.find((m) => m.brand_id !== null);
-          if (brandMembership) {
-            const brandResult = await (
-              supabase
-                .from("brands")
-                .select("slug")
-                .eq("id", brandMembership.brand_id as number)
-                .single() as unknown as Promise<{ data: { slug: string } | null }>
-            );
-
-            if (brandResult.data?.slug) {
-              url.pathname = `/${brandResult.data.slug}/panel/dashboard`;
-              return NextResponse.redirect(url);
-            }
-          }
-        }
-      }
+      url.pathname = "/";
+      return NextResponse.redirect(url);
     }
     return supabaseResponse;
   }

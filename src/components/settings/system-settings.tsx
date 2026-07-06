@@ -1297,7 +1297,11 @@ export function SystemSettings() {
     try {
       const result = await getBrandSettingsAction(brandSlug);
       if (result.success) {
-        if (result.data.businessHours) setBusinessHours(result.data.businessHours);
+        if (result.data.businessHours) setBusinessHours({
+            ...defaultOperationalHours(),
+            ...result.data.businessHours,
+            shiftTolerance: { ...defaultOperationalHours().shiftTolerance, ...(result.data.businessHours.shiftTolerance ?? {}) },
+          });
         if (result.data.notificationSettings) setNotificationSettings(result.data.notificationSettings);
         if (result.data.workflowRules) setWorkflowRules(result.data.workflowRules);
         if (result.data.autoCloseSettings) setAutoCloseSettings(result.data.autoCloseSettings);

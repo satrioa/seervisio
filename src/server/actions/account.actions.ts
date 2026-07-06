@@ -2,7 +2,7 @@
 
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, requireActiveStoreSession, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
 import {
   getAccounts,
   createAccount,
@@ -52,9 +52,6 @@ export async function createAccountAction(
     requireActionPermission(session.role, "user.manage");
 
     const adminDb = createServiceRoleSupabaseClient();
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(adminDb as any, session.brandId, session.defaultBranchId);
-    }
 
     /* Check user limit */
     const sub = await getBrandSubscription(adminDb as any, session.brandId);
@@ -137,9 +134,6 @@ export async function resetPasswordAction(
     }
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
     const { data: profile, error: profErr } = await db
       .from("profiles")
       .select("auth_user_id")
@@ -177,9 +171,6 @@ export async function deleteAccountFromBrandAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
 
     /* Verify membership belongs to this brand */
     const { data: membership, error: memCheckErr } = await db
@@ -235,9 +226,6 @@ export async function linkAccountAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
 
     const result = await linkExistingAuthUser(email, profileId);
 
@@ -275,9 +263,6 @@ export async function updateAccountAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
 
     if (updates.role !== undefined || updates.isActive === false) {
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
@@ -321,9 +306,6 @@ export async function toggleAccountActiveAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
 
     if (!active) {
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
@@ -362,9 +344,6 @@ export async function updateAccountAvatarAction(
     requireActionPermission(session.role, "user.manage");
 
     const db = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient() as any;
-    if (session.defaultBranchId) {
-      await requireActiveStoreSession(db, session.brandId, session.defaultBranchId);
-    }
 
     const { error } = await db
       .from("profiles")

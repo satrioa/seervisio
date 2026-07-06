@@ -5,20 +5,45 @@ import {
   DollarSign,
   Activity,
   TrendingUp,
+  TrendingDown,
   Wrench,
   ShoppingCart,
   Package,
   Wallet,
   CheckCircle2,
+  CheckCheck,
   XCircle,
   RefreshCw,
+  RotateCcw,
   PackageMinus,
-  ShoppingCart as ShoppingCartIcon,
+  PackagePlus,
   Store,
   MessageSquare,
   AlertTriangle,
   ChevronDown,
   AlertCircle,
+  Ban,
+  Undo2,
+  ClipboardCheck,
+  PlusCircle,
+  Edit3,
+  Archive,
+  Trash2,
+  ArrowLeftRight,
+  CreditCard,
+  Target,
+  Settings,
+  Building2,
+  Play,
+  Pause,
+  UserPlus,
+  UserX,
+  UserPen,
+  UserCheck,
+  KeyRound,
+  Link2,
+  Download,
+  Upload,
 } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 
@@ -83,16 +108,67 @@ function statusBadge(s: string) {
    HELPER TYPES
    ══════════════════════════════════════════════ */
 
+const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+  all: { label: "All", color: "" },
+  service: { label: "Service", color: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" },
+  payment: { label: "Payment", color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" },
+  inventory: { label: "Inventory", color: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800" },
+  finance: { label: "Finance", color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800" },
+  account: { label: "Account", color: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800" },
+  system: { label: "System", color: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800" },
+};
+
 const ACTIVITY_TYPE_STYLES: Record<string, { icon: React.ElementType; marker: string; badge: string }> = {
   service_created: { icon: Wrench, marker: "bg-blue-500/10 text-blue-600 dark:text-blue-400", badge: "bg-blue-500/10 text-blue-700 dark:text-blue-300" },
   status_changed: { icon: RefreshCw, marker: "bg-violet-500/10 text-violet-600 dark:text-violet-400", badge: "bg-violet-500/10 text-violet-700 dark:text-violet-300" },
+  service_cancelled: { icon: XCircle, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  service_reopened: { icon: RotateCcw, marker: "bg-orange-500/10 text-orange-600 dark:text-orange-400", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-300" },
+  technician_assigned: { icon: UserCheck, marker: "bg-sky-500/10 text-sky-600 dark:text-sky-400", badge: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+  pickup_verified: { icon: CheckCheck, marker: "bg-teal-500/10 text-teal-600 dark:text-teal-400", badge: "bg-teal-500/10 text-teal-700 dark:text-teal-300" },
   payment_received: { icon: Wallet, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  stock_used: { icon: PackageMinus, marker: "bg-amber-500/10 text-amber-600 dark:text-amber-400", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-  purchase_created: { icon: ShoppingCartIcon, marker: "bg-orange-500/10 text-orange-600 dark:text-orange-400", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-300" },
+  dp_received: { icon: Wallet, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  void_payment: { icon: Ban, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  refund_payment: { icon: Undo2, marker: "bg-rose-500/10 text-rose-600 dark:text-rose-400", badge: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
+  sparepart_used: { icon: PackageMinus, marker: "bg-amber-500/10 text-amber-600 dark:text-amber-400", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  stock_in: { icon: PackagePlus, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  stock_out: { icon: PackageMinus, marker: "bg-orange-500/10 text-orange-600 dark:text-orange-400", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-300" },
+  stock_opname: { icon: ClipboardCheck, marker: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400", badge: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" },
+  pos_sale: { icon: ShoppingCart, marker: "bg-orange-500/10 text-orange-600 dark:text-orange-400", badge: "bg-orange-500/10 text-orange-700 dark:text-orange-300" },
+  pos_void: { icon: Ban, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  void_pos: { icon: Ban, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  refund_pos: { icon: Undo2, marker: "bg-rose-500/10 text-rose-600 dark:text-rose-400", badge: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
   shift_opened: { icon: Store, marker: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400", badge: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" },
   shift_closed: { icon: CheckCircle2, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-300", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  income_created: { icon: TrendingUp, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  expense_created: { icon: TrendingDown, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  finance_void: { icon: Ban, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  account_created: { icon: PlusCircle, marker: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  account_updated: { icon: Edit3, marker: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  account_archived: { icon: Archive, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  account_deleted: { icon: Trash2, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  balance_adjusted: { icon: ArrowLeftRight, marker: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  payment_method: { icon: CreditCard, marker: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  target_updated: { icon: Target, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  settings_updated: { icon: Settings, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  profile_updated: { icon: Building2, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  branch_created: { icon: PlusCircle, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  branch_updated: { icon: Edit3, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  branch_activated: { icon: Play, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  branch_deactivated: { icon: Pause, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  user_created: { icon: UserPlus, marker: "bg-purple-500/10 text-purple-600 dark:text-purple-400", badge: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
+  user_deleted: { icon: UserX, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  user_updated: { icon: UserPen, marker: "bg-purple-500/10 text-purple-600 dark:text-purple-400", badge: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
+  user_activated: { icon: UserCheck, marker: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  user_deactivated: { icon: UserX, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  password_reset: { icon: KeyRound, marker: "bg-purple-500/10 text-purple-600 dark:text-purple-400", badge: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
+  auth_linked: { icon: Link2, marker: "bg-purple-500/10 text-purple-600 dark:text-purple-400", badge: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
+  export: { icon: Download, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  import: { icon: Upload, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  cache_cleared: { icon: RefreshCw, marker: "bg-slate-500/10 text-slate-600 dark:text-slate-400", badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+  data_reset: { icon: RotateCcw, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  data_delete: { icon: Trash2, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
+  factory_reset: { icon: RotateCcw, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
   note_added: { icon: MessageSquare, marker: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
-  service_cancelled: { icon: XCircle, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
   alert: { icon: AlertTriangle, marker: "bg-red-500/10 text-red-600 dark:text-red-400", badge: "bg-red-500/10 text-red-700 dark:text-red-300" },
 };
 
@@ -159,27 +235,50 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
     }
   }, [granularity]);
 
-  /* ── Group activity log by day ── */
+  /* ── Category filter state ── */
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
+
+  /* ── Relative time helper ── */
+  function relativeTime(iso: string): string {
+    const now = Date.now();
+    const then = new Date(iso).getTime();
+    const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+    if (diffSec < 60) return `${diffSec} detik lalu`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} menit lalu`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} jam lalu`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `${diffDay} hari lalu`;
+    return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+  }
+
+  /* ── Group by timeline + filter by category ── */
   const activityGroups = React.useMemo(() => {
     const groups: { label: string; items: ActivityLogItem[] }[] = [];
-    const items = data?.recentActivity ?? [];
-    if (items.length === 0) return groups;
+    const raw = data?.recentActivity ?? [];
+    if (raw.length === 0) return groups;
 
-    const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
-    const todayItems = items.filter((a) => {
-      const itemDate = a.time ? new Date().toISOString().split("T")[0] : "";
-      return itemDate === today || a.groupKey === "today";
-    });
-    const yesterdayItems = items.filter(() => false);
+    const filtered = categoryFilter === "all"
+      ? raw
+      : raw.filter((a) => a.category === categoryFilter);
 
-    if (todayItems.length > 0) groups.push({ label: "Today", items: todayItems.slice(0, 20) });
-    if (yesterdayItems.length > 0) groups.push({ label: "Yesterday", items: yesterdayItems.slice(0, 20) });
-    if (groups.length === 0 && items.length > 0) {
-      groups.push({ label: "Terbaru", items: items.slice(0, 20) });
+    const groupOrder = ["today", "yesterday", "thisWeek", "older"];
+    const groupLabels: Record<string, string> = {
+      today: "Hari Ini",
+      yesterday: "Kemarin",
+      thisWeek: "Minggu Ini",
+      older: "Sebelumnya",
+    };
+
+    for (const key of groupOrder) {
+      const items = filtered.filter((a) => a.groupKey === key).slice(0, 20);
+      if (items.length > 0) {
+        groups.push({ label: groupLabels[key], items });
+      }
     }
     return groups;
-  }, [data?.recentActivity]);
+  }, [data?.recentActivity, categoryFilter]);
 
   const [openActivityGroups, setOpenActivityGroups] = React.useState<Record<string, boolean>>({});
   React.useEffect(() => {
@@ -593,10 +692,28 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
       <div className="flex flex-col gap-6">
         {/* ── Activity Log ── */}
         <Card className="overflow-hidden shadow-xs">
-          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
-            <div>
-              <CardTitle className="text-sm font-semibold">Activity Log</CardTitle>
-              <CardDescription className="text-xs">Riwayat aktivitas terbaru dari operasional toko.</CardDescription>
+          <CardHeader className="flex flex-col gap-3 pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-semibold">Activity Log</CardTitle>
+                <CardDescription className="text-xs">Riwayat aktivitas terbaru dari operasional toko.</CardDescription>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setCategoryFilter(key)}
+                  className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                    categoryFilter === key
+                      ? cfg.color || "bg-foreground text-background border-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {cfg.label}
+                </button>
+              ))}
             </div>
           </CardHeader>
           <CardContent className="relative p-0">
@@ -626,7 +743,8 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                             const style = ACTIVITY_TYPE_STYLES[item.type] || ACTIVITY_TYPE_STYLES.alert;
                             const Icon = style.icon;
                             const isLast = index === group.items.length - 1;
-                            const formatted = formatActivityEvent(item.type, item.details, item.targetLabel);
+                            const formatted = formatActivityEvent(item.type, item.details, item.targetLabel, item.description, item.action);
+                            const relTime = relativeTime(item.time);
                             return (
                               <div key={item.id} className="group relative flex gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-muted/40">
                                 <div className="relative flex shrink-0 justify-center">
@@ -643,13 +761,13 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                                       <span className="font-semibold text-foreground">{item.user}</span>{" "}
                                       <span className="text-muted-foreground">{formatted.primaryText}</span>
                                     </p>
-                                    <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">{item.time}</span>
+                                    <span className="hidden shrink-0 whitespace-nowrap text-[10px] text-muted-foreground sm:inline" title={new Date(item.time).toLocaleString("id-ID")}>{relTime}</span>
                                   </div>
                                   <div className="mt-1 flex flex-wrap items-center gap-2">
                                     <Badge variant="secondary" className={`h-5 rounded-full border-0 px-2 text-[10px] font-medium ${style.badge}`}>
                                       {item.tag}
                                     </Badge>
-                                    <span className="text-[10px] text-muted-foreground sm:hidden">{item.time}</span>
+                                    <span className="text-[10px] text-muted-foreground sm:hidden" title={new Date(item.time).toLocaleString("id-ID")}>{relTime}</span>
                                   </div>
                                   {formatted.secondaryText && formatted.secondaryText.length > 0 && (
                                     <div className="mt-1.5 space-y-0.5">

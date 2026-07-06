@@ -70,7 +70,7 @@ import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { ShiftCashWidget } from "@/components/layout/shift-cash-widget";
-import { useTour } from "@/components/onboarding/tour-provider";
+
 
 
 // Permission key for each nav item
@@ -176,6 +176,16 @@ interface CollapsibleGroup {
   items: SubNavItem[];
 }
 
+const TOUR_ID_MAP: Record<string, string> = {
+  services: "services",
+  "pos-v4": "pos",
+  "store-shift": "store-shift",
+  "inventory-v4": "inventory",
+  "payment-methods": "payment-methods",
+  branches: "branches",
+  accounts: "users",
+};
+
 const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
   {
     label: "Operation",
@@ -222,8 +232,10 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     items: [
       { href: "settings?section=brand-profile", label: "Brand Profile" },
       { href: "settings?section=appearance", label: "Appearance & Brand Theme" },
+      { href: "settings?section=language-region", label: "Language & Region" },
       { href: "settings?section=target-goal", label: "Target & Goal" },
       { href: "settings?section=system", label: "System Settings" },
+      { href: "settings?section=ai", label: "AI & Insight Engine" },
     ],
   },
 ];
@@ -253,7 +265,9 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
   const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
   const { isMobile, setOpenMobile } = useSidebar();
   const boot = useBootLoader();
-  const { restartTour } = useTour();
+  const restartTour = React.useCallback(() => {
+    (window as any).__onboardingReset?.();
+  }, []);
 
   const handleNavClick = React.useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -366,6 +380,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton
                   size="lg"
+                  data-tour="brand-overview"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   {brandLogoUrl && !brandImageFailed ? (
@@ -480,6 +495,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                 {/* Dashboard */}
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    data-tour="dashboard"
                     isActive={isActive("dashboard")}
                     tooltip="Dashboard"
                     className={
@@ -569,6 +585,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                                 >
                                   <Link
                                     href={`/${brandSlug}/panel/${item.href}`}
+                                    data-tour={TOUR_ID_MAP[item.href] || undefined}
                                     onClick={handleNavClick}
                                   >
                                     <span>{item.label}</span>
@@ -622,7 +639,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
             />
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} avatarUrl={userAvatarUrl ?? null} />
+            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} avatarUrl={userAvatarUrl ?? null} restartTour={restartTour} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -651,6 +668,7 @@ function AccountSwitcher({
   userName,
   userEmail,
   avatarUrl,
+  restartTour,
 }: {
   brandSlug: string;
   role: string;
@@ -660,6 +678,7 @@ function AccountSwitcher({
   userName: string;
   userEmail: string;
   avatarUrl: string | null;
+  restartTour: () => void;
 }) {
   const router = useRouter();
   const { setActiveBranchId } = useActiveBranch();
@@ -929,10 +948,7 @@ function AccountSwitcher({
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-sidebar-accent"
-              onClick={() => {
-                const { restartTour } = useTour();
-                restartTour();
-              }}
+              onClick={restartTour}
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted-foreground/30">
                 <Compass className="size-4" />

@@ -11,7 +11,7 @@ export function CtaSection() {
     <section className="relative overflow-hidden border-y border-border/40 py-24 sm:py-32">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-32 -top-32 size-[400px] rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -right-32 -bottom-32 size-[400px] rounded-full bg-blue-500/5 blur-3xl" />
+        <div className="absolute -right-32 -bottom-32 size-[400px] rounded-full bg-[#3ecf8e]/5 blur-3xl" />
       </div>
       <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
         <motion.h2
