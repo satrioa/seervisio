@@ -84,6 +84,7 @@ export type Database = {
           actor_id: string | null
           actor_name: string | null
           actor_role: string | null
+          branch_id: string | null
           brand_id: number | null
           created_at: string
           description: string | null
@@ -100,6 +101,7 @@ export type Database = {
           actor_id?: string | null
           actor_name?: string | null
           actor_role?: string | null
+          branch_id?: string | null
           brand_id?: number | null
           created_at?: string
           description?: string | null
@@ -116,6 +118,7 @@ export type Database = {
           actor_id?: string | null
           actor_name?: string | null
           actor_role?: string | null
+          branch_id?: string | null
           brand_id?: number | null
           created_at?: string
           description?: string | null
@@ -133,6 +136,13 @@ export type Database = {
             columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
           {
@@ -3421,6 +3431,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_type: string
           auth_user_id: string | null
           avatar_url: string | null
           created_at: string
@@ -3443,6 +3454,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_type?: string
           auth_user_id?: string | null
           avatar_url?: string | null
           created_at?: string
@@ -3465,6 +3477,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_type?: string
           auth_user_id?: string | null
           avatar_url?: string | null
           created_at?: string

@@ -9,6 +9,7 @@ import { getImpersonationCookie } from "@/lib/auth/impersonation";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
 import { PanelLayoutClient } from "./panel-layout-client";
 import { ROLES } from "@/lib/permissions/roles";
+import { getActiveLicenseForBrand } from "@/server/repositories/license.repository";
 
 interface PanelLayoutProps {
   children: React.ReactNode;
@@ -56,7 +57,22 @@ export default async function PanelLayout({
           .filter((branch) => effectiveContext.accessibleBranchIds.includes(branch.id))
           .map((branch) => ({ id: branch.id, name: branch.name }));
 
-    // Step 5: Fetch onboarding progress
+    // Step 5: Fetch license status
+    let activeLicense: { status: string; expires_at: string | null; is_trial: boolean } | null = null;
+    try {
+      const lic = await getActiveLicenseForBrand(effectiveContext.brandId);
+      if (lic) {
+        activeLicense = {
+          status: lic.status,
+          expires_at: lic.expires_at,
+          is_trial: lic.is_trial,
+        };
+      }
+    } catch {
+      // License check failure should not block access
+    }
+
+    // Step 6: Fetch onboarding progress
     const { data: onboardingData } = await (supabase as any)
       .from("profiles")
       .select("onboarding_completed, onboarding_completed_tasks")
@@ -86,6 +102,7 @@ export default async function PanelLayout({
         profileId={effectiveContext.profileId}
         onboardingCompleted={onboardingCompleted}
         onboardingCompletedTasks={onboardingCompletedTasks}
+        activeLicense={activeLicense}
       >
         {children}
       </PanelLayoutClient>

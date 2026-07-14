@@ -331,9 +331,10 @@ export async function getBrandSubscription(
   brandId: number,
 ): Promise<BranchSubscription | null> {
   const { data } = await supabase
-    .from("brand_subscriptions")
-    .select("*")
+    .from("licenses")
+    .select("id, status, is_trial, packages:package_id(slug, max_branches, max_users)")
     .eq("brand_id", brandId)
+    .in("status", ["active", "trial"])
     .maybeSingle();
 
   if (!data) return null;
@@ -341,10 +342,10 @@ export async function getBrandSubscription(
   const r = data as any;
   return {
     id: r.id,
-    brandId: r.brand_id,
-    plan: r.plan,
-    maxBranches: r.max_branches,
-    maxUsers: r.max_users ?? 5,
+    brandId,
+    plan: r.packages?.slug ?? "free",
+    maxBranches: r.packages?.max_branches ?? 1,
+    maxUsers: r.packages?.max_users ?? 5,
     status: r.status,
   };
 }

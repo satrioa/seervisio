@@ -196,6 +196,12 @@ export async function getDashboardOverviewAction(
     const branchFilter =
       branchId && branchId !== "ALL_BRANCHES" ? [branchId] : accessibleBranchIds;
 
+    // OR-filter for audit_logs: selected branch(es) + brand-level (NULL) events.
+    const auditBranchOr =
+      branchFilter.length > 0
+        ? `branch_id.in.(${branchFilter.join(",")}),branch_id.is.null`
+        : `branch_id.is.null`;
+
     console.log("[dashboard] input", {
       brandId: session.brandId,
       branchId,
@@ -273,8 +279,11 @@ export async function getDashboardOverviewAction(
 
       (supabase as any)
         .from("audit_logs")
-        .select("id, action, target_type, target_id, target_label, actor_id, description, details, created_at, profiles!audit_logs_actor_id_fkey(name)")
+        // Branch-scoped: include events for the selected branch(es) plus
+        // brand-level events (branch_id IS NULL, e.g. settings/account/etc.).
+        .select("id, action, branch_id, target_type, target_id, target_label, actor_id, description, details, created_at, profiles!audit_logs_actor_id_fkey(name)")
         .eq("brand_id", session.brandId)
+        .or(auditBranchOr)
         .gte("created_at", dateFromStr)
         .lte("created_at", dateToEndOfDay)
         .order("created_at", { ascending: false })

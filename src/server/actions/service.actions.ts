@@ -17,7 +17,7 @@ import {
   addAuditLog,
 } from "@/repositories/service.repository";
 import { findOrCreateCustomer } from "@/repositories/customer.repository";
-import { callGenerateServiceNumber, callRecordServicePayment, callRecordServicePaymentFinanceEntries, getServicePayments, callCalculateServicePaymentSummary } from "@/repositories/payment.repository";
+import { callGenerateServiceNumber, callRecordServicePayment, getServicePayments, callCalculateServicePaymentSummary } from "@/repositories/payment.repository";
 import { getServiceSparepartUsages } from "@/repositories/inventory.repository";
 import { getServiceStatusHistory } from "@/repositories/service.repository";
 import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
@@ -731,6 +731,7 @@ export async function createServiceAction(
     try {
       await addAuditLog({
         brand_id: brandId,
+        branch_id: branchId,
         action: "SERVICE_CREATED",
         target_type: "service",
         target_id: service.id,
@@ -781,11 +782,6 @@ export async function createServiceAction(
     }
 
     if (input.dpAmount && input.dpAmount > 0 && input.dpPaymentMethodId) {
-      // TECHNICIAN cannot receive payment
-      if (session.role === "TECHNICIAN") {
-        return errorResult("Role Anda tidak memiliki akses untuk menerima pembayaran.");
-      }
-
       if (input.estimatedCost && input.dpAmount > input.estimatedCost) {
         return errorResult("Nominal DP tidak boleh melebihi estimasi biaya.");
       }
@@ -805,15 +801,12 @@ export async function createServiceAction(
         paymentMeta
       );
 
-      if (paymentResult?.service_payment_id) {
-        try {
-          await callRecordServicePaymentFinanceEntries(
-            paymentResult.service_payment_id,
-            session.profileId
-          );
-        } catch (finErr: any) {
-          console.warn("[createServiceAction] Finance entry failed:", finErr.message);
-        }
+      if (paymentResult?.revenue_ledger_id) {
+        console.log("[service:create] Finance entries created atomically with DP payment:", {
+          servicePaymentId: paymentResult.service_payment_id,
+          revenue_ledger_id: paymentResult.revenue_ledger_id,
+          mdr_ledger_id: paymentResult.mdr_ledger_id,
+        });
       }
 
       await addServiceTimelineEntry({
@@ -830,6 +823,7 @@ export async function createServiceAction(
       try {
         await addAuditLog({
           brand_id: brandId,
+          branch_id: branchId,
           action: "SERVICE_DP_RECEIVED",
           target_type: "service_payment",
           target_id: paymentResult?.service_payment_id,
@@ -1016,6 +1010,7 @@ export async function assignServiceTechnicianAction(
     try {
       await addAuditLog({
         brand_id: session.brandId,
+        branch_id: service.branch_id,
         action: "SERVICE_TECHNICIAN_ASSIGNED",
         target_type: "service",
         target_id: serviceId,

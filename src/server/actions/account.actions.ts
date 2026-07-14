@@ -2,6 +2,7 @@
 
 "use server";
 
+import { ROLES } from "@/lib/permissions/roles";
 import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
 import {
   getAccounts,
@@ -190,7 +191,7 @@ export async function deleteAccountFromBrandAction(
     }
 
     /* Prevent removing last active MASTER_ADMIN */
-    if (membership.role === "MASTER_ADMIN" && membership.is_active) {
+    if (membership.role === ROLES.MASTER_ADMIN && membership.is_active) {
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
       if (activeMasterCount <= 1) {
         return errorResult("Tidak dapat menghapus Master Admin terakhir.");
@@ -268,8 +269,8 @@ export async function updateAccountAction(
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
       const accounts = await getAccounts(session.brandId);
       const target = accounts.find((a) => a.profileId === profileId);
-      if (target && target.role === "MASTER_ADMIN" && activeMasterCount <= 1) {
-        if (updates.role !== undefined && updates.role !== "MASTER_ADMIN") {
+      if (target && target.role === ROLES.MASTER_ADMIN && activeMasterCount <= 1) {
+        if (updates.role !== undefined && updates.role !== ROLES.MASTER_ADMIN) {
           return errorResult("Tidak dapat menurunkan role Master Admin terakhir.");
         }
         if (updates.isActive === false) {
@@ -311,7 +312,7 @@ export async function toggleAccountActiveAction(
       const activeMasterCount = await countActiveMasterAdmins(session.brandId);
       const accounts = await getAccounts(session.brandId);
       const target = accounts.find((a) => a.profileId === profileId);
-      if (target && target.role === "MASTER_ADMIN" && activeMasterCount <= 1) {
+      if (target && target.role === ROLES.MASTER_ADMIN && activeMasterCount <= 1) {
         return errorResult("Tidak dapat menonaktifkan Master Admin terakhir.");
       }
     }

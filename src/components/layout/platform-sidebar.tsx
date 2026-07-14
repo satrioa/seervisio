@@ -43,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/platform/tenants", label: "Tenants", icon: Building2 },
   { href: "/platform/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/platform/packages", label: "Packages", icon: Package },
+  { href: "/platform/licenses", label: "Licenses", icon: CreditCard },
   { href: "/platform/usage", label: "Usage", icon: BarChart3 },
   { href: "/platform/revenue", label: "Revenue", icon: DollarSign },
   { href: "/platform/system-health", label: "System Health", icon: Activity },

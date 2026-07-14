@@ -220,6 +220,7 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     icon: Users,
     items: [
       { href: "customers", label: "Customers" },
+      { href: "licenses", label: "License Center" },
       { href: "branches", label: "Cabang" },
       { href: "accounts", label: "Account" },
       { href: "technician-performance", label: "Performa Teknisi" },

@@ -63,7 +63,19 @@ export function LoginForm() {
       }
 
       updateLastLoginAt(supabase, data.user.id);
-      window.location.href = "/";
+
+      // Re-bind any checkout session created before login so the
+      // selected package survives into the post-login flow.
+      try {
+        const { afterLoginRebindCheckoutAction } = await import(
+          "@/server/actions/checkout.actions"
+        );
+        await afterLoginRebindCheckoutAction();
+      } catch {
+        /* non-fatal */
+      }
+
+      window.location.href = redirectTo || "/";
     } catch {
       setError(ERROR_MESSAGES.unknown);
       setIsLoading(false);

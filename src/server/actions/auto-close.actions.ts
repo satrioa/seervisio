@@ -88,18 +88,22 @@ export async function runAutoCloseCheckAction(
 /**
  * runAutoCloseScheduledAction
  *
- * Same RPC call as runAutoCloseCheckAction but WITHOUT permission checks.
- * Designed to be called from the client-side scheduler/hook on behalf of any user.
+ * Same RPC call as runAutoCloseCheckAction but scoped to a brand.
+ * Requires store_shift.close permission for the given brand.
+ * Designed to be called from the client-side scheduler/hook.
+ *
  * The SQL function check_and_auto_close_shifts handles all validation internally
  * (shift must be open, hours exceeded, auto-close enabled, etc.)
- *
- * Call without brandSlug to check all brands (permission bypass).
- * Call with brandSlug as a no-op scoped safety marker (permission still skipped).
  */
 export async function runAutoCloseScheduledAction(
   brandSlug?: string,
 ): Promise<ActionResult<AutoCloseResult[]>> {
   try {
+    if (brandSlug) {
+      const session = await getSessionData(brandSlug);
+      requireActionPermission(session.role, "store_shift.close");
+    }
+
     const supabase = await createServerSupabase();
 
     const { data, error } = await (supabase as any).rpc("check_and_auto_close_shifts");

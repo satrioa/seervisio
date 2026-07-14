@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import JSZip from "jszip";
 import { getSessionData, requireActionPermission, successResult, errorResult, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { ROLES } from "@/lib/permissions/roles";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 
 function toCSV(rows: Record<string, any>[], columns: string[]): string {
@@ -22,7 +23,7 @@ async function assertMasterAdmin(brandSlug: string) {
 
 async function assertCanExport(brandSlug: string) {
   const session = await getSessionData(brandSlug);
-  const allowed = session.role === "MASTER_ADMIN" || session.role === "PLATFORM_OWNER" || session.role === "ADMIN";
+  const allowed = session.role === ROLES.MASTER_ADMIN || session.role === ROLES.PLATFORM_OWNER || session.role === ROLES.ADMIN;
   if (!allowed) throw new Error("Anda tidak memiliki izin untuk mengekspor data.");
   return session;
 }

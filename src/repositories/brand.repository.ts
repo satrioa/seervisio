@@ -42,6 +42,29 @@ export async function getBrandById(
 }
 
 /**
+ * Create a new brand.
+ */
+export async function createBrand(
+  supabase: SupabaseClient<any, any, any>,
+  input: { name: string; slug: string; status: string; owner_name: string; owner_email: string }
+): Promise<DbBrand> {
+  const { data, error } = await supabase
+    .from("brands")
+    .insert({
+      name: input.name,
+      slug: input.slug,
+      status: input.status,
+      owner_name: input.owner_name,
+      owner_email: input.owner_email,
+    })
+    .select("id, name, slug")
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Gagal membuat brand.");
+  return data as unknown as DbBrand;
+}
+
+/**
  * List all brands.
  */
 export async function getAllBrands(

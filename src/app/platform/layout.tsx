@@ -12,7 +12,7 @@ export default async function PlatformLayout({ children }: PlatformLayoutProps) 
   const authResult = await getCurrentUser();
 
   if (!authResult.user) {
-    redirect("/login");
+    redirect("/platform/login");
   }
 
   const isPlatformOwner = authResult.user.memberships.some(

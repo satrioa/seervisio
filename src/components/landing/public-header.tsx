@@ -177,7 +177,7 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                   className="hidden md:inline-flex gap-1.5 group/dash transition-all duration-200 hover:shadow-md"
                 >
                   <Link href={auth.dashboardHref}>
-                    Dashboard
+                    {auth.accountType === 'platform' ? 'Platform Dashboard' : 'Dashboard'}
                     <ArrowRight className="size-3.5 transition-transform duration-200 group-hover/dash:translate-x-0.5" />
                   </Link>
                 </Button>
@@ -225,8 +225,8 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                       </div>
                     </DropdownMenuLabel>
 
-                    {/* Brand info */}
-                    {auth.brand && (
+                    {/* Brand info — customer only */}
+                    {auth.accountType !== 'platform' && auth.brand && (
                       <>
                         <DropdownMenuSeparator />
                         <div className="flex items-center gap-2 px-3 py-2">
@@ -243,7 +243,7 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
 
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      {canAccessBrandSettings && (
+                      {auth.accountType !== 'platform' && canAccessBrandSettings && (
                         <DropdownMenuItem asChild>
                           <Link
                             href={`/${auth.brand!.slug}/panel/system/brand-profile`}
@@ -257,9 +257,11 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                       <DropdownMenuItem asChild>
                         <Link
                           href={
-                            auth.brand
-                              ? `/${auth.brand.slug}/panel/system/account/profile`
-                              : "/login"
+                            auth.accountType === 'platform'
+                              ? "/platform/settings"
+                              : auth.brand
+                                ? `/${auth.brand.slug}/panel/system/account/profile`
+                                : "/login"
                           }
                           className="cursor-pointer"
                         >

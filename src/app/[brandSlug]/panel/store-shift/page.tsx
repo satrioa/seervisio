@@ -37,7 +37,7 @@ async function downloadShiftSummaryPdf(
   const result = await getStoreShiftReportAction(brandSlug, shift.id);
   const report = result.success ? result.data : null;
   const expectedCash = report?.expectedCash ?? getExpectedClosingCash(shift, activeExpectedCash);
-  const pdf = buildShiftReportPdf({
+  const blob = await buildShiftReportPdf({
     shiftNumber: shift.shiftNumber,
     status: shift.shiftStatus,
     openedAt: shift.openedAt,
@@ -50,7 +50,6 @@ async function downloadShiftSummaryPdf(
     cashDifference: shift.cashDifference ?? null,
     report: report ?? null,
   });
-  const blob = new Blob([pdf], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

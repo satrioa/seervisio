@@ -68,57 +68,94 @@ export async function middleware(request: NextRequest) {
   // Public routes that don't need auth
   const isPublicRoute =
     pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/checkout" ||
+    pathname === "/license" ||
+    pathname === "/welcome" ||
+    pathname === "/platform/login" ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/";
 
-  // Check if this is a panel route
+  // Check route types
   const isPanelRoute = /^\/[^/]+\/panel(\/.*)?$/.test(pathname);
   const isPlatformRoute = pathname.startsWith("/platform");
 
-  // If it's a public route, pass through
+  // For public routes — redirect authenticated users away from public pages
   if (isPublicRoute) {
-    // If user is already logged in and visiting /login, redirect to landing page
-    if (pathname === "/login" && user) {
+    if (user) {
+      if (pathname === "/login") {
+        // Authenticated customer users go to landing page; platform users stay on platform pages
+        url.pathname = "/";
+        return NextResponse.redirect(url);
+      }
+      if (pathname === "/platform/login" && user) {
+        // Already authenticated platform user visiting login → redirect to platform dashboard
+        url.pathname = "/platform/dashboard";
+        return NextResponse.redirect(url);
+      }
+    }
+    return supabaseResponse;
+  }
+
+  // ====================== UNAUTHENTICATED USERS ======================
+  if (!user) {
+    // Platform route (including platform/login is already handled above as public)
+    if (isPlatformRoute) {
+      url.pathname = "/platform/login";
+      url.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(url);
+    }
+
+    // Panel route
+    if (isPanelRoute) {
+      url.pathname = "/login";
+      url.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(url);
+    }
+
+    return supabaseResponse;
+  }
+
+  // ====================== AUTHENTICATED USERS ======================
+  // Load profile + account_type for all protected routes
+  const profileResult = await (
+    supabase
+      .from("profiles")
+      .select("id, is_active, account_type")
+      .eq("auth_user_id", user.id)
+      .single() as unknown as Promise<{
+      data: { id: string; is_active: boolean; account_type: string } | null;
+    }>
+  );
+
+  const profile = profileResult.data;
+
+  // If profile not found or inactive, redirect to login with error
+  if (!profile || !profile.is_active) {
+    await supabase.auth.signOut();
+    url.pathname = "/login";
+    url.searchParams.set("error", "account_disabled");
+    return NextResponse.redirect(url);
+  }
+
+  const accountType = profile.account_type ?? 'customer';
+
+  // Platform routes: require account_type === 'platform'
+  if (isPlatformRoute) {
+    if (accountType !== 'platform') {
+      // Customer trying to access platform area — redirect to landing page
       url.pathname = "/";
       return NextResponse.redirect(url);
     }
     return supabaseResponse;
   }
 
-  // If platform route and not authenticated, redirect to login
-  if (isPlatformRoute && !user) {
-    url.pathname = "/login";
-    url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // If panel route and not authenticated, redirect to login
-  if (isPanelRoute && !user) {
-    url.pathname = "/login";
-    url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // If panel route and authenticated, verify profile is linked
-  if (isPanelRoute && user) {
-    const profileResult = await (
-      supabase
-        .from("profiles")
-        .select("id, is_active")
-        .eq("auth_user_id", user.id)
-        .single() as unknown as Promise<{
-        data: { id: string; is_active: boolean } | null;
-      }>
-    );
-
-    const profile = profileResult.data;
-
-    // If profile not found or inactive, redirect to login with error
-    if (!profile || !profile.is_active) {
-      await supabase.auth.signOut();
-      url.pathname = "/login";
-      url.searchParams.set("error", "account_disabled");
+  // Panel routes: require account_type === 'customer'
+  if (isPanelRoute) {
+    if (accountType !== 'customer') {
+      // Platform user trying to access customer panel — redirect to platform dashboard
+      url.pathname = "/platform/dashboard";
       return NextResponse.redirect(url);
     }
 
@@ -148,7 +185,6 @@ export async function middleware(request: NextRequest) {
       const membership = membershipResult.data;
 
       if (!membership) {
-        // User doesn't have access to this brand
         url.pathname = "/login";
         url.searchParams.set("error", "no_brand_access");
         return NextResponse.redirect(url);
@@ -181,7 +217,6 @@ export async function middleware(request: NextRequest) {
         }
       }
 
-      // No brand found — redirect to login
       url.pathname = "/login";
       url.searchParams.set("error", "no_brand_access");
       return NextResponse.redirect(url);

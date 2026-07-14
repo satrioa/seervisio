@@ -24,7 +24,6 @@ import {
   callReturnServiceSparepartUsage,
   callTransitionServiceStatus,
   callRecordServicePayment,
-  callRecordServicePaymentFinanceEntries,
   callCalculateServicePaymentSummary,
   getBranchPaymentMethods,
 } from "@/repositories/payment.repository";
@@ -339,21 +338,6 @@ export async function updateServiceStatusAction(
     }
 
     if (dbNextStatus === "DONE") {
-      const { data: payments } = await (supabase as any)
-        .from("service_payments")
-        .select("id")
-        .eq("service_id", service.id)
-        .eq("payment_status", "COMPLETED");
-      if (payments) {
-        for (const payment of payments) {
-          try {
-            await callRecordServicePaymentFinanceEntries(payment.id, session.profileId);
-          } catch (finErr: any) {
-            console.warn("[updateServiceStatusAction] Finance entry failed:", finErr.message);
-          }
-        }
-      }
-
       try {
         const { data: svc } = await (supabase as any)
           .from("services")
@@ -400,6 +384,7 @@ export async function updateServiceStatusAction(
 
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_STATUS_UPDATED",
       target_type: "service",
       target_id: service.id,
@@ -476,6 +461,7 @@ export async function cancelServiceAction(
 
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_CANCELLED",
       target_type: "service",
       target_id: service.id,
@@ -527,6 +513,7 @@ export async function reopenServiceAction(
 
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_REOPENED",
       target_type: "service",
       target_id: service.id,
@@ -650,6 +637,7 @@ export async function addServiceSparepartAction(
 
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_SPAREPART_ADDED",
       target_type: "service",
       target_id: service.id,
@@ -742,9 +730,6 @@ export async function receiveServicePaymentAction(
 ): Promise<ActionResult<any>> {
   try {
     const session = await getSessionData(input.brandSlug);
-    if (session.role === "TECHNICIAN") {
-      return errorResult("Role Anda tidak memiliki akses untuk menerima pembayaran.");
-    }
     requireActionPermission(session.role, PERMISSIONS.SERVICE_PAYMENT_CREATE);
     if (!isUuid(input.branchPaymentMethodId)) {
       return errorResult("Metode pembayaran tidak valid. Pilih ulang metode pembayaran.");
@@ -835,12 +820,12 @@ export async function receiveServicePaymentAction(
       shouldRefresh: true,
     });
 
-    if (paymentResult?.service_payment_id) {
-      try {
-        await callRecordServicePaymentFinanceEntries(paymentResult.service_payment_id, session.profileId);
-      } catch (finErr: any) {
-        console.warn("[receiveServicePaymentAction] Finance entry failed:", finErr.message);
-      }
+    if (paymentResult?.revenue_ledger_id) {
+      console.log("[service-payment/finance] Finance entries created atomically with payment:", {
+        servicePaymentId: paymentResult.service_payment_id,
+        revenue_ledger_id: paymentResult.revenue_ledger_id,
+        mdr_ledger_id: paymentResult.mdr_ledger_id,
+      });
     }
 
     await addServiceTimelineEntry({
@@ -856,6 +841,7 @@ export async function receiveServicePaymentAction(
 
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_PAYMENT_RECEIVED",
       target_type: "service_payment",
       target_id: paymentResult?.service_payment_id,
@@ -1150,6 +1136,7 @@ export async function verifyServicePickupAction(
     // 8. Create audit log entry
     await addAuditLog({
       brand_id: service.brand_id,
+      branch_id: service.branch_id,
       action: "SERVICE_PICKUP_VERIFIED",
       target_type: "service",
       target_id: service.id,

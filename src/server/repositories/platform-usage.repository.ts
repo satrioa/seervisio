@@ -93,7 +93,7 @@ export async function getPerTenantUsage(): Promise<PerTenantUsage[]> {
   const [brandsResult, subsResult, branchesResult, membershipsResult, txResult, ledgerResult] =
     await Promise.all([
       supabase.from("brands").select("id, name, slug, status"),
-      (supabase as any).from("brand_subscriptions").select("brand_id, plan, max_branches, max_users"),
+      (supabase as any).from("licenses").select("brand_id, packages:package_id(slug, max_branches, max_users)"),
       (supabase as any).from("branches").select("brand_id, id").is("deleted_at", null),
       (supabase as any).from("user_brand_memberships").select("brand_id, id"),
       (supabase as any)
@@ -117,7 +117,13 @@ export async function getPerTenantUsage(): Promise<PerTenantUsage[]> {
   const ledgerRows = (ledgerResult?.data ?? []) as any[];
 
   const subMap = new Map<number, any>();
-  for (const s of subscriptions) subMap.set(s.brand_id, s);
+  for (const s of subscriptions) {
+    subMap.set(s.brand_id, {
+      plan: s.packages?.slug ?? "none",
+      max_branches: s.packages?.max_branches ?? 0,
+      max_users: s.packages?.max_users ?? 0,
+    });
+  }
 
   const branchCountMap = new Map<number, number>();
   for (const b of branchRows) {

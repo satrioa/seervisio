@@ -133,14 +133,21 @@ export async function generateNotificationsAction(): Promise<ActionResult<{ crea
 
     const supabase = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient();
     const { data: subscriptions } = await (supabase as any)
-      .from("brand_subscriptions")
-      .select("brand_id, plan, status, expires_at, max_branches, max_users");
+      .from("licenses")
+      .select("brand_id, status, expires_at, packages:package_id(slug, max_branches, max_users)");
+
+    const subscriptions2 = (subscriptions ?? []).map((s: any) => ({
+      brand_id: s.brand_id,
+      plan: s.packages?.slug ?? "free",
+      status: s.status,
+      expires_at: s.expires_at,
+      max_branches: s.packages?.max_branches ?? 1,
+      max_users: s.packages?.max_users ?? 5,
+    }));
 
     const subMap = new Map<number, any>();
-    if (subscriptions) {
-      for (const s of subscriptions) {
-        subMap.set(s.brand_id, s);
-      }
+    for (const s of subscriptions2) {
+      subMap.set(s.brand_id, s);
     }
 
     for (const tenant of tenants) {

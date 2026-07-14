@@ -5,6 +5,7 @@ import { PublicFooter } from "@/components/landing/public-footer";
 export interface AuthUserData {
   isAuthenticated: boolean;
   dashboardHref: string;
+  accountType: 'customer' | 'platform' | null;
   profile: {
     name: string;
     email: string;
@@ -22,17 +23,18 @@ async function getAuthState(): Promise<AuthUserData> {
     const supabase = await createServerSupabase();
     const { data } = await supabase.auth.getUser();
     if (!data.user) {
-      return {
-        isAuthenticated: false,
-        dashboardHref: "/login",
-        profile: null,
-        brand: null,
-      };
-    }
+    return {
+      isAuthenticated: false,
+      dashboardHref: "/login",
+      accountType: null,
+      profile: null,
+      brand: null,
+    };
+  }
 
-    const { data: profile } = await (supabase as any)
+  const { data: profile } = await (supabase as any)
       .from("profiles")
-      .select("id, name, email, avatar_url")
+      .select("id, name, email, avatar_url, account_type")
       .eq("auth_user_id", data.user.id)
       .maybeSingle();
 
@@ -40,10 +42,28 @@ async function getAuthState(): Promise<AuthUserData> {
       return {
         isAuthenticated: true,
         dashboardHref: "/onboarding",
+        accountType: null,
         profile: {
           name: data.user.user_metadata?.name || "",
           email: data.user.email || "",
           avatarUrl: null,
+        },
+        brand: null,
+      };
+    }
+
+    const accountType = profile.account_type ?? 'customer';
+
+    // Platform users — point to platform dashboard, skip brand/membership queries
+    if (accountType === 'platform') {
+      return {
+        isAuthenticated: true,
+        dashboardHref: "/platform/dashboard",
+        accountType: 'platform',
+        profile: {
+          name: profile.name || "",
+          email: profile.email || data.user.email || "",
+          avatarUrl: profile.avatar_url || null,
         },
         brand: null,
       };
@@ -65,6 +85,7 @@ async function getAuthState(): Promise<AuthUserData> {
     return {
       isAuthenticated: true,
       dashboardHref: slug ? `/${slug}/panel/dashboard` : "/onboarding",
+      accountType: 'customer',
       profile: {
         name: profile.name || "",
         email: profile.email || data.user.email || "",
@@ -78,6 +99,7 @@ async function getAuthState(): Promise<AuthUserData> {
     return {
       isAuthenticated: false,
       dashboardHref: "/login",
+      accountType: null,
       profile: null,
       brand: null,
     };

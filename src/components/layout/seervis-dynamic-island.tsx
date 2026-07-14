@@ -9,7 +9,6 @@ import {
 } from "react";
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DynamicIslandProvider,
@@ -20,17 +19,19 @@ import { Button } from "@/components/ui/button";
 import {
   Clock,
   Loader2,
-  CheckCircle,
-  AlertTriangle,
   Info,
   Store,
   LogOut,
+  Circle,
 } from "lucide-react";
 import { type DynamicIslandFeedbackPayload } from "@/lib/dynamic-island/dynamic-island-events";
-import { useActiveBranch } from "@/components/layout/active-branch-context";
-import { useStoreShift } from "@/features/store-shift/store-shift-provider";
+import { useOperational } from "@/features/operational/operational-provider";
 import { StoreShiftCloseModal } from "@/components/store-shift/StoreShiftCloseModal";
-import { getStoreShiftOverviewAction } from "@/server/actions/store-shift.actions";
+import { useAmbientIntelligence } from "./use-ambient-intelligence";
+import { useIdleTracker } from "@/hooks/use-idle-tracker";
+import { AmbientEyes } from "@/components/ambient-eyes";
+import { Spokes } from "@/components/spokes";
+import { TrendingUpIcon, ActivityIcon, ShoppingCartIcon, CheckCheckIcon, XIcon } from "@animateicons/react/lucide";
 
 /* ── Types ── */
 type IslandMode = "welcome" | "idle" | "expanded" | "feedback";
@@ -41,12 +42,24 @@ const spring = { type: "spring" as const, stiffness: 400, damping: 30 };
 const feedbackTextTransition = { duration: 0.22, ease: "easeOut" as const };
 
 /* ── Helpers ── */
-function formatDuration(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+function LicenseStatusBadge({ license }: { license: { status: string; expires_at: string | null; is_trial: boolean } }) {
+  const daysLeft = license.expires_at
+    ? Math.max(0, Math.ceil((new Date(license.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+  const isActive = license.status === "active";
+  const isTrial = license.status === "trial" || license.is_trial;
+  const isExpired = license.status === "expired" || (!isActive && !isTrial && daysLeft === 0);
+  const color = isActive ? "text-green-400" : isExpired ? "text-red-400" : "text-amber-400";
+
+  return (
+    <div className={`flex shrink-0 items-center gap-1.5 pr-2 ${color}`}>
+      <span className="size-1.5 rounded-full bg-current" />
+      <span className="text-[10px] font-medium leading-none">
+        {license.status}
+        {daysLeft > 0 && ` · ${daysLeft}h`}
+      </span>
+    </div>
+  );
 }
 
 function getPresetDimensions(size: keyof typeof DynamicIslandSizePresets) {
@@ -78,33 +91,46 @@ function getFeedbackDimensions(actionState: ActionState) {
 }
 
 /* ── Inner component ── */
-function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; onOpenShift?: () => void }) {
-  const pathname = usePathname();
-  const brandSlug = pathname.split("/")[1];
-  const { setSize } = useDynamicIslandSize();
-  const { activeBranchName } = useActiveBranch();
-  const displayBranchName = activeBranchName ?? "Semua Cabang";
-  const { activeShift, isShiftLoading, refreshShiftStatus } = useStoreShift();
+function SeervisIslandContent({
+  userName,
+  onOpenShift,
+  activeLicense,
+}: {
+  userName?: string;
+  onOpenShift?: () => void;
+  activeLicense?: { status: string; expires_at: string | null; is_trial: boolean } | null;
+}) {
+  const {
+    storeStatus,
+    brandSlug,
+    branchName,
+    shift,
+    shiftDuration,
+    shiftLabel,
+    openingCash,
+    currentCash,
+    expectedCash,
+    isLoading,
+    openStore,
+    closeStore,
+    refresh,
+  } = useOperational();
 
-  const hasActiveShift = activeShift !== null && activeShift.shiftStatus === "OPEN";
+  const displayBranchName = branchName ?? "Semua Cabang";
+  const hasActiveShift = storeStatus === "OPEN";
 
-  console.log("[dynamic-island:shift] render", {
-    isShiftLoading,
-    activeShiftId: activeShift?.id,
-    status: activeShift?.shiftStatus,
-    branchName: activeBranchName,
-  });
-
-  /* State */
+  /* UI-only state (no business state) */
   const [mode, setMode] = useState<IslandMode>("welcome");
   const [actionState, setActionState] = useState<ActionState>("idle");
   const [isExpanded, setIsExpanded] = useState(false);
-  const [elapsed, setElapsed] = useState("00:00:00");
-  const shiftStartRef = useRef<Date | null>(null);
+  const eyesDisabled = isExpanded || mode !== "idle" || actionState !== "idle";
+  const showEyes = useIdleTracker(30_000, eyesDisabled);
+  const pauseAmbient = showEyes || isExpanded;
+
+  const ambient = useAmbientIntelligence(activeLicense ?? undefined, pauseAmbient);
   const islandRef = useRef<HTMLDivElement | null>(null);
   const [errorShake, setErrorShake] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
-  const [computedExpectedCash, setComputedExpectedCash] = useState<number | null>(null);
 
   /* Feedback dynamic text */
   const [feedbackTitle, setFeedbackTitle] = useState("");
@@ -120,15 +146,6 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
   const shouldReduceMotion = useReducedMotion();
   const isMobile = useIsMobile();
 
-  /* Sync active shift from provider — after welcome, set idle state */
-  useEffect(() => {
-    if (mode === "welcome" || mode === "feedback") return;
-    if (hasActiveShift) {
-      shiftStartRef.current = new Date(activeShift!.openedAt);
-      setElapsed(formatDuration(Date.now() - new Date(activeShift!.openedAt).getTime()));
-    }
-  }, [hasActiveShift, activeShift, mode]);
-
   /* Ticker for multi-line feedback */
   useEffect(() => {
     setActiveLineIndex(0);
@@ -141,50 +158,18 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
     return () => clearInterval(interval);
   }, [feedbackLines]);
 
+  const { setSize } = useDynamicIslandSize();
+
   /* Welcome auto-transition after 2.2s */
   useEffect(() => {
     if (mode === "welcome") {
       setSize("medium" as any);
       const t = setTimeout(() => {
         setMode("idle");
-        setSize("compact" as any);
       }, 2200);
       return () => clearTimeout(t);
     }
   }, [mode, setSize]);
-
-  /* Duration ticker when shift is open */
-  useEffect(() => {
-    if (!hasActiveShift || !shiftStartRef.current) return;
-    const interval = setInterval(() => {
-      setElapsed(formatDuration(Date.now() - shiftStartRef.current!.getTime()));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [hasActiveShift]);
-
-  /* ── Fetch expected cash for shift closing ── */
-  const fetchExpectedCash = useCallback(async () => {
-    if (!hasActiveShift || !activeShift?.branchId) {
-      setComputedExpectedCash(null);
-      return;
-    }
-    try {
-      const res = await getStoreShiftOverviewAction(brandSlug, activeShift.branchId);
-      if (res.success) setComputedExpectedCash(res.data.expectedCash);
-    } catch { /* ignore */ }
-  }, [hasActiveShift, activeShift?.branchId, brandSlug]);
-
-  useEffect(() => { fetchExpectedCash(); }, [fetchExpectedCash]);
-
-  useEffect(() => {
-    const handler = () => { fetchExpectedCash(); };
-    window.addEventListener("seervis:cash-transaction", handler);
-    window.addEventListener("seervis:shift-changed", handler);
-    return () => {
-      window.removeEventListener("seervis:cash-transaction", handler);
-      window.removeEventListener("seervis:shift-changed", handler);
-    };
-  }, [fetchExpectedCash]);
 
   /* Toggle expand/collapse */
   const handleToggle = useCallback(() => {
@@ -256,7 +241,6 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
         setMode("idle");
         setFeedbackTitle("");
         setFeedbackDescription(null);
-        setSize("compact" as any);
         feedbackTimerRef.current = null;
       }, dismissAfter);
     };
@@ -280,36 +264,20 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
     onOpenShift?.();
   }, [onOpenShift]);
 
-  /* Listen for shift-changed event — refetch provider + show feedback */
+  /* Listen for shift-changed event — show feedback */
   useEffect(() => {
     const handler = () => {
       setActionState("success");
       setMode("feedback");
       setSize("compact" as any);
-      shiftStartRef.current = new Date();
-      setElapsed("00:00:00");
       setTimeout(() => {
         setActionState("idle");
         setMode("idle");
         setIsExpanded(false);
-        setSize("compact" as any);
       }, 1400);
     };
     window.addEventListener("seervis:shift-changed", handler);
     return () => window.removeEventListener("seervis:shift-changed", handler);
-  }, [setSize]);
-
-  const handleError = useCallback(() => {
-    setActionState("error");
-    setMode("feedback");
-    setSize("compact" as any);
-    setErrorShake(true);
-    setTimeout(() => setErrorShake(false), 500);
-    setTimeout(() => {
-      setActionState("idle");
-      setMode("idle");
-      setSize("compact" as any);
-    }, 2200);
   }, [setSize]);
 
   /* Current dimensions based on mode */
@@ -322,9 +290,11 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
           ? { width: 371, height: 84 }
           : mode === "feedback"
             ? getFeedbackDimensions(actionState)
-            : mode === "idle" && hasActiveShift
-              ? { width: 250, height: 44 }
-              : getPresetDimensions(mode === "expanded" ? "medium" : "compact");
+            : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
+              ? { width: 280, height: 44 }
+              : mode === "idle" && hasActiveShift
+                ? { width: 220, height: 44 }
+                : getPresetDimensions(mode === "expanded" ? "medium" : "compact");
   const initialDims =
     mode === "welcome" ? getPresetDimensions("compact") : dims;
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
@@ -390,7 +360,7 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
         )}
 
         {/* ── Idle + No shift ── */}
-        {mode === "idle" && !hasActiveShift && !isShiftLoading && (
+        {mode === "idle" && !hasActiveShift && !isLoading && (
           <motion.div
             key="idle-none"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -436,28 +406,83 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
             >
               Buka Toko
             </Button>
+            {activeLicense && (
+              <LicenseStatusBadge license={activeLicense} />
+            )}
           </motion.div>
         )}
 
-        {/* ── Idle + Shift running ── */}
+        {/* ── Idle + Shift running → Ambient Intelligence ── */}
         {mode === "idle" && hasActiveShift && (
           <motion.div
-            key="idle-open"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={spring}
-            className="flex items-center justify-center gap-2.5 px-5"
+            key={ambient.mode === "idle" && showEyes ? "ambient-eyes" : ambient.mode === "idle" ? "ambient-idle" : `ambient-${ambient.currentText?.slice(0, 20) ?? "kpi"}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="flex items-center gap-2.5 px-4"
           >
-            <Clock className="size-3.5 shrink-0 text-white/50 dark:text-black/50" />
-            <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80 font-medium">
-              {displayBranchName} - {elapsed}
-            </span>
+            {ambient.mode === "idle" && showEyes ? (
+              <div className="flex items-center justify-center text-white/40 dark:text-black/40">
+              <AmbientEyes />
+              </div>
+            ) : ambient.mode === "idle" ? (
+              <>
+                <span className="size-1.5 shrink-0 rounded-full bg-green-400/80" />
+                <span className="whitespace-nowrap text-xs font-medium text-white/80 dark:text-black/80">
+                  {displayBranchName}
+                </span>
+                <span className="text-[10px] text-white/40 dark:text-black/40 tabular-nums">
+                  {shiftDuration}
+                </span>
+              </>
+            ) : ambient.mode === "critical_warning" ? (
+              <>
+                <span className="size-1.5 shrink-0 rounded-full bg-red-400" />
+                <span className="whitespace-nowrap text-xs font-medium text-red-300 dark:text-red-400">
+                  {ambient.currentText}
+                </span>
+              </>
+            ) : ambient.currentText?.startsWith("Revenue") ? (
+              <>
+                <TrendingUpIcon size={14} isAnimated color="currentColor" />
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                  {ambient.currentText}
+                </span>
+              </>
+            ) : ambient.currentText?.startsWith("Shift") ? (
+              <>
+                <ActivityIcon size={14} isAnimated color="currentColor" />
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                  {ambient.currentText}
+                </span>
+              </>
+            ) : ambient.currentText?.startsWith("Transaksi") ? (
+              <>
+                <ShoppingCartIcon size={14} isAnimated color="currentColor" />
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                  {ambient.currentText}
+                </span>
+              </>
+            ) : ambient.currentText?.startsWith("Servis") ? (
+              <>
+                <CheckCheckIcon size={14} isAnimated color="currentColor" />
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                  {ambient.currentText}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                  {ambient.currentText}
+                </span>
+              </>
+            )}
           </motion.div>
         )}
 
         {/* ── Idle + Loading ── */}
-        {mode === "idle" && isShiftLoading && (
+        {mode === "idle" && isLoading && (
           <motion.div
             key="idle-loading"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -514,19 +539,24 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
             transition={spring}
             className="flex w-full flex-col gap-3 p-4"
           >
-            <div>
-              <p className="text-sm font-medium text-white dark:text-black">Shift Berjalan</p>
+            <div className="flex items-center gap-2">
+              <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
+              <p className="text-sm font-medium text-white dark:text-black">
+                {displayBranchName} · {shiftLabel}
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <InfoRow label="Branch" value={displayBranchName} />
-              <InfoRow label="Duration" value={elapsed} />
+              <InfoRow label="Duration" value={shiftDuration} />
+              {expectedCash !== null && (
+                <InfoRow label="Expected Cash" value={`Rp${expectedCash.toLocaleString("id-ID")}`} />
+              )}
             </div>
 
             <Button
               size="sm"
-              variant="outline"
-              className="w-full h-9 gap-1.5 rounded-full border-white/20 px-3 text-xs text-red-300 hover:bg-white/10 hover:text-red-200 dark:border-black/20 dark:text-red-400 dark:hover:bg-black/10 dark:hover:text-red-300"
+              variant="destructive"
+              className="w-full h-9 gap-1.5 rounded-full px-3 text-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 setMode("idle");
@@ -553,13 +583,13 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
-                <Loader2 className="size-4 animate-spin text-white/70 dark:text-black/70" />
+                <Spokes className="size-[18px] text-white/70 dark:text-black/70" style={{ "--duration": "0.9s" } as React.CSSProperties} />
               )}
               {actionState === "success" && (
-                <CheckCircle className="size-4 text-green-400" />
+                <CheckCheckIcon size={16} isAnimated color="currentColor" className="text-green-400" />
               )}
               {actionState === "error" && (
-                <AlertTriangle className="size-4 text-red-400" />
+                <XIcon size={16} isAnimated color="currentColor" className="text-red-400" />
               )}
               {actionState === "info" && (
                 <Info className="size-4 text-blue-400" />
@@ -593,14 +623,14 @@ function SeervisIslandContent({ userName, onOpenShift }: { userName?: string; on
       </AnimatePresence>
     </motion.div>
 
-    {activeShift && (
+    {shift && (
       <StoreShiftCloseModal
         open={showCloseModal}
         onOpenChange={setShowCloseModal}
         brandSlug={brandSlug}
-        shiftId={activeShift.id}
-        expectedCash={computedExpectedCash}
-        onSuccess={() => { refreshShiftStatus(); }}
+        shiftId={shift.id}
+        expectedCash={expectedCash}
+        onSuccess={() => { void refresh(); }}
       />
     )}
   </>
@@ -632,10 +662,18 @@ function InfoRow({
 }
 
 /* Public component */
-export function SeervisDynamicIsland({ userName, onOpenShift }: { userName?: string; onOpenShift?: () => void }) {
+export function SeervisDynamicIsland({
+  userName,
+  onOpenShift,
+  activeLicense,
+}: {
+  userName?: string;
+  onOpenShift?: () => void;
+  activeLicense?: { status: string; expires_at: string | null; is_trial: boolean } | null;
+}) {
   return (
     <DynamicIslandProvider initialSize={"medium" as any}>
-      <SeervisIslandContent userName={userName} onOpenShift={onOpenShift} />
+      <SeervisIslandContent userName={userName} onOpenShift={onOpenShift} activeLicense={activeLicense} />
     </DynamicIslandProvider>
   );
 }

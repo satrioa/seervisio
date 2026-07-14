@@ -193,9 +193,10 @@ export async function getTenantHealth(
   const issues: string[] = [];
 
   const { data: subscription } = await (supabase as any)
-    .from("brand_subscriptions")
-    .select("status, expires_at, max_branches, max_users")
+    .from("licenses")
+    .select("status, expires_at, packages:package_id(max_branches, max_users)")
     .eq("brand_id", brandId)
+    .order("created_at", { ascending: false })
     .maybeSingle();
 
   if (!subscription) {
@@ -221,12 +222,15 @@ export async function getTenantHealth(
     .select("*", { count: "exact", head: true })
     .eq("brand_id", brandId);
 
+  const maxUsers = subscription.packages?.max_users ?? 0;
+  const maxBranches = subscription.packages?.max_branches ?? 0;
+
   if (
-    subscription.max_users > 0 &&
-    (userCount ?? 0) >= subscription.max_users * 0.8
+    maxUsers > 0 &&
+    (userCount ?? 0) >= maxUsers * 0.8
   ) {
     issues.push(
-      `User limit nearly reached (${userCount}/${subscription.max_users})`,
+      `User limit nearly reached (${userCount}/${maxUsers})`,
     );
   }
 
@@ -237,11 +241,11 @@ export async function getTenantHealth(
     .is("deleted_at", null);
 
   if (
-    subscription.max_branches > 0 &&
-    (branchCount ?? 0) >= subscription.max_branches * 0.8
+    maxBranches > 0 &&
+    (branchCount ?? 0) >= maxBranches * 0.8
   ) {
     issues.push(
-      `Branch limit nearly reached (${branchCount}/${subscription.max_branches})`,
+      `Branch limit nearly reached (${branchCount}/${maxBranches})`,
     );
   }
 
@@ -325,8 +329,8 @@ export async function getAllTenantsHealth(): Promise<TenantHealthSummary[]> {
   const [brandsResult, subscriptionsResult, branchCountsResult, userCountsResult] = await Promise.all([
     supabase.from("brands").select("id, status"),
     (supabase as any)
-      .from("brand_subscriptions")
-      .select("brand_id, status, expires_at, max_branches, max_users"),
+      .from("licenses")
+      .select("brand_id, status, expires_at, packages:package_id(max_branches, max_users)"),
     (supabase as any)
       .from("branches")
       .select("brand_id, id")
@@ -345,7 +349,11 @@ export async function getAllTenantsHealth(): Promise<TenantHealthSummary[]> {
 
   const subMap = new Map<number, any>();
   for (const s of subscriptions) {
-    subMap.set(s.brand_id, s);
+    subMap.set(s.brand_id, {
+      ...s,
+      max_branches: s.packages?.max_branches ?? 0,
+      max_users: s.packages?.max_users ?? 0,
+    });
   }
 
   const branchCountMap = new Map<number, number>();

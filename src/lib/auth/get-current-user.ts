@@ -19,6 +19,8 @@ export interface UserSession {
   name: string;
   /** Profile email */
   email: string;
+  /** Account type: 'customer' or 'platform' */
+  accountType: 'customer' | 'platform';
   /** All brand memberships (brand_id + role) */
   memberships: Array<{
     id: string;
@@ -108,20 +110,23 @@ export async function getCurrentUser(): Promise<AuthResult> {
   // Step 3: Load brand memberships
   const memberships = await getMembershipsForProfile(supabase, profile.id);
 
-  if (memberships.length === 0) {
-    return {
-      user: null,
-      error: "Anda belum memiliki akses ke brand manapun. Silakan hubungi administrator.",
-    };
-  }
-
   // Step 4: Build and return user session
+  // Platform users can exist without brand memberships.
+  // NEW customer accounts (post-refactor) ALSO start with NO brand
+  // memberships — the brand is created LATER, in the Welcome Wizard,
+  // after the license is ACTIVE. They must still authenticate so they
+  // can reach /checkout and /license. A brand-less customer is a
+  // VALID pre-onboarding state, NOT an error here; the brand-scoped
+  // panel enforces membership on its own.
+  const accountType: 'customer' | 'platform' = (profile.account_type || 'customer') as 'customer' | 'platform';
+
   return {
     user: {
       profileId: profile.id,
       authUserId: authUser.id,
       name: profile.name,
       email: profile.email,
+      accountType,
       memberships: memberships.map((m) => ({
         id: m.id,
         brandId: m.brand_id!,

@@ -1573,6 +1573,7 @@ export async function adjustInventoryStockAction(
     // Audit log
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: branchId,
       actor_id: session.profileId,
       action: direction === "IN" ? "STOCK_ADJUSTMENT_IN" : "STOCK_ADJUSTMENT_OUT",
       target_type: "INVENTORY_ITEM",

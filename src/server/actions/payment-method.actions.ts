@@ -285,6 +285,7 @@ export async function linkPaymentMethodAccountAction(
 
     await (admin as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: input.branchId,
       action: "PAYMENT_METHOD_LINKED",
       target_type: "branch_payment_method",
       target_id: updatedRow.id,

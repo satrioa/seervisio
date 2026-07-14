@@ -63,7 +63,7 @@ function fmtCurrency(n: number | null | undefined): string {
 async function downloadFinanceShiftSummaryPdf(brandSlug: string, shift: ShiftSummaryItem): Promise<void> {
   const result = await getStoreShiftReportAction(brandSlug, shift.shiftId);
   const report = result.success ? result.data : null;
-  const pdf = buildShiftReportPdf({
+  const blob = await buildShiftReportPdf({
     shiftNumber: shift.shiftNumber,
     status: shift.status,
     branchName: shift.branchName,
@@ -77,7 +77,6 @@ async function downloadFinanceShiftSummaryPdf(brandSlug: string, shift: ShiftSum
     cashDifference: shift.cashDifference ?? null,
     report: report ?? null,
   });
-  const blob = new Blob([pdf], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

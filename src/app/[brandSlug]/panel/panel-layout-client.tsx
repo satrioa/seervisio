@@ -23,6 +23,7 @@ import GradualBlur from "@/components/GradualBlur";
 import { ActiveBranchProvider, useActiveBranch, type ActiveBranchOption } from "@/components/layout/active-branch-context";
 import { PosCartProvider } from "@/components/pos/pos-cart-context";
 import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
+import { OperationalProvider } from "@/features/operational/operational-provider";
 import { StoreShiftProvider } from "@/features/store-shift/store-shift-provider";
 import { saveRememberedAccount, loadRememberedAccounts } from "@/lib/auth/remembered-accounts";
 import { ROLE_LABELS } from "@/lib/permissions/roles";
@@ -36,6 +37,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAutoClose } from "@/hooks/use-auto-close";
 import { LanguageProviderWrapper } from "@/components/settings/language-provider-wrapper";
 import { OnboardingProvider, useOnboarding } from "@/components/onboarding/onboarding-provider";
+import { LicenseGuard } from "@/components/layout/license-guard";
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -57,6 +59,7 @@ interface PanelLayoutClientProps {
   profileId: string;
   onboardingCompleted?: boolean;
   onboardingCompletedTasks?: string[];
+  activeLicense: { status: string; expires_at: string | null; is_trial: boolean } | null;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -102,6 +105,7 @@ export function PanelLayoutClient({
   profileId,
   onboardingCompleted,
   onboardingCompletedTasks,
+  activeLicense,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
@@ -109,7 +113,7 @@ export function PanelLayoutClient({
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
             <PosCartProvider>
           <OnboardingProvider brandSlug={brandSlug} role={role} onboardingCompleted={onboardingCompleted ?? false}>
-            <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks}>{children}</PanelLayoutShell>
+            <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks} activeLicense={activeLicense}>{children}</PanelLayoutShell>
           </OnboardingProvider>
           </PosCartProvider>
         </ActiveBranchProvider>
@@ -136,6 +140,7 @@ function PanelLayoutShell({
   profileId,
   onboardingCompleted,
   onboardingCompletedTasks,
+  activeLicense,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -390,6 +395,7 @@ function PanelLayoutShell({
     <>
     <SystemLoader />
     <StoreShiftProvider>
+    <OperationalProvider operatorName={activeOperatorName}>
     <LanguageProviderWrapper brandSlug={brandSlug}>
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
@@ -425,7 +431,7 @@ function PanelLayoutShell({
                 }}
               >
                 <div className="pointer-events-auto">
-                  <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} />
+                  <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
                 </div>
               </motion.div>
 
@@ -452,7 +458,7 @@ function PanelLayoutShell({
 
             {/* ── Mobile Dynamic Island row ── */}
             <div className="relative z-50 flex justify-center px-3 pb-2 pt-0 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
-              <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} />
+              <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
             </div>
 
             {/* Page content */}
@@ -461,7 +467,13 @@ function PanelLayoutShell({
                 ref={mainScrollRef}
                 className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"} ${isMobile ? "pb-14" : ""}`}
               >
-                {children}
+                <LicenseGuard
+                  brandSlug={brandSlug}
+                  licenseStatus={activeLicense?.status ?? null}
+                  expiresAt={activeLicense?.expires_at ?? null}
+                >
+                  {children}
+                </LicenseGuard>
               </main>
             <GradualBlur
               target="parent"
@@ -504,6 +516,7 @@ function PanelLayoutShell({
       )}
     </div>
     </LanguageProviderWrapper>
+    </OperationalProvider>
     </StoreShiftProvider>
     </>
   );

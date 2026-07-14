@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
     Card,
-    CardAction,
     CardContent,
     CardDescription,
     CardFooter,
@@ -326,14 +325,14 @@ function TourOverlay({
                                 <CardDescription>
                                     Step {currentStepIndex + 1} of {totalSteps}
                                 </CardDescription>
-                                <CardAction>
+                                <div className="absolute right-4 top-4">
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={onClose}>
                                         <XIcon />
                                     </Button>
-                                </CardAction>
+                                </div>
                             </CardHeader>
                             <CardContent>{step.content}</CardContent>
                             <CardFooter className="justify-between">

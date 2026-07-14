@@ -22,6 +22,7 @@
     "@reui": "https://reui.io/r/{style}/{name}.json",
     "@react-bits": "https://reactbits.dev/r/{name}.json",
     "@diceui": "https://diceui.com/r/{style}/{name}.json",
-    "@tour": "https://onboarding-tour.vercel.app/r/{name}.json"
+    "@tour": "https://onboarding-tour.vercel.app/r/{name}.json",
+    "@loading-ui": "https://loading-ui.com/r/{name}.json"
   }
 }

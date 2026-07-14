@@ -11,6 +11,9 @@ export interface PackageRow {
   maxStorageMb: number;
   maxTransactions: number;
   isActive: boolean;
+  billingDurationEnabled: boolean;
+  billingDurationType: "month" | "year" | null;
+  billingDurationValue: number | null;
 }
 
 export interface SubscriptionRow {
@@ -75,8 +78,8 @@ export async function getPlatformDashboardData(): Promise<PlatformDashboardData>
       .select("id", { count: "exact", head: true })
       .eq("is_active", true),
     (supabase as any)
-      .from("brand_subscriptions")
-      .select("id, plan, status, package_id"),
+      .from("licenses")
+      .select("id, status, package_id, is_trial"),
     (supabase as any)
       .from("packages")
       .select("id, price"),
@@ -89,9 +92,9 @@ export async function getPlatformDashboardData(): Promise<PlatformDashboardData>
   const subRows = (subscriptionsResult.data ?? []) as any[];
   const activeSubscriptions = subRows.filter((s: any) => s.status === "active").length;
   const expiredSubscriptions = subRows.filter((s: any) => s.status === "expired" || s.status === "cancelled").length;
-  const trialAccounts = subRows.filter((s: any) => s.status === "trial").length;
+  const trialAccounts = subRows.filter((s: any) => s.is_trial === true).length;
 
-  // Platform revenue = subscription fees from active brands
+  // Platform revenue = license fees from active brands
   const packagePriceMap = new Map<string, number>();
   for (const pkg of (packagesResult.data ?? []) as any[]) {
     packagePriceMap.set(pkg.id, Number(pkg.price) || 0);
@@ -100,14 +103,7 @@ export async function getPlatformDashboardData(): Promise<PlatformDashboardData>
   let monthlyRevenue = 0;
   for (const sub of subRows) {
     if (sub.status === "active" || sub.status === "trial") {
-      let price = 0;
-      if (sub.package_id && packagePriceMap.has(sub.package_id)) {
-        price = packagePriceMap.get(sub.package_id)!;
-      } else {
-        // Fallback: use plan-based pricing
-        const planPrices: Record<string, number> = { starter: 0, pro: 299000, enterprise: 999000 };
-        price = planPrices[sub.plan] ?? 0;
-      }
+      const price = sub.package_id && packagePriceMap.has(sub.package_id) ? packagePriceMap.get(sub.package_id)! : 0;
       monthlyRevenue += price;
     }
   }
@@ -149,8 +145,8 @@ export async function getTenantsList(): Promise<TenantRow[]> {
       .select("id, name, slug, owner_name, owner_email, status, created_at")
       .order("created_at", { ascending: false }),
     (supabase as any)
-      .from("brand_subscriptions")
-      .select("brand_id, plan, status"),
+      .from("licenses")
+      .select("brand_id, status, packages:package_id(slug)"),
     supabase
       .from("branches")
       .select("brand_id, id", { count: "exact", head: false })
@@ -167,7 +163,7 @@ export async function getTenantsList(): Promise<TenantRow[]> {
 
   const subMap = new Map<number, { plan: string; status: string }>();
   for (const s of subscriptions) {
-    subMap.set(s.brand_id, { plan: s.plan, status: s.status });
+    subMap.set(s.brand_id, { plan: s.packages?.slug ?? "starter", status: s.status });
   }
 
   const branchCountMap = new Map<number, number>();
@@ -215,6 +211,9 @@ export async function getPackagesList(): Promise<PackageRow[]> {
     maxStorageMb: r.max_storage_mb,
     maxTransactions: r.max_transactions,
     isActive: r.is_active,
+    billingDurationEnabled: r.billing_duration_enabled ?? true,
+    billingDurationType: r.billing_duration_type ?? "month",
+    billingDurationValue: r.billing_duration_value ?? 1,
   }));
 }
 
@@ -240,6 +239,9 @@ export async function getPackageById(id: string): Promise<PackageRow | null> {
     maxStorageMb: r.max_storage_mb,
     maxTransactions: r.max_transactions,
     isActive: r.is_active,
+    billingDurationEnabled: r.billing_duration_enabled ?? true,
+    billingDurationType: r.billing_duration_type ?? "month",
+    billingDurationValue: r.billing_duration_value ?? 1,
   };
 }
 
@@ -252,6 +254,9 @@ export async function createPackage(input: {
   maxUsers: number;
   maxStorageMb: number;
   maxTransactions: number;
+  billingDurationEnabled?: boolean;
+  billingDurationType?: "month" | "year" | null;
+  billingDurationValue?: number | null;
 }): Promise<PackageRow> {
   const supabase = createServiceRoleSupabaseClient();
 
@@ -267,6 +272,9 @@ export async function createPackage(input: {
       max_storage_mb: input.maxStorageMb,
       max_transactions: input.maxTransactions,
       is_active: true,
+      billing_duration_enabled: input.billingDurationEnabled ?? true,
+      billing_duration_type: input.billingDurationType ?? "month",
+      billing_duration_value: input.billingDurationValue ?? 1,
     })
     .select()
     .single();
@@ -284,6 +292,9 @@ export async function createPackage(input: {
     maxStorageMb: r.max_storage_mb,
     maxTransactions: r.max_transactions,
     isActive: r.is_active,
+    billingDurationEnabled: r.billing_duration_enabled ?? true,
+    billingDurationType: r.billing_duration_type ?? "month",
+    billingDurationValue: r.billing_duration_value ?? 1,
   };
 }
 
@@ -296,6 +307,9 @@ export async function updatePackage(id: string, input: {
   maxStorageMb?: number;
   maxTransactions?: number;
   isActive?: boolean;
+  billingDurationEnabled?: boolean | null;
+  billingDurationType?: "month" | "year" | null;
+  billingDurationValue?: number | null;
 }): Promise<PackageRow> {
   const supabase = createServiceRoleSupabaseClient();
 
@@ -308,6 +322,9 @@ export async function updatePackage(id: string, input: {
   if (input.maxStorageMb !== undefined) payload.max_storage_mb = input.maxStorageMb;
   if (input.maxTransactions !== undefined) payload.max_transactions = input.maxTransactions;
   if (input.isActive !== undefined) payload.is_active = input.isActive;
+  if (input.billingDurationEnabled !== undefined) payload.billing_duration_enabled = input.billingDurationEnabled;
+  if (input.billingDurationType !== undefined) payload.billing_duration_type = input.billingDurationType;
+  if (input.billingDurationValue !== undefined) payload.billing_duration_value = input.billingDurationValue;
 
   const { data, error } = await (supabase as any)
     .from("packages")
@@ -329,6 +346,9 @@ export async function updatePackage(id: string, input: {
     maxStorageMb: r.max_storage_mb,
     maxTransactions: r.max_transactions,
     isActive: r.is_active,
+    billingDurationEnabled: r.billing_duration_enabled ?? true,
+    billingDurationType: r.billing_duration_type ?? "month",
+    billingDurationValue: r.billing_duration_value ?? 1,
   };
 }
 
@@ -340,8 +360,8 @@ export async function getSubscriptionsList(): Promise<SubscriptionRow[]> {
       .from("brands")
       .select("id, name"),
     (supabase as any)
-      .from("brand_subscriptions")
-      .select("*, packages!left(name)"),
+      .from("licenses")
+      .select("*, packages:package_id(name, slug, max_branches, max_users)"),
   ]);
 
   const brandMap = new Map<number, string>();
@@ -354,13 +374,13 @@ export async function getSubscriptionsList(): Promise<SubscriptionRow[]> {
     id: r.id,
     brandId: r.brand_id,
     brandName: brandMap.get(r.brand_id) ?? `Brand #${r.brand_id}`,
-    plan: r.plan,
+    plan: r.packages?.slug ?? "free",
     packageName: r.packages?.name ?? null,
     status: r.status,
     startedAt: r.started_at,
     expiresAt: r.expires_at,
-    maxBranches: r.max_branches,
-    maxUsers: r.max_users ?? 5,
+    maxBranches: r.packages?.max_branches ?? 1,
+    maxUsers: r.packages?.max_users ?? 5,
   }));
 }
 
@@ -393,10 +413,10 @@ export interface SubscriptionGrowthPoint {
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
   const supabase = createServiceRoleSupabaseClient();
 
-  const [activeSubsResult, totalBrandsResult, userCountResult] = await Promise.all([
+  const [activeSubsResult, totalBrandsResult, userCountResult, packagesResult2] = await Promise.all([
     (supabase as any)
-      .from("brand_subscriptions")
-      .select("plan, status, brands!inner(id)"),
+      .from("licenses")
+      .select("status, package_id, brands!inner(id)"),
     supabase
       .from("brands")
       .select("id", { count: "exact", head: true }),
@@ -404,19 +424,21 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
       .from("user_brand_memberships")
       .select("id", { count: "exact", head: true })
       .eq("is_active", true),
+    (supabase as any)
+      .from("packages")
+      .select("id, price"),
   ]);
 
   const allSubs = (activeSubsResult.data ?? []) as any[];
   const activeSubs = allSubs.filter((s: any) => s.status === "active");
 
-  const planPrices: Record<string, number> = {
-    starter: 0,
-    pro: 299000,
-    enterprise: 999000,
-  };
+  const packagePriceMap2 = new Map<string, number>();
+  for (const pkg of (packagesResult2.data ?? []) as any[]) {
+    packagePriceMap2.set(pkg.id, Number(pkg.price) || 0);
+  }
 
   const mrr = activeSubs.reduce(
-    (sum: number, s: any) => sum + (planPrices[s.plan] ?? 0),
+    (sum: number, s: any) => sum + (packagePriceMap2.get(s.package_id) ?? 0),
     0
   );
   const arr = mrr * 12;
@@ -466,31 +488,27 @@ export async function getRevenueByPackage(): Promise<RevenueByPackage[]> {
   const supabase = createServiceRoleSupabaseClient();
 
   const { data } = await (supabase as any)
-    .from("brand_subscriptions")
-    .select("plan, brand_id");
+    .from("licenses")
+    .select("package_id, packages:package_id(slug, price), brand_id")
+    .neq("status", "cancelled");
 
   const rows = (data ?? []) as any[];
   const planMap = new Map<string, { revenue: number; brandCount: number }>();
 
-  const planPrices: Record<string, number> = {
-    starter: 0,
-    pro: 299000,
-    enterprise: 999000,
-  };
-
   for (const r of rows) {
-    const plan = r.plan || "starter";
-    const entry = planMap.get(plan) ?? { revenue: 0, brandCount: 0 };
-    entry.revenue += planPrices[plan] ?? 0;
+    const slug = r.packages?.slug ?? "starter";
+    const price = Number(r.packages?.price ?? 0);
+    const entry = planMap.get(slug) ?? { revenue: 0, brandCount: 0 };
+    entry.revenue += price;
     entry.brandCount++;
-    planMap.set(plan, entry);
+    planMap.set(slug, entry);
   }
 
   return Array.from(planMap.entries())
-    .map(([pkg, data]) => ({
+    .map(([pkg, d]) => ({
       package: pkg,
-      revenue: data.revenue,
-      brandCount: data.brandCount,
+      revenue: d.revenue,
+      brandCount: d.brandCount,
     }))
     .sort((a, b) => b.revenue - a.revenue);
 }
@@ -503,7 +521,7 @@ export async function getSubscriptionGrowth(): Promise<SubscriptionGrowthPoint[]
   const startDate = sixMonthsAgo.toISOString();
 
   const { data } = await (supabase as any)
-    .from("brand_subscriptions")
+    .from("licenses")
     .select("started_at, status, created_at")
     .gte("created_at", startDate)
     .order("created_at", { ascending: true });

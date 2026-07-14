@@ -287,6 +287,7 @@ export async function createPaymentAccountAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: isGlobal ? null : input.branchId,
       action: isGlobal ? "PAYMENT_ACCOUNT_GLOBAL_CREATED" : "PAYMENT_ACCOUNT_BRANCH_CREATED",
       target_type: "payment_account",
       target_id: created.id,
@@ -373,6 +374,7 @@ export async function updatePaymentAccountAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: updated?.branch_id ?? null,
       action: "PAYMENT_ACCOUNT_UPDATED",
       target_type: "payment_account",
       target_id: input.accountId,
@@ -460,6 +462,7 @@ export async function deletePaymentAccountAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: existing.branch_id ?? null,
       action: error ? "PAYMENT_ACCOUNT_ARCHIVED" : "PAYMENT_ACCOUNT_DELETED",
       target_type: "payment_account",
       target_id: accountId,
@@ -526,6 +529,7 @@ export async function adjustPaymentAccountBalanceAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: adjBranchId ?? null,
       action: "PAYMENT_ACCOUNT_BALANCE_ADJUSTED",
       target_type: "payment_account",
       target_id: input.accountId,
@@ -644,6 +648,7 @@ export async function repairBranchCashAccountAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: branchId,
       action: "CASH_ACCOUNT_CREATED",
       target_type: "payment_account",
       target_id: created.id,

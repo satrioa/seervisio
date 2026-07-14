@@ -47,7 +47,7 @@ export async function updateSubscriptionStatusAction(
     await requirePlatformOwner();
     const supabase = createServiceRoleSupabaseClient();
     const { error } = await (supabase as any)
-      .from("brand_subscriptions")
+      .from("licenses")
       .update({ status })
       .eq("id", subscriptionId);
     if (error) throw new Error(error.message);
@@ -87,14 +87,12 @@ export async function changeSubscriptionPackageAction(
     }
 
     const { error } = await (supabase as any)
-      .from("brand_subscriptions")
+      .from("licenses")
       .update({
         package_id: packageId,
-        plan: pkg.slug,
-        max_branches: pkg.maxBranches,
-        max_users: pkg.maxUsers,
         started_at: startDate,
         expires_at: endDate,
+        status: endDate && new Date(endDate) < new Date() ? "expired" : "active",
       })
       .eq("id", subscriptionId);
 

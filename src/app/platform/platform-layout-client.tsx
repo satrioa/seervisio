@@ -26,6 +26,7 @@ function getPageTitle(pathname: string | null): string {
     tenants: "Tenants",
     subscriptions: "Subscriptions",
     packages: "Packages",
+    licenses: "License Management",
     usage: "Usage",
     revenue: "Revenue",
     "system-health": "System Health",

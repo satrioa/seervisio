@@ -75,6 +75,7 @@ import type {
 } from "@/server/actions/dashboard.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatActivityEvent } from "@/components/dashboard/activity-formatter";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
 
 /* ── Helpers ── */
 
@@ -186,6 +187,7 @@ interface GeneralOverviewTabProps {
 }
 
 export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, loading, error }: GeneralOverviewTabProps) {
+  const { activeBranchName, userRole } = useActiveBranch();
   /* ── Derive chart data from real props ── */
   const revenueData = React.useMemo(() => {
     if (!data?.revenueTrend) return [];
@@ -699,7 +701,16 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                 <CardDescription className="text-xs">Riwayat aktivitas terbaru dari operasional toko.</CardDescription>
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {activeBranchName ? (
+                <span className="rounded-full border border-border px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {activeBranchName}
+                </span>
+              ) : (
+                <span className="rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  All Branches
+                </span>
+              )}
               {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
                 <button
                   key={key}

@@ -298,6 +298,7 @@ export async function addServiceTimelineEntry(params: {
 
 export async function addAuditLog(params: {
   brand_id: number;
+  branch_id?: string | null;
   action: string;
   target_type?: string;
   target_id?: string;
@@ -315,6 +316,7 @@ export async function addAuditLog(params: {
     .from("audit_logs")
     .insert({
       brand_id: params.brand_id,
+      branch_id: params.branch_id ?? null,
       actor_id: params.actor_id ?? null,
       actor_name: params.actor_name ?? null,
       actor_role: params.actor_role ?? null,

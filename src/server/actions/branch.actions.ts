@@ -125,6 +125,7 @@ export async function createBranchAction(
 
     await (adminDb as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: branch.id,
       actor_id: session.profileId,
       action: "BRANCH_CREATED",
       target_type: "BRANCH",
@@ -169,6 +170,7 @@ export async function updateBranchAction(
 
     await (adminDb as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: branchId,
       actor_id: session.profileId,
       action: "BRANCH_UPDATED",
       target_type: "BRANCH",
@@ -205,6 +207,7 @@ export async function toggleBranchActiveAction(
 
     await (adminDb as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: branchId,
       actor_id: session.profileId,
       action: isActive ? "BRANCH_ACTIVATED" : "BRANCH_DEACTIVATED",
       target_type: "BRANCH",

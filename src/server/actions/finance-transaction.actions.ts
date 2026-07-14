@@ -431,10 +431,11 @@ export async function createOtherIncomeAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: input.branchId,
       actor_id: session.profileId,
       action: "CREATE",
-      entity_type: "FINANCE_TRANSACTION",
-      entity_id: movementId,
+      target_type: "payment_account_movements",
+      target_id: movementId,
       description: `Pendapatan lain: ${input.category} - ${input.description} (${input.amount})`,
     });
 
@@ -498,10 +499,11 @@ export async function createOperatingExpenseAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: input.branchId,
       actor_id: session.profileId,
       action: "CREATE",
-      entity_type: "FINANCE_TRANSACTION",
-      entity_id: movementId,
+      target_type: "payment_account_movements",
+      target_id: movementId,
       description: `Pengeluaran: ${input.category} - ${input.description} (${input.amount})`,
     });
 
@@ -582,10 +584,11 @@ export async function voidFinanceTransactionAction(
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
+      branch_id: original.branch_id ?? null,
       actor_id: session.profileId,
       action: "VOID",
-      entity_type: "FINANCE_TRANSACTION",
-      entity_id: original.id,
+      target_type: "payment_account_movements",
+      target_id: original.id,
       description: `Pembatalan transaksi: ${input.reason}`,
     });
 

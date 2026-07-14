@@ -101,22 +101,20 @@ export async function createTenantAction(
         store_name: input.brandName,
       });
 
-    // 6. Create brand_subscription
+    // 6. Create license
     const now = new Date();
     const expiresAt = new Date(now);
     expiresAt.setDate(expiresAt.getDate() + 30);
 
     await (supabase as any)
-      .from("brand_subscriptions")
+      .from("licenses")
       .insert({
         brand_id: brandId,
-        plan: input.planSlug,
-        max_branches: pkg.max_branches,
-        max_users: pkg.max_users,
+        package_id: pkg.id,
         status: "active",
         started_at: now.toISOString(),
         expires_at: expiresAt.toISOString(),
-        package_id: pkg.id,
+        is_trial: false,
       });
 
     // 7. Create user_brand_membership as MASTER_ADMIN
@@ -174,7 +172,7 @@ export async function suspendTenantAction(
     if (brandError) throw new Error(brandError.message);
 
     const { error: subError } = await (supabase as any)
-      .from("brand_subscriptions")
+      .from("licenses")
       .update({ status: "expired" })
       .eq("brand_id", brandId);
 
@@ -203,7 +201,7 @@ export async function activateTenantAction(
     if (brandError) throw new Error(brandError.message);
 
     const { error: subError } = await (supabase as any)
-      .from("brand_subscriptions")
+      .from("licenses")
       .update({ status: "active" })
       .eq("brand_id", brandId);
 

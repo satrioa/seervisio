@@ -1,0 +1,240 @@
+"use server";
+
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { successResult, errorResult, type ActionResult } from "./action-helper";
+import {
+  createCheckoutSessionInput,
+  applyCoupon,
+  bindProfile,
+  isCheckoutSessionValid,
+  type CheckoutSession,
+  type Coupon,
+  type BillingCycle,
+} from "@/lib/customer-journey/checkout-session";
+import { getProfileByAuthUserId } from "@/repositories/profile.repository";
+
+function generateToken(): string {
+  // URL-safe, opaque token. Uses crypto when available.
+  const c = (globalThis as any).crypto;
+  if (c?.randomUUID) {
+    return "cs_" + c.randomUUID().replace(/-/g, "") + Math.random().toString(36).slice(2, 10);
+  }
+  return "cs_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+export interface CheckoutSessionView {
+  token: string;
+  packageId: string;
+  packageSlug: string;
+  packageName: string;
+  price: number;
+  billingCycle: BillingCycle;
+  currency: string;
+  couponCode: string | null;
+  discountAmount: number;
+  totalAmount: number;
+  status: CheckoutSession["status"];
+  hasActiveLicense: boolean;
+}
+
+// Create a checkout session for a package. Works for anonymous
+// visitors (profile_id null) and survives login + email verification.
+export async function createCheckoutSessionAction(input: {
+  packageId: string;
+  billingCycle?: BillingCycle;
+  couponCode?: string | null;
+}): Promise<ActionResult<{ token: string; session: CheckoutSessionView }>> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const { data: pkg, error: pkgError } = await (adminDb as any)
+      .from("packages")
+      .select("id, slug, name, price")
+      .eq("id", input.packageId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (pkgError || !pkg) {
+      return errorResult("Paket tidak ditemukan.");
+    }
+
+    const token = generateToken();
+    let session = createCheckoutSessionInput({
+      id: (pkg as any).id,
+      token,
+      package_id: pkg.id,
+      package_slug: pkg.slug,
+      package_name: pkg.name,
+      price: Number(pkg.price),
+      billing_cycle: input.billingCycle ?? "monthly",
+    });
+
+    let coupon: Coupon | null = null;
+    if (input.couponCode) {
+      // Stubbed coupon lookup: a real coupon service would validate
+      // here. We accept a simple well-known dev coupon for now.
+      if (input.couponCode.toUpperCase() === "WELCOME10") {
+        coupon = { code: "WELCOME10", type: "percent", value: 10, currency: session.currency };
+      }
+      try {
+        session = applyCoupon(session, coupon);
+      } catch {
+        return errorResult("Kupon tidak valid untuk mata uang ini.");
+      }
+    }
+
+    const { data: inserted, error: insertError } = await (adminDb as any)
+      .from("checkout_sessions")
+      .insert({
+        id: session.id,
+        token: session.token,
+        profile_id: null,
+        package_id: session.package_id,
+        package_slug: session.package_slug,
+        package_name: session.package_name,
+        price: session.price,
+        billing_cycle: session.billing_cycle,
+        currency: session.currency,
+        coupon_code: session.coupon_code,
+        discount_amount: session.discount_amount,
+        total_amount: session.total_amount,
+        status: session.status,
+        expires_at: session.expires_at,
+      })
+      .select()
+      .single();
+
+    if (insertError || !inserted) {
+      console.error("[checkout] create session error:", insertError);
+      return errorResult("Gagal membuat sesi checkout.");
+    }
+
+    return successResult({
+      token: session.token,
+      session: mapSessionView(inserted as any),
+    });
+  } catch (err: any) {
+    console.error("[checkout] createCheckoutSessionAction:", err.message);
+    return errorResult("Gagal membuat sesi checkout.");
+  }
+}
+
+// Fetch a session by token (used by /checkout and after login/verification).
+export async function getCheckoutSessionAction(token: string | null | undefined): Promise<
+  ActionResult<CheckoutSessionView | null>
+> {
+  try {
+    if (!token) return successResult(null);
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const { data, error } = await (adminDb as any)
+      .from("checkout_sessions")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+
+    if (error) return errorResult("Gagal memuat sesi checkout.");
+    if (!data) return successResult(null);
+
+    const row = data as any;
+    if (!isCheckoutSessionValid(row)) {
+      return successResult(null);
+    }
+
+    // Best-effort: does this profile already hold an active license?
+    let hasActiveLicense = false;
+    if (row.profile_id) {
+      try {
+        const { getActiveLicenseForProfile } = await import("@/server/repositories/license.repository");
+        const lic = await getActiveLicenseForProfile(row.profile_id);
+        hasActiveLicense = Boolean(lic);
+      } catch {
+        hasActiveLicense = false;
+      }
+    }
+
+    return successResult({ ...mapSessionView(row), hasActiveLicense });
+  } catch (err: any) {
+    console.error("[checkout] getCheckoutSessionAction:", err.message);
+    return errorResult("Gagal memuat sesi checkout.");
+  }
+}
+
+// Bind an (anonymous) session to the now-registered profile so the
+// selected package survives the account creation step.
+export async function bindCheckoutSessionToProfileAction(
+  token: string,
+  profileId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient();
+    const { error } = await (adminDb as any)
+      .from("checkout_sessions")
+      .update({ profile_id: profileId })
+      .eq("token", token)
+      .eq("status", "active");
+
+    if (error) {
+      console.error("[checkout] bind session error:", error);
+      return errorResult("Gagal menghubungkan sesi checkout.");
+    }
+    return successResult(undefined);
+  } catch (err: any) {
+    console.error("[checkout] bindCheckoutSessionToProfileAction:", err.message);
+    return errorResult("Gagal menghubungkan sesi checkout.");
+  }
+}
+
+// Called by the login form right after a successful client-side sign-in,
+// so an anonymous checkout session created before login is bound to
+// the now-authenticated user. (The /checkout page also re-binds
+// defensively, but this makes the binding immediate.)
+export async function afterLoginRebindCheckoutAction(): Promise<ActionResult<void>> {
+  return bindActiveCheckoutSessionToUserAction();
+}
+
+// After a successful login, re-bind any active session belonging to this
+// user (covers the case where the session was created pre-login).
+export async function bindActiveCheckoutSessionToUserAction(): Promise<ActionResult<void>> {
+  try {
+    const supabase = await createServerSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return successResult(undefined);
+
+    const profile = (await getProfileByAuthUserId(supabase as any, user.id)) as any;
+    if (!profile) return successResult(undefined);
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const { error } = await (adminDb as any)
+      .from("checkout_sessions")
+      .update({ profile_id: profile.id })
+      .eq("profile_id", null)
+      .eq("status", "active")
+      .filter("expires_at", "gt", new Date().toISOString())
+      .maybeSingle();
+
+    if (error) console.warn("[checkout] rebind session:", error.message);
+    return successResult(undefined);
+  } catch (err: any) {
+    console.error("[checkout] bindActiveCheckoutSessionToUserAction:", err.message);
+    return errorResult("Gagal menghubungkan sesi checkout.");
+  }
+}
+
+function mapSessionView(row: any): CheckoutSessionView {
+  return {
+    token: row.token,
+    packageId: row.package_id,
+    packageSlug: row.package_slug,
+    packageName: row.package_name,
+    price: Number(row.price),
+    billingCycle: row.billing_cycle,
+    currency: row.currency,
+    couponCode: row.coupon_code ?? null,
+    discountAmount: Number(row.discount_amount),
+    totalAmount: Number(row.total_amount),
+    status: row.status,
+    hasActiveLicense: false,
+  };
+}

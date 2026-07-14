@@ -1,5 +1,6 @@
 "use server";
 
+import { ROLES } from "@/lib/permissions/roles";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   getSessionData,
@@ -185,7 +186,7 @@ export async function adjustInventoryOpnameAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
 
-    if (session.role === "TECHNICIAN" && !input.note?.trim()) {
+    if (session.role === ROLES.TECHNICIAN && !input.note?.trim()) {
       return errorResult("Alasan penyesuaian wajib diisi untuk teknisi.");
     }
 
@@ -312,6 +313,7 @@ export async function adjustInventoryOpnameAction(
       // Audit log
       await (supabase as any).from("audit_logs").insert({
         brand_id: session.brandId,
+        branch_id: effectiveBranchId,
         actor_id: session.profileId,
         action: "STOCK_OPNAME_ADJUSTMENT",
         target_type: "INVENTORY_ITEM",

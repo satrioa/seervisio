@@ -960,6 +960,7 @@ export async function useSparepartForServiceV4Action(
 
       await addAuditLog({
         brand_id: session.brandId,
+        branch_id: input.branchId,
         action: "SERVICE_SPAREPART_ADDED",
         target_type: "service",
         target_id: input.serviceId,
@@ -1115,6 +1116,7 @@ export async function checkoutPosV4Action(
     try {
       await addAuditLog({
         brand_id: session.brandId,
+        branch_id: input.branchId,
         action: "POS_CHECKOUT",
         target_type: "pos_transaction",
         target_id: result.transactionId,
@@ -1275,6 +1277,7 @@ export async function voidPosTransactionV4Action(
     try {
       await addAuditLog({
         brand_id: session.brandId,
+        branch_id: input.branchId,
         action: "POS_VOID",
         target_type: "pos_transaction",
         target_id: result.transactionId,
