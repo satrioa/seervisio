@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -47,9 +47,8 @@ import { SeervisioLogo } from "@/components/brand/logo";
 import { landingLogoutAction } from "@/server/actions/auth.actions";
 import type { AuthUserData } from "@/app/(landing)/layout";
 
-const NAV = [
+const UNAUTH_NAV = [
   { label: "Solutions", href: "/#features" },
-  { label: "Pricing", href: "/pricing" },
   { label: "Docs", href: "/docs" },
   { label: "Blog", href: "/blog" },
 ];
@@ -115,6 +114,27 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
   const avatarUrl = auth.profile?.avatarUrl;
   const isAuth = auth.isAuthenticated;
 
+  // Determine nav items: show Dashboard link when signed in
+  const navItems = React.useMemo(() => {
+    if (!isAuth) return UNAUTH_NAV;
+    return [
+      { label: "Dashboard", href: auth.dashboardHref },
+      ...UNAUTH_NAV,
+    ];
+  }, [isAuth, auth.dashboardHref]);
+
+  // CTA label & href based on auth/license state
+  // Returns null to hide the button entirely when payment is pending.
+  const cta = React.useMemo<{ label: string; href: string } | null>(() => {
+    if (!isAuth) return { label: "Start Free", href: "/signup" };
+    if (auth.accountType === 'platform') return { label: "Platform Dashboard", href: "/platform/dashboard" };
+    if (auth.license.hasPendingPayment) return null;
+    if (!auth.license.exists) return { label: "Choose a Plan", href: "/license" };
+    if (!auth.license.isActive) return { label: "My License", href: "/panel/licenses" };
+    if (!auth.profile?.onboardingCompleted) return { label: "Continue Setup", href: "/welcome" };
+    return { label: "Dashboard", href: auth.dashboardHref };
+  }, [isAuth, auth]);
+
   return (
     <>
       <header
@@ -133,15 +153,17 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-1 md:flex">
-            {NAV.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  pathname === item.href
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  item.label === "Dashboard"
+                    ? "text-primary font-semibold"
+                    : pathname === item.href
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 {item.label}
@@ -168,19 +190,21 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
               )}
             </button>
 
-            {/* Auth button */}
+            {/* Auth-aware CTA */}
             {isAuth ? (
               <>
-                <Button
-                  asChild
-                  size="sm"
-                  className="hidden md:inline-flex gap-1.5 group/dash transition-all duration-200 hover:shadow-md"
-                >
-                  <Link href={auth.dashboardHref}>
-                    {auth.accountType === 'platform' ? 'Platform Dashboard' : 'Dashboard'}
-                    <ArrowRight className="size-3.5 transition-transform duration-200 group-hover/dash:translate-x-0.5" />
-                  </Link>
-                </Button>
+                {cta && (
+                  <Button
+                    asChild
+                    size="sm"
+                    className="hidden md:inline-flex gap-1.5 group/dash transition-all duration-200 hover:shadow-md"
+                  >
+                    <Link href={cta.href}>
+                      {cta.label}
+                      <ArrowRight className="size-3.5 transition-transform duration-200 group-hover/dash:translate-x-0.5" />
+                    </Link>
+                  </Button>
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -348,12 +372,17 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                 </DropdownMenu>
               </>
             ) : (
-              <Button asChild size="sm" className="hidden md:inline-flex gap-1.5">
-                <Link href="/login">
-                  Login
-                  <ArrowRight className="size-3.5" />
-                </Link>
-              </Button>
+              <div className="hidden items-center gap-2 md:flex">
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/login">Login</Link>
+                </Button>
+                <Button asChild size="sm" className="gap-1.5">
+                  <Link href="/signup">
+                    Start Free
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                </Button>
+              </div>
             )}
 
             {/* Mobile hamburger */}
@@ -410,12 +439,17 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
             )}
 
             <nav className="flex flex-col gap-1 px-4 pt-4">
-              {NAV.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
-                  className="rounded-lg px-3 py-3 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className={cn(
+                    "rounded-lg px-3 py-3 text-base font-medium transition-colors",
+                    item.label === "Dashboard"
+                      ? "text-primary font-semibold"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
                 >
                   {item.label}
                 </Link>
@@ -423,12 +457,14 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
               <div className="mt-4 flex flex-col gap-2">
                 {isAuth ? (
                   <>
-                    <Button asChild className="gap-1.5">
-                      <Link href={auth.dashboardHref} onClick={() => setMobileOpen(false)}>
-                        Dashboard
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
+                    {cta && (
+                      <Button asChild className="gap-1.5">
+                        <Link href={cta.href} onClick={() => setMobileOpen(false)}>
+                          {cta.label}
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       className="gap-1.5 text-red-600 dark:text-red-400"
@@ -442,12 +478,19 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                     </Button>
                   </>
                 ) : (
-                  <Button asChild className="gap-1.5">
-                    <Link href="/login" onClick={() => setMobileOpen(false)}>
-                      Login
-                      <ArrowRight className="size-4" />
-                    </Link>
-                  </Button>
+                  <>
+                    <Button asChild variant="outline" className="gap-1.5">
+                      <Link href="/login" onClick={() => setMobileOpen(false)}>
+                        Login
+                      </Link>
+                    </Button>
+                    <Button asChild className="gap-1.5">
+                      <Link href="/signup" onClick={() => setMobileOpen(false)}>
+                        Start Free
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </Button>
+                  </>
                 )}
               </div>
             </nav>

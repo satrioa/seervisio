@@ -1,121 +1,176 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-const PLANS = [
-  {
-    name: "Starter",
-    price: "Free",
-    desc: "Perfect for small shops getting started.",
-    features: ["Up to 50 services/month", "1 branch", "Basic reports", "Email support"],
-    cta: "Start Free",
-    href: "/login",
-  },
-  {
-    name: "Professional",
-    price: "Rp 299K",
-    period: "/month",
-    desc: "For growing repair businesses.",
-    features: [
+export interface PricingPackage {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  billing_duration_enabled: boolean;
+  billing_duration_type: "month" | "year" | null;
+  billing_duration_value: number | null;
+}
+
+interface PricingSectionProps {
+  packages?: PricingPackage[];
+}
+
+function formatPrice(price: number): string {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
+}
+
+export function PricingSection({ packages }: PricingSectionProps) {
+  const router = useRouter();
+  const [loadingId, setLoadingId] = React.useState<string | null>(null);
+
+  const handleChoosePlan = async (pkg: PricingPackage) => {
+    setLoadingId(pkg.id);
+    try {
+      const mod = await import("@/server/actions/checkout.actions");
+      const result = await mod.createCheckoutSessionAction({ packageId: pkg.id });
+      if (!result.success) {
+        console.error("Failed to create checkout session:", result.error);
+        setLoadingId(null);
+        return;
+      }
+      router.push(`/checkout?token=${encodeURIComponent(result.data.token)}`);
+    } catch {
+      setLoadingId(null);
+    }
+  };
+
+  // Fallback hardcoded data for the landing page (when no packages prop)
+  const fallbackPackages: PricingPackage[] = packages ?? [
+    { id: "starter", name: "Starter", slug: "starter", description: "Perfect for small shops getting started.", price: 0, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
+    { id: "professional", name: "Professional", slug: "professional", description: "For growing repair businesses.", price: 299000, billing_duration_enabled: true, billing_duration_type: "month", billing_duration_value: 1 },
+    { id: "enterprise", name: "Enterprise", slug: "enterprise", description: "For multi-location chains and franchises.", price: 0, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
+  ];
+
+  // The first (cheapest) package is "Best Value", second is "Popular"
+  const sorted = [...fallbackPackages].sort((a, b) => a.price - b.price);
+
+  // Build feature lists per package
+  const featureMap: Record<string, string[]> = {
+    starter: [
+      "All core features",
+      "Up to 200 services/month",
+      "1 branch",
+      "Basic reports & analytics",
+      "Email support",
+    ],
+    professional: [
       "Unlimited services",
       "Up to 3 branches",
       "AI Command Center",
-      "Advanced analytics",
+      "Advanced analytics & insights",
       "Priority support",
     ],
-    cta: "Start Free Trial",
-    href: "/login",
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    desc: "For multi-location chains and franchises.",
-    features: [
+    enterprise: [
       "Everything in Professional",
-      "Unlimited branches",
-      "Custom integrations",
+      "Unlimited branches & users",
+      "Custom integrations & API",
       "Dedicated account manager",
       "SLA guarantee",
       "On-premise option",
     ],
-    cta: "Contact Sales",
-    href: "/login",
-  },
-];
+  };
 
-export function PricingSection() {
   return (
     <section className="border-y border-border/40 bg-muted/30 py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
-          >
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Simple, transparent pricing
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ delay: 0.1 }}
-            className="mt-4 text-lg text-muted-foreground"
-          >
-            No hidden fees. No surprises.
-          </motion.p>
+          </h2>
+          <p className="mt-4 text-lg text-muted-foreground">
+            Choose the plan that fits your business. No hidden fees.
+          </p>
         </div>
 
         <div className="mt-16 grid gap-6 lg:grid-cols-3 lg:gap-8">
-          {PLANS.map((plan, i) => (
-            <motion.div
-              key={plan.name}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ delay: i * 0.1 }}
-              className={cn(
-                "relative flex flex-col rounded-2xl border p-6 transition-shadow hover:shadow-lg",
-                plan.popular
-                  ? "border-primary/50 bg-card shadow-lg shadow-primary/5"
-                  : "border-border/50 bg-card",
-              )}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[10px] font-semibold text-primary-foreground">
-                  Most Popular
-                </div>
-              )}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                  {plan.period && (
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
+          {sorted.map((pkg, i) => {
+            const slug = pkg.slug.toLowerCase();
+            const isBestValue = i === 0;
+            const isPopular = i === 1 && sorted.length > 2;
+            const features = featureMap[slug] ?? [
+              "All core features",
+              "Email support",
+            ];
+
+            return (
+              <div
+                key={pkg.id}
+                className={cn(
+                  "relative flex flex-col rounded-2xl border p-6 transition-all duration-200",
+                  isPopular
+                    ? "border-primary/50 bg-card shadow-lg shadow-primary/5 scale-[1.02]"
+                    : "border-border/50 bg-card hover:shadow-md",
+                )}
+              >
+                {/* Badges */}
+                {isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[10px] font-semibold text-primary-foreground">
+                    Most Popular
+                  </div>
+                )}
+                {isBestValue && !isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-semibold text-white">
+                    Best Value
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-foreground">{pkg.name}</h3>
+                  <div className="mt-2 flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-foreground">
+                      {pkg.price === 0 ? "Free" : formatPrice(pkg.price)}
+                    </span>
+                    {pkg.price > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        /{pkg.billing_duration_type === "year" ? "year" : "month"}
+                      </span>
+                    )}
+                  </div>
+                  {pkg.description && (
+                    <p className="mt-2 text-sm text-muted-foreground">{pkg.description}</p>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{plan.desc}</p>
+
+                <ul className="mb-8 flex-1 space-y-3">
+                  {features.map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Check className="size-4 shrink-0 text-primary" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  variant={isPopular ? "default" : "outline"}
+                  className="w-full"
+                  onClick={() => handleChoosePlan(pkg)}
+                  disabled={loadingId === pkg.id}
+                >
+                  {loadingId === pkg.id ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : isPopular ? (
+                    "Get Started"
+                  ) : (
+                    "Choose Plan"
+                  )}
+                </Button>
               </div>
-              <ul className="mb-8 flex-1 space-y-3">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="size-4 shrink-0 text-primary" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Button asChild variant={plan.popular ? "default" : "outline"} className="w-full">
-                <Link href={plan.href}>{plan.cta}</Link>
-              </Button>
-            </motion.div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

@@ -14,6 +14,15 @@ import {
 } from "@/lib/customer-journey/checkout-session";
 import { getProfileByAuthUserId } from "@/repositories/profile.repository";
 
+function generateUuid(): string {
+  const c = (globalThis as any).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function generateToken(): string {
   // URL-safe, opaque token. Uses crypto when available.
   const c = (globalThis as any).crypto;
@@ -36,6 +45,7 @@ export interface CheckoutSessionView {
   totalAmount: number;
   status: CheckoutSession["status"];
   hasActiveLicense: boolean;
+  profileId: string | null;
 }
 
 // Create a checkout session for a package. Works for anonymous
@@ -47,6 +57,30 @@ export async function createCheckoutSessionAction(input: {
 }): Promise<ActionResult<{ token: string; session: CheckoutSessionView }>> {
   try {
     const adminDb = createServiceRoleSupabaseClient();
+
+    // If the caller is already authenticated, bind the session immediately
+    // so the checkout page shows the authenticated state.
+    let boundProfileId: string | null = null;
+    try {
+      const supabase = await createServerSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const profile = await getProfileByAuthUserId(supabase as any, user.id) as any;
+        if (profile?.id) boundProfileId = profile.id;
+      }
+    } catch {
+      // Non-critical — anonymous sessions still work.
+    }
+
+    // Expire any existing active session for this profile first, since
+    // the DB has a partial unique index (one active session per profile).
+    if (boundProfileId) {
+      await (adminDb as any)
+        .from("checkout_sessions")
+        .update({ status: "abandoned" })
+        .eq("profile_id", boundProfileId)
+        .eq("status", "active");
+    }
 
     const { data: pkg, error: pkgError } = await (adminDb as any)
       .from("packages")
@@ -60,8 +94,9 @@ export async function createCheckoutSessionAction(input: {
     }
 
     const token = generateToken();
+    const sessionId = generateUuid();
     let session = createCheckoutSessionInput({
-      id: (pkg as any).id,
+      id: sessionId,
       token,
       package_id: pkg.id,
       package_slug: pkg.slug,
@@ -89,7 +124,7 @@ export async function createCheckoutSessionAction(input: {
       .insert({
         id: session.id,
         token: session.token,
-        profile_id: null,
+        profile_id: boundProfileId,
         package_id: session.package_id,
         package_slug: session.package_slug,
         package_name: session.package_name,
@@ -236,5 +271,6 @@ function mapSessionView(row: any): CheckoutSessionView {
     totalAmount: Number(row.total_amount),
     status: row.status,
     hasActiveLicense: false,
+    profileId: row.profile_id ?? null,
   };
 }

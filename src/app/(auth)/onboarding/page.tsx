@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getProfileByAuthUserId } from "@/repositories/profile.repository";
-import { OnboardingWizard } from "./onboarding-wizard";
 
 export default async function OnboardingPage() {
   const supabase = await createServerSupabase();
@@ -12,32 +11,30 @@ export default async function OnboardingPage() {
   }
 
   const profile = await getProfileByAuthUserId(supabase as any, user.id) as any;
+  if (!profile) {
+    redirect("/login");
+  }
 
-  // Already completed onboarding? redirect to dashboard
-  if (profile?.onboarding_completed) {
-    const { data: membership } = await (supabase as any)
-      .from("user_brand_memberships")
-      .select("brand_id")
-      .eq("profile_id", profile.id)
-      .eq("is_active", true)
-      .not("brand_id", "is", null)
-      .limit(1)
-      .maybeSingle();
+  // Onboarding now requires an active license.
+  // No license yet → send to license plans.
+  // Has license but not active → send to license center.
+  // License active + onboarding completed → dashboard.
+  // License active + onboarding not done → welcome wizard.
+  const { getActiveLicenseForProfile } = await import("@/server/repositories/license.repository");
+  const license = await getActiveLicenseForProfile(profile.id);
+  const { isDashboardAllowed } = await import("@/lib/customer-journey/license-status");
 
-    if (membership) {
-      const { data: brand } = await (supabase as any)
-        .from("brands")
-        .select("slug")
-        .eq("id", membership.brand_id)
-        .maybeSingle();
+  if (!license) {
+    redirect("/license");
+  }
 
-      if (brand?.slug) {
-        redirect(`/${brand.slug}/panel/dashboard`);
-      }
-    }
+  if (!isDashboardAllowed(license)) {
+    redirect("/panel/licenses");
+  }
 
+  if (profile.onboarding_completed) {
     redirect("/");
   }
 
-  return <OnboardingWizard profileId={profile?.id} />;
+  redirect("/welcome");
 }

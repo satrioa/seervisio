@@ -536,12 +536,17 @@ export async function uploadLicensePaymentProofAction(
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext = file.name.split(".").pop() || "jpg";
-    const filePath = `license-proofs/${paymentId}/proof-${Date.now()}.${ext}`;
+    const filePath = `${paymentId}/proof-${Date.now()}.${ext}`;
 
     const { error: uploadError } = await (adminDb as any).storage
       .from("license-proofs")
       .upload(filePath, buffer, { contentType: file.type, upsert: false });
-    if (uploadError) throw new Error("Gagal mengunggah bukti pembayaran.");
+    if (uploadError) {
+      if (uploadError.message?.includes("Bucket not found")) {
+        return errorResult("Bucket license-proofs belum dibuat. Jalankan migration 112.");
+      }
+      throw new Error("Gagal mengunggah bukti pembayaran.");
+    }
 
     const { data: publicUrl } = (adminDb as any).storage
       .from("license-proofs")

@@ -145,3 +145,121 @@ export async function completeOnboardingAction(profileId: string): Promise<void>
     .update({ onboarding_completed: true, onboarding_current_step: 0 })
     .eq("id", profileId);
 }
+
+/**
+ * Upload brand logo during onboarding.
+ */
+export async function uploadBrandLogoAction(
+  brandId: number,
+  formData: FormData,
+): Promise<{ url?: string; error?: string }> {
+  try {
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "File tidak ditemukan." };
+
+    const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+    if (!ALLOWED.includes(file.type)) {
+      return { error: "Format file tidak didukung. Gunakan JPG, PNG, atau WebP." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { error: "File terlalu besar. Maksimal 5MB." };
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
+    const filePath = `${brandId}/logo-${Date.now()}.${ext}`;
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const { error: uploadError } = await (adminDb as any).storage
+      .from("brands")
+      .upload(filePath, buffer, { contentType: file.type, upsert: true });
+
+    if (uploadError) return { error: "Gagal mengunggah logo." };
+
+    const { data: publicUrlData } = (adminDb as any).storage
+      .from("brands")
+      .getPublicUrl(filePath);
+
+    return { url: publicUrlData?.publicUrl ?? "" };
+  } catch (err: any) {
+    return { error: err.message || "Gagal mengunggah logo." };
+  }
+}
+
+/**
+ * Save brand profile during onboarding (name, logo, theme colors).
+ */
+export async function saveOnboardingBrandProfileAction(
+  brandId: number,
+  data: {
+    name: string;
+    logoUrl: string | null;
+    primaryColor: string;
+    accentColor: string;
+  },
+): Promise<{ error?: string }> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient();
+
+    // Update brand name
+    const { error: nameErr } = await (adminDb as any)
+      .from("brands")
+      .update({ name: data.name.trim() })
+      .eq("id", brandId);
+    if (nameErr) return { error: "Gagal menyimpan nama brand." };
+
+    // Upsert brand_settings
+    const { data: existing } = await (adminDb as any)
+      .from("brand_settings")
+      .select("id")
+      .eq("brand_id", brandId)
+      .maybeSingle();
+
+    if (existing) {
+      await (adminDb as any)
+        .from("brand_settings")
+        .update({
+          store_name: data.name.trim(),
+          logo_url: data.logoUrl,
+          theme_primary_color: data.primaryColor,
+          theme_accent_color: data.accentColor,
+        })
+        .eq("id", existing.id);
+    } else {
+      await (adminDb as any)
+        .from("brand_settings")
+        .insert({
+          brand_id: brandId,
+          store_name: data.name.trim(),
+          logo_url: data.logoUrl,
+          theme_primary_color: data.primaryColor,
+          theme_accent_color: data.accentColor,
+        });
+    }
+
+    return {};
+  } catch (err: any) {
+    return { error: err.message || "Gagal menyimpan profil brand." };
+  }
+}
+
+/**
+ * Save branch name during onboarding.
+ */
+export async function saveOnboardingBranchAction(
+  branchId: string,
+  data: { name: string },
+): Promise<{ error?: string }> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient();
+    const { error } = await (adminDb as any)
+      .from("branches")
+      .update({ name: data.name.trim() })
+      .eq("id", branchId);
+
+    if (error) return { error: "Gagal menyimpan nama cabang." };
+    return {};
+  } catch (err: any) {
+    return { error: err.message || "Gagal menyimpan cabang." };
+  }
+}

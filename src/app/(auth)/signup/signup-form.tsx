@@ -39,7 +39,7 @@ export function SignupForm() {
     }
 
     if (!companyName.trim()) {
-      errors.push({ field: "companyName", message: "Company name is required." });
+      errors.push({ field: "companyName", message: "Business name is required." });
     }
 
     if (!email.trim()) {
@@ -88,7 +88,7 @@ export function SignupForm() {
         return;
       }
 
-      router.push("/onboarding");
+      router.push("/license");
     } catch (err: any) {
       setError(err?.message ?? "An unexpected error occurred.");
       setIsLoading(false);
@@ -150,7 +150,7 @@ export function SignupForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="companyName">Company Name</Label>
+              <Label htmlFor="companyName">Business Name</Label>
               <Input
                 id="companyName"
                 type="text"

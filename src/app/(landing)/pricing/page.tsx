@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getActivePackages } from "@/server/repositories/license.repository";
 import { PricingSection } from "@/components/landing/pricing-section";
 import { CtaSection } from "@/components/landing/cta-section";
 
@@ -7,7 +8,9 @@ export const metadata: Metadata = {
   description: "Simple, transparent pricing for repair shops of all sizes.",
 };
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const packages = await getActivePackages();
+
   return (
     <>
       <div className="pt-24">
@@ -16,10 +19,10 @@ export default function PricingPage() {
             Pricing
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
-            Start free. Upgrade when you grow.
+            Choose the plan that fits your business. No hidden fees.
           </p>
         </div>
-        <PricingSection />
+        <PricingSection packages={packages} />
       </div>
       <CtaSection />
     </>

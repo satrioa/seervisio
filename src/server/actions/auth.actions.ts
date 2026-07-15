@@ -5,6 +5,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { successResult, errorResult, type ActionResult } from "./action-helper";
 import { getProfileByAuthUserId } from "@/repositories/profile.repository";
 
+
 export interface SignupInput {
   fullName: string;
   companyName: string;
@@ -34,10 +35,11 @@ export async function signupAction(
     });
 
     if (authError) {
+      console.error("[auth] createUser error:", authError.message, JSON.stringify(authError));
       if (authError.message.includes("already registered")) {
         return errorResult("An account with this email already exists.");
       }
-      return errorResult("Failed to create account. Please try again.");
+      return errorResult("Failed to create account: " + authError.message);
     }
 
     const authUserId = authData.user.id;
@@ -48,7 +50,8 @@ export async function signupAction(
       .insert({
         auth_user_id: authUserId,
         email: input.email,
-        name: input.fullName,
+        name: input.companyName,
+        business_name: input.companyName,
         is_active: true,
         account_type: 'customer',
         onboarding_completed: false,
@@ -58,12 +61,28 @@ export async function signupAction(
       .single();
 
     if (profileError) {
+      console.error("[auth] Profile insert error:", profileError.message, JSON.stringify(profileError));
       // Rollback auth user
       await (adminDb as any).auth.admin.deleteUser(authUserId);
       return errorResult("Failed to create profile. Please try again.");
     }
 
-    // 3. If the visitor started checkout before registering, bind the
+    // 3. Create brand + branch + cash account + membership so the user
+    // has a complete workspace from the start.
+    let brandId: number | null = null;
+    try {
+      const { createCustomerBrandAction } = await import("@/server/actions/welcome.actions");
+      const result = await createCustomerBrandAction(
+        profile.id,
+        input.fullName,
+        input.companyName,
+      );
+      brandId = result.brandId;
+    } catch (e) {
+      console.warn("[auth] Failed to create brand during signup:", e);
+    }
+
+    // 4. If the visitor started checkout before registering, bind the
     // session to the new account so the selected package survives.
     if (input.checkoutSessionToken) {
       try {
@@ -74,7 +93,7 @@ export async function signupAction(
       }
     }
 
-    return successResult({ profileId: profile.id });
+    return successResult({ profileId: profile.id, brandId });
   } catch (err: any) {
     console.error("[auth] signupAction error:", err.message);
     return errorResult("An unexpected error occurred. Please try again.");

@@ -228,10 +228,21 @@ export async function getActiveLicenseForBrand(brandId: number): Promise<License
   return data ? mapLicense(data) : null;
 }
 
-// The REFACTORED entry point: a license is now anchored to a PROFILE
-// (brand may not exist yet, because the brand is created LATER, in the
-// Welcome Wizard, after the license is ACTIVE). Keeps legacy
-// brand-scoped licenses working too.
+// Return ANY license for this profile (regardless of status).
+export async function getLicenseForProfile(profileId: string): Promise<License | null> {
+  const supabase = createServiceRoleSupabaseClient();
+  const { data, error } = await (supabase as any)
+    .from("licenses")
+    .select("*, packages:package_id(name, slug), brands:brand_id(name)")
+    .eq("profile_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapLicense(data) : null;
+}
+
+// Return only the ACTIVE / TRIAL license for the profile.
 export async function getActiveLicenseForProfile(profileId: string): Promise<License | null> {
   const supabase = createServiceRoleSupabaseClient();
   const { data, error } = await (supabase as any)

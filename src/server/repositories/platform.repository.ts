@@ -122,6 +122,210 @@ export async function getPlatformDashboardData(): Promise<PlatformDashboardData>
   };
 }
 
+export interface RecentOrder {
+  id: string;
+  brandName: string;
+  packageName: string | null;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface LatestLicense {
+  id: string;
+  brandName: string;
+  packageName: string | null;
+  status: string;
+  isTrial: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface PlatformConsoleData {
+  // Business KPIs
+  mrr: number;
+  arr: number;
+  revenueToday: number;
+  pendingVerificationCount: number;
+  pendingVerificationAmount: number;
+  totalRevenue: number;
+  // Customer KPIs
+  totalCustomers: number;
+  newCustomers: number;
+  trialAccounts: number;
+  activeLicenses: number;
+  lifetimeLicenses: number;
+  expiredLicenses: number;
+  // Charts
+  revenueTrend: RevenueTrendPoint[];
+  customerGrowth: SubscriptionGrowthPoint[];
+  licenseDistribution: { status: string; count: number }[];
+  conversionFunnel: { stage: string; count: number }[];
+  // Commerce
+  pendingPayments: { count: number; amount: number };
+  recentOrders: RecentOrder[];
+  latestLicenses: LatestLicense[];
+  // Operations
+  recentActivity: PlatformAuditLogRow[];
+  // Infrastructure
+  systemHealth: SystemHealthItem[];
+}
+
+/**
+ * Single aggregated loader for the redesigned Platform Console. Reuses the
+ * existing table model (brands, branches, profiles, licenses, license_payments,
+ * finance_ledger, audit_logs) and the existing helper queries. No new
+ * architecture — just richer aggregation on top of the same data.
+ */
+export async function getPlatformConsoleData(): Promise<PlatformConsoleData> {
+  const supabase = createServiceRoleSupabaseClient();
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const monthStart = startOfMonth.toISOString();
+
+  const [
+    dash,
+    rev,
+    growth,
+    trend,
+    health,
+    audit,
+    licensesResult,
+    paymentsResult,
+    brandsResult,
+    profilesResult,
+    checkoutsResult,
+    revenueTodayResult,
+  ] = await Promise.all([
+    getPlatformDashboardData(),
+    getRevenueMetrics(),
+    getSubscriptionGrowth(),
+    getRevenueTrend(),
+    checkSystemHealth(),
+    getPlatformAuditLogs({ limit: 8 }),
+    (supabase as any)
+      .from("licenses")
+      .select("id, status, is_trial, brand_id, package_id, expires_at, created_at, brands:brand_id(name), packages:package_id(name)"),
+    (supabase as any)
+      .from("license_payments")
+      .select("id, status, total_amount, brand_id, package_id, created_at, brands:brand_id(name), packages:package_id(name)"),
+    supabase.from("brands").select("id, name, created_at").gte("created_at", monthStart).order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    (supabase as any).from("checkout_sessions").select("id", { count: "exact", head: true }),
+    (supabase as any)
+      .from("license_payments")
+      .select("total_amount")
+      .eq("status", "paid")
+      .gte("verified_at", new Date().toISOString().slice(0, 10)),
+  ]);
+
+  const licenses = (licensesResult.data ?? []) as any[];
+  const payments = (paymentsResult.data ?? []) as any[];
+
+  const activeLicenses = licenses.filter((l: any) => l.status === "active").length;
+  const expiredLicenses = licenses.filter(
+    (l: any) => l.status === "expired" || l.status === "cancelled",
+  ).length;
+  const lifetimeLicenses = licenses.length;
+
+  const licenseStatusMap = new Map<string, number>();
+  for (const l of licenses) {
+    licenseStatusMap.set(l.status, (licenseStatusMap.get(l.status) ?? 0) + 1);
+  }
+  const licenseDistribution = Array.from(licenseStatusMap.entries()).map(
+    ([status, count]) => ({ status, count }),
+  );
+
+  const pendingVerification = payments.filter(
+    (p: any) => p.status === "waiting_verification",
+  );
+  const pendingVerificationCount = pendingVerification.length;
+  const pendingVerificationAmount = pendingVerification.reduce(
+    (s: number, p: any) => s + (Number(p.total_amount) || 0),
+    0,
+  );
+
+  const pendingPaymentsRows = payments.filter(
+    (p: any) => p.status === "pending_payment" || p.status === "waiting_verification",
+  );
+  const pendingPayments = {
+    count: pendingPaymentsRows.length,
+    amount: pendingPaymentsRows.reduce(
+      (s: number, p: any) => s + (Number(p.total_amount) || 0),
+      0,
+    ),
+  };
+
+  const recentOrders: RecentOrder[] = payments
+    .slice()
+    .sort((a: any, b: any) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    .slice(0, 6)
+    .map((p: any): RecentOrder => ({
+      id: p.id,
+      brandName: p.brands?.name ?? "Unknown Brand",
+      packageName: p.packages?.name ?? null,
+      amount: Number(p.total_amount) || 0,
+      status: p.status,
+      createdAt: p.created_at,
+    }));
+
+  const latestLicenses: LatestLicense[] = licenses
+    .slice()
+    .sort((a: any, b: any) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    .slice(0, 6)
+    .map((l: any): LatestLicense => ({
+      id: l.id,
+      brandName: l.brands?.name ?? "Unknown Brand",
+      packageName: l.packages?.name ?? null,
+      status: l.status,
+      isTrial: Boolean(l.is_trial),
+      expiresAt: l.expires_at,
+      createdAt: l.created_at,
+    }));
+
+  // Conversion funnel: sign-ups -> checkout -> payment -> verified license.
+  const signups = profilesResult.count ?? 0;
+  const checkouts = checkoutsResult.count ?? 0;
+  const paymentUploads = payments.length;
+  const conversionFunnel = [
+    { stage: "Sign-ups", count: signups },
+    { stage: "Checkout", count: checkouts },
+    { stage: "Payments", count: paymentUploads },
+    { stage: "Active Licenses", count: activeLicenses },
+  ];
+
+  const revenueTodayRows = (revenueTodayResult.data ?? []) as any[];
+  const revenueToday = revenueTodayRows.reduce(
+    (s: number, r: any) => s + (Number(r.total_amount) || 0),
+    0,
+  );
+
+  return {
+    mrr: rev.mrr,
+    arr: rev.arr,
+    revenueToday,
+    pendingVerificationCount,
+    pendingVerificationAmount,
+    totalRevenue: dash.annualRevenue,
+    totalCustomers: dash.totalBrands,
+    newCustomers: (brandsResult.data ?? []).length,
+    trialAccounts: dash.trialAccounts,
+    activeLicenses,
+    lifetimeLicenses,
+    expiredLicenses,
+    revenueTrend: trend,
+    customerGrowth: growth,
+    licenseDistribution,
+    conversionFunnel,
+    pendingPayments,
+    recentOrders,
+    latestLicenses,
+    recentActivity: audit.rows,
+    systemHealth: health,
+  };
+}
+
 export interface TenantRow {
   id: number;
   name: string;

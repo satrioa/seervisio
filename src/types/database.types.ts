@@ -3434,6 +3434,7 @@ export type Database = {
           account_type: string
           auth_user_id: string | null
           avatar_url: string | null
+          business_name: string | null
           created_at: string
           email: string
           id: string
@@ -3457,6 +3458,7 @@ export type Database = {
           account_type?: string
           auth_user_id?: string | null
           avatar_url?: string | null
+          business_name?: string | null
           created_at?: string
           email: string
           id?: string
@@ -3480,6 +3482,7 @@ export type Database = {
           account_type?: string
           auth_user_id?: string | null
           avatar_url?: string | null
+          business_name?: string | null
           created_at?: string
           email?: string
           id?: string

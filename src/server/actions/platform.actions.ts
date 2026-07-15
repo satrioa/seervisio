@@ -4,8 +4,10 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import {
   getPlatformDashboardData,
+  getPlatformConsoleData,
   getRevenueTrend,
   getSubscriptionGrowth,
+  type PlatformConsoleData,
   type RevenueTrendPoint,
   type SubscriptionGrowthPoint,
 } from "@/server/repositories/platform.repository";
@@ -76,5 +78,18 @@ export async function getSubscriptionGrowthAction(): Promise<
   } catch (err: any) {
     console.error("[Platform] getSubscriptionGrowthAction:", err.message);
     return errorResult(err.message || "Failed to load subscription growth.");
+  }
+}
+
+export async function getPlatformConsoleAction(): Promise<
+  ActionResult<PlatformConsoleData>
+> {
+  try {
+    await requirePlatformOwner();
+    const data = await getPlatformConsoleData();
+    return successResult(data);
+  } catch (err: any) {
+    console.error("[Platform] getPlatformConsoleAction:", err.message);
+    return errorResult(err.message || "Gagal memuat konsol platform.");
   }
 }

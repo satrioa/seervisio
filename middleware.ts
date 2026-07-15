@@ -118,14 +118,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // ====================== AUTHENTICATED USERS ======================
-  // Load profile + account_type for all protected routes
+  // Load profile + account_type + onboarding state for all protected routes
   const profileResult = await (
     supabase
       .from("profiles")
-      .select("id, is_active, account_type")
+      .select("id, is_active, account_type, onboarding_completed")
       .eq("auth_user_id", user.id)
       .single() as unknown as Promise<{
-      data: { id: string; is_active: boolean; account_type: string } | null;
+      data: { id: string; is_active: boolean; account_type: string; onboarding_completed: boolean } | null;
     }>
   );
 
@@ -189,6 +189,37 @@ export async function middleware(request: NextRequest) {
         url.searchParams.set("error", "no_brand_access");
         return NextResponse.redirect(url);
       }
+
+      // ── License & onboarding gate ─────────────────────────────
+      // Customers must have an active license before they can reach
+      // the panel. The standalone /license page handles all pre-panel
+      // states (no license, pending payment, etc.).
+      const licResult = await (
+        (supabase as any)
+          .from("licenses")
+          .select("id, status, expires_at")
+          .or(`profile_id.eq.${profile.id},brand_id.eq.${brand.id}`)
+          .in("status", ["active", "trial"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle() as unknown as Promise<{
+          data: { id: string; status: string; expires_at: string | null } | null;
+        }>
+      );
+
+      const hasActiveLicense = licResult.data !== null;
+
+      if (!hasActiveLicense) {
+        url.pathname = "/license";
+        return NextResponse.redirect(url);
+      }
+
+      if (!profile.onboarding_completed) {
+        url.pathname = "/welcome";
+        return NextResponse.redirect(url);
+      }
+
+      // ── All checks pass → allow panel access ──────────────────
     } else {
       // Brand slug may have changed — redirect to user's first brand
       const membershipResult = await (

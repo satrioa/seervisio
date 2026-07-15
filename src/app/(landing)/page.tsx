@@ -7,6 +7,7 @@ import { WorkflowSection } from "@/components/landing/workflow-section";
 import { PricingSection } from "@/components/landing/pricing-section";
 import { TestimonialsSection } from "@/components/landing/testimonials";
 import { CtaSection } from "@/components/landing/cta-section";
+import { getActivePackages } from "@/server/repositories/license.repository";
 
 export const metadata: Metadata = {
   title: "Seervisio — The Modern Operating System for Repair Shops",
@@ -26,7 +27,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const packages = await getActivePackages();
+
   return (
     <>
       <HeroSection />
@@ -34,7 +37,7 @@ export default function LandingPage() {
       <FeatureGrid />
       <AiSection />
       <WorkflowSection />
-      <PricingSection />
+      <PricingSection packages={packages} />
       <TestimonialsSection />
       <CtaSection />
     </>

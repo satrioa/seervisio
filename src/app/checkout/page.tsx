@@ -1,5 +1,6 @@
 import React, { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { getCheckoutSessionAction } from "@/server/actions/checkout.actions";
 import { CheckoutClient } from "./checkout-client";
 
@@ -12,13 +13,61 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const result = await getCheckoutSessionAction(token);
 
   if (!result.success || !result.data) {
-    // No (valid) session yet — bounce to pricing to (re)select a package.
     redirect("/pricing");
+  }
+
+  // Load auth + profile using the same reliable getCurrentUser() used by
+  // /license. Falls back to the session's bound profileId if auth fails.
+  let profile: {
+    id: string;
+    business_name: string | null;
+    name: string;
+    phone: string | null;
+  } | null = null;
+  let email: string | null = null;
+  let ownerName: string | null = null;
+
+  const authResult = await getCurrentUser();
+  if (authResult.user) {
+    email = authResult.user.email;
+    const adminDb = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient();
+    const { data: p } = await (adminDb as any)
+      .from("profiles")
+      .select("id, business_name, name, phone")
+      .eq("auth_user_id", authResult.user.authUserId)
+      .maybeSingle();
+    if (p) {
+      profile = p;
+      // Fetch owner name from brand (profile.name is now brand name)
+      const { data: membership } = await (adminDb as any)
+        .from("user_brand_memberships")
+        .select("brands!user_brand_memberships_brand_id_fkey(owner_name)")
+        .eq("profile_id", p.id)
+        .not("brand_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      ownerName = membership?.brands?.owner_name ?? null;
+    }
+  }
+
+  // Fallback: if auth failed but the session has a bound profile.
+  if (!profile && result.data.profileId) {
+    try {
+      const adminDb = (await import("@/lib/supabase/admin")).createServiceRoleSupabaseClient();
+      const { data: p } = await (adminDb as any)
+        .from("profiles")
+        .select("id, business_name, name, phone")
+        .eq("id", result.data.profileId)
+        .maybeSingle();
+      if (p) profile = p;
+    } catch {
+      // ignore
+    }
   }
 
   return (
     <Suspense fallback={null}>
-      <CheckoutClient session={result.data} />
+      <CheckoutClient session={result.data} profile={profile} email={email} ownerName={ownerName} />
     </Suspense>
   );
 }
