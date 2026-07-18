@@ -11,7 +11,7 @@ interface RightSidebarContextValue {
   showOverview: () => void;
   showDetail: (service: ServiceRecord) => void;
   isCreateServiceOpen: boolean;
-  openCreateService: () => void;
+  openCreateService: (e?: React.MouseEvent<HTMLElement>) => void;
   closeCreateService: () => void;
   onServiceUpdated?: () => void;
   setOnServiceUpdated: (cb: (() => void) | undefined) => void;
@@ -35,7 +35,12 @@ export function RightSidebarProvider({ children }: { children: React.ReactNode }
     setType("detail");
   }, []);
 
-  const openCreateService = React.useCallback(() => {
+  const openCreateService = React.useCallback((
+    e?: React.MouseEvent<HTMLElement>,
+  ) => {
+    // Reject programmatic clicks (isTrusted=false from trigger.click())
+    // to prevent the tour's openDialogIfNeeded from auto-opening the form.
+    if (!e?.nativeEvent?.isTrusted) return;
     setIsCreateServiceOpen(true);
   }, []);
 

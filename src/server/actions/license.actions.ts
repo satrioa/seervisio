@@ -8,6 +8,9 @@ import { getProfileByAuthUserId } from "@/repositories/profile.repository";
 import { ROLES } from "@/lib/permissions/roles";
 import { logPlatformAction } from "@/server/repositories/platform.repository";
 import { insertBrandNotification } from "@/server/repositories/notification.repository";
+import { Mailer } from "@/server/mail/mailer";
+import { generateInvoice } from "@/server/mail/invoice";
+import { getBillingLabel } from "@/lib/billing/billing-helpers";
 import { successResult, errorResult, type ActionResult } from "./action-helper";
 import {
   getActivePackages,
@@ -109,7 +112,7 @@ export async function createLicenseOrderAction(
     pic_phone: string;
     company_address: string;
     npwp?: string;
-    invoice_email: string;
+    invoice_email?: string;
     notes?: string;
   },
 ): Promise<ActionResult<LicenseOrder>> {
@@ -142,6 +145,9 @@ export async function createLicenseOrderAction(
       .single();
     if (invoiceError) throw new Error("Gagal membuat nomor invoice.");
 
+    // Use auth user's email as fallback when invoice_email is not provided
+    const invoiceEmail = input.invoice_email || auth.email || "";
+
     const order = await repoCreateOrder(brand.id, {
       package_id: input.package_id,
       price: pkg.price,
@@ -152,7 +158,7 @@ export async function createLicenseOrderAction(
       pic_phone: input.pic_phone,
       company_address: input.company_address,
       npwp: input.npwp,
-      invoice_email: input.invoice_email,
+      invoice_email: invoiceEmail,
       notes: input.notes,
       brand_info: { name: brand.name, slug: brand.slug },
     });
@@ -249,10 +255,66 @@ export async function uploadLicenseProofAction(
   }
 }
 
-/* ── Public: Get bank info ── */
+/* ── Public: Get bank info from platform settings ── */
 
 export async function getBankTransferInfoAction(): Promise<ActionResult<BankTransferInfo>> {
-  return successResult(BANK_INFO);
+  try {
+    const supabase = createServiceRoleSupabaseClient();
+    const { data, error } = await (supabase as any)
+      .from("platform_payment_methods")
+      .select("name, account_name, account_number")
+      .eq("type", "transfer")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return errorResult("Metode pembayaran tidak ditemukan.");
+    }
+
+    return successResult({
+      bank_name: data.name,
+      account_number: data.account_number || "",
+      account_holder: data.account_name,
+    });
+  } catch (err: any) {
+    console.error("[getBankTransferInfoAction]", err.message);
+    return errorResult(err.message || "Gagal memuat info bank.");
+  }
+}
+
+/* ── Public: Get all platform payment methods ── */
+
+export async function getPlatformPaymentMethodsAction(): Promise<
+  ActionResult<{ id: string; type: string; name: string; accountName: string; accountNumber: string | null; logoUrl: string | null }[]>
+> {
+  try {
+    const supabase = createServiceRoleSupabaseClient();
+    const { data, error } = await (supabase as any)
+      .from("platform_payment_methods")
+      .select("id, type, name, account_name, account_number")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      return errorResult(error.message);
+    }
+
+    const methods = (data ?? []).map((m: any) => ({
+      id: m.id,
+      type: m.type,
+      name: m.name,
+      accountName: m.account_name,
+      accountNumber: m.account_number,
+      logoUrl: null,
+    }));
+
+    return successResult(methods);
+  } catch (err: any) {
+    console.error("[getPlatformPaymentMethodsAction]", err.message);
+    return errorResult(err.message || "Gagal memuat metode pembayaran.");
+  }
 }
 
 /* ── Admin: Get all orders ── */
@@ -417,12 +479,15 @@ export interface LicensePaymentView {
   discountAmount: number;
   totalAmount: number;
   billingCycle: string;
+  billingDurationEnabled: boolean;
   currency: string;
   couponCode: string | null;
   invoiceNumber: string | null;
   proofUrl: string | null;
   bankInfo: BankTransferInfo;
   estimatedVerificationHours: number;
+  paymentDeadline: string | null;
+  createdAt: string;
 }
 
 // Create a license_payment from a (bound) checkout session.
@@ -433,6 +498,7 @@ export async function createLicensePaymentAction(input: {
   companyAddress: string;
   npwp?: string;
   invoiceEmail: string;
+  paymentMethodId?: string;
 }): Promise<ActionResult<LicensePaymentView>> {
   try {
     const auth = await requireAuth();
@@ -444,21 +510,50 @@ export async function createLicensePaymentAction(input: {
       return errorResult("Sesi checkout bukan milik Anda.");
     }
 
-    // One active (non-terminal) payment per profile at a time.
+    // Check for existing non-terminal payments that block a new order.
     const { data: existing } = await (adminDb as any)
       .from("license_payments")
       .select("id, status")
       .eq("profile_id", auth.profileId)
-      .in("status", ["pending_payment", "waiting_verification"])
+      .in("status", ["pending_payment", "waiting_verification", "paid"])
       .maybeSingle();
+
     if (existing) {
-      return errorResult("Anda sudah memiliki pesanan lisensi yang sedang diproses.");
+      if (existing.status === "waiting_verification") {
+        return errorResult("Pembayaran Anda sedang diverifikasi. Paket tidak dapat diubah sampai proses verifikasi selesai.");
+      }
+      if (existing.status === "paid") {
+        return errorResult("Anda sudah memiliki lisensi aktif. Lakukan upgrade melalui menu Lisensi.");
+      }
+      // pending_payment → auto-replace so user can change packages freely.
+      const { error: replaceErr } = await (adminDb as any)
+        .from("license_payments")
+        .update({ status: "expired", updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (replaceErr) throw new Error("Gagal mengganti pesanan sebelumnya.");
     }
 
     const { data: invoiceData, error: invErr } = await (adminDb as any)
       .rpc("generate_license_invoice_number")
       .single();
     if (invErr) throw new Error("Gagal membuat nomor invoice.");
+
+    // Resolve selected payment method bank info
+    let bankName: string | null = null;
+    let accountNumber: string | null = null;
+    let accountHolder: string | null = null;
+    if (input.paymentMethodId) {
+      const { data: pm } = await (adminDb as any)
+        .from("platform_payment_methods")
+        .select("name, account_name, account_number")
+        .eq("id", input.paymentMethodId)
+        .maybeSingle();
+      if (pm) {
+        bankName = pm.name;
+        accountNumber = pm.account_number;
+        accountHolder = pm.account_name;
+      }
+    }
 
     const { data: inserted, error: insErr } = await (adminDb as any)
       .from("license_payments")
@@ -480,6 +575,9 @@ export async function createLicensePaymentAction(input: {
         npwp: input.npwp || null,
         invoice_email: input.invoiceEmail,
         invoice_number: invoiceData,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_holder: accountHolder,
       })
       .select("*")
       .single();
@@ -495,10 +593,72 @@ export async function createLicensePaymentAction(input: {
       .update({ status: "converted" })
       .eq("token", input.token);
 
+    // Backfill license_orders (deprecated but still read by admin dashboard).
+    await (adminDb as any)
+      .from("license_orders")
+      .insert({
+        invoice_number: invoiceData,
+        package_id: session.package_id,
+        price: session.price,
+        total_amount: session.total_amount,
+        status: "pending_payment",
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_holder: accountHolder,
+        pic_name: input.picName,
+        pic_phone: input.picPhone,
+        company_address: input.companyAddress,
+        npwp: input.npwp || null,
+        invoice_email: input.invoiceEmail,
+        notes: null,
+        brand_info: null,
+      })
+      .select("id")
+      .maybeSingle();
+
     return successResult(mapLicensePaymentView(inserted as any));
   } catch (err: any) {
     console.error("[createLicensePaymentAction]", err);
     return errorResult(err.message || "Gagal membuat pesanan lisensi.");
+  }
+}
+
+// Replace an existing pending-payment order so the user can change packages.
+// Only allowed when status is still pending_payment (proof not yet uploaded).
+export async function replacePaymentAction(
+  paymentId: string,
+): Promise<ActionResult<{ redirect: string }>> {
+  try {
+    const auth = await requireAuth();
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const { data: payment, error: fetchErr } = await (adminDb as any)
+      .from("license_payments")
+      .select("id, profile_id, status")
+      .eq("id", paymentId)
+      .maybeSingle();
+
+    if (fetchErr || !payment) {
+      return errorResult("Pesanan tidak ditemukan.");
+    }
+    if (payment.profile_id !== auth.profileId) {
+      return errorResult("Akses ditolak.");
+    }
+    if (payment.status !== "pending_payment") {
+      return errorResult("Pesanan tidak dapat diubah karena sudah diupload atau diverifikasi.");
+    }
+
+    const { error: cancelErr } = await (adminDb as any)
+      .from("license_payments")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("id", paymentId);
+
+    if (cancelErr) throw new Error("Gagal membatalkan pesanan.");
+
+    return successResult({ redirect: "/license" });
+  } catch (err: any) {
+    console.error("[replacePaymentAction]", err.message);
+    return errorResult(err.message || "Gagal mengganti paket.");
   }
 }
 
@@ -573,6 +733,34 @@ export async function uploadLicensePaymentProofAction(
       .single();
     if (updErr) throw new Error("Gagal memperbarui status pesanan.");
 
+    // Non-blocking: send payment pending email
+    void (async () => {
+      try {
+        const { data: profile } = await (adminDb as any)
+          .from("profiles")
+          .select("name, email")
+          .eq("id", auth.profileId)
+          .maybeSingle();
+        if (!profile?.email) return;
+        const paymentsRow = updated as any;
+        await Mailer.send({
+          to: profile.email,
+          toName: profile.name,
+          subject: "Pembayaran Anda Sedang Diverifikasi",
+          template: "payment-pending",
+          data: {
+            customerName: profile.name,
+            orderNumber: paymentsRow.invoice_number ?? paymentsRow.id,
+            packageName: paymentsRow.package_name ?? paymentsRow.package_slug ?? "Paket Lisensi",
+            amount: Number(paymentsRow.total_amount),
+            uploadTime: new Date().toLocaleString("id-ID"),
+          },
+        });
+      } catch (e) {
+        console.error("[uploadLicensePaymentProofAction] email error:", e);
+      }
+    })();
+
     return successResult(mapLicensePaymentView(updated as any));
   } catch (err: any) {
     console.error("[uploadLicensePaymentProofAction]", err);
@@ -608,24 +796,32 @@ export async function approveLicensePaymentAction(
       new Date(),
     );
 
+    // The checkout funnel is profile-scoped (the brand is created later in the
+    // Welcome Wizard). If the brand already exists by approval time, link it now
+    // so brand_id isn't left NULL until a back-fill. Falls back to the payment's
+    // own brand_id when present.
+    const brandId = p.brand_id ?? (await resolveBrandIdForProfile(p.profile_id));
+
     // Mark payment paid.
     await (adminDb as any)
       .from("license_payments")
       .update({
         status: "paid",
+        brand_id: brandId,
         verified_by: (await platformProfileId(auth)) ?? null,
         verified_at: new Date().toISOString(),
       })
       .eq("id", paymentId);
 
-    // Issue the license (brand_id NULL until the Welcome Wizard back-fills it).
+    // Issue the license (brand_id back-filled by the Welcome Wizard if still NULL).
     const { data: license, error: licErr } = await (adminDb as any)
       .from("licenses")
       .insert({
         profile_id: p.profile_id,
-        brand_id: null,
+        brand_id: brandId,
         package_id: p.package_id,
         order_id: null,
+        license_payment_id: paymentId,
         status: "active",
         started_at: new Date().toISOString(),
         expires_at: expiresAt,
@@ -634,6 +830,116 @@ export async function approveLicensePaymentAction(
       .select("id")
       .single();
     if (licErr) throw new Error("Gagal menerbitkan lisensi.");
+
+    // Grant the license owner MASTER_ADMIN membership for the brand.
+    // The buyer who holds the license is always the brand owner, so they
+    // must have full access once the license is active — even if the
+    // Welcome Wizard membership step was skipped or failed.
+    if (brandId) {
+      try {
+        const { data: existingMem } = await (adminDb as any)
+          .from("user_brand_memberships")
+          .select("id, is_active, deleted_at")
+          .eq("profile_id", p.profile_id)
+          .eq("brand_id", brandId)
+          .maybeSingle();
+
+        if (existingMem) {
+          if (!existingMem.is_active || existingMem.deleted_at) {
+            await (adminDb as any)
+              .from("user_brand_memberships")
+              .update({ is_active: true, deleted_at: null, role: "MASTER_ADMIN" })
+              .eq("id", (existingMem as any).id);
+          }
+        } else {
+          await (adminDb as any)
+            .from("user_brand_memberships")
+            .insert({
+              profile_id: p.profile_id,
+              brand_id: brandId,
+              role: "MASTER_ADMIN",
+              is_active: true,
+            });
+        }
+      } catch (memErr) {
+        console.error("[approveLicensePaymentAction] membership grant error:", memErr);
+      }
+    }
+
+    // Non-blocking: send payment approved + invoice emails
+    void (async () => {
+      try {
+        const { data: profile } = await (adminDb as any)
+          .from("profiles")
+          .select("name, email, business_name")
+          .eq("id", p.profile_id)
+          .maybeSingle();
+        if (!profile?.email) return;
+
+        const pkgName = (p.packages as any)?.name ?? "Paket Lisensi";
+        const billingCycle = p.billing_cycle ?? "monthly";
+        const licenseType = getBillingLabel(billingCycle);
+        const now = new Date();
+        const activationDate = now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+        const expirationDate = expiresAt
+          ? new Date(expiresAt).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+          : null;
+
+        // Generate invoice PDF
+        const invoice = await generateInvoice({
+          customerName: profile.name ?? profile.email,
+          customerEmail: profile.email,
+          companyName: profile.business_name ?? profile.name ?? "Perusahaan",
+          packageName: pkgName,
+          amount: Number(p.total_amount ?? 0),
+          billingCycle,
+          paymentMethod: "Transfer Bank",
+        });
+
+        // Send payment approved email
+        await Mailer.send({
+          to: profile.email,
+          toName: profile.name,
+          subject: "Lisensi Anda Telah Aktif!",
+          template: "payment-approved",
+          data: {
+            customerName: profile.name ?? profile.email,
+            packageName: pkgName,
+            licenseType,
+            activationDate,
+            expirationDate,
+            dashboardUrl: "https://app.seervisio.com",
+          },
+        });
+
+        // Send invoice email with PDF attachment
+        if (invoice.pdfBuffer) {
+          const base64Pdf = invoice.pdfBuffer.toString("base64");
+          await Mailer.send({
+            to: profile.email,
+            toName: profile.name,
+            subject: `Invoice ${invoice.invoiceNumber}`,
+            template: "invoice-email",
+            data: {
+              customerName: profile.name ?? profile.email,
+              invoiceNumber: invoice.invoiceNumber,
+              packageName: pkgName,
+              amount: Number(p.total_amount ?? 0),
+              invoiceDate: activationDate,
+              paymentMethod: "Transfer Bank",
+            },
+            attachments: [
+              {
+                name: `${invoice.invoiceNumber}.pdf`,
+                content: base64Pdf,
+              },
+            ],
+          });
+        }
+      } catch (e) {
+        console.error("[approveLicensePaymentAction] email error:", e);
+      }
+    })();
 
     return successResult({ licenseId: (license as any).id });
   } catch (err: any) {
@@ -685,7 +991,7 @@ export async function getLicenseCenterStatusAction(): Promise<
 
     const { data: payment, error } = await (adminDb as any)
       .from("license_payments")
-      .select("*, packages:package_id(name, slug)")
+      .select("*, packages:package_id(name, slug, billing_duration_enabled)")
       .eq("profile_id", auth.profileId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -740,7 +1046,31 @@ function isPlatformOwnerSession(auth: UserSession): boolean {
   return auth.memberships.some((m: any) => m.role === ROLES.PLATFORM_OWNER);
 }
 
+/**
+ * Resolve the tenant brand a purchase belongs to from the buyer's
+ * MASTER_ADMIN membership. Used at approval time so that when the Welcome
+ * Wizard already created the brand, the license + payment are linked
+ * immediately instead of waiting for a back-fill that may never re-run.
+ * Prefers an active, non-deleted membership.
+ */
+async function resolveBrandIdForProfile(profileId: string | null): Promise<number | null> {
+  if (!profileId) return null;
+  const adminDb = createServiceRoleSupabaseClient();
+  const { data } = await (adminDb as any)
+    .from("user_brand_memberships")
+    .select("brand_id, is_active, deleted_at")
+    .eq("profile_id", profileId)
+    .eq("role", "MASTER_ADMIN");
+  const rows = (data ?? []) as { brand_id: number | null; is_active: boolean; deleted_at: string | null }[];
+  if (rows.length === 0) return null;
+  const active = rows.find((m) => m.is_active && !m.deleted_at);
+  return (active ?? rows[0]).brand_id ?? null;
+}
+
 function mapLicensePaymentView(row: any): LicensePaymentView {
+  const createdAt = row.created_at ?? new Date().toISOString();
+  const deadline = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000);
+
   return {
     id: row.id,
     status: row.status,
@@ -750,11 +1080,18 @@ function mapLicensePaymentView(row: any): LicensePaymentView {
     discountAmount: Number(row.discount_amount),
     totalAmount: Number(row.total_amount),
     billingCycle: row.billing_cycle,
+    billingDurationEnabled: row.packages?.billing_duration_enabled ?? row.billing_cycle !== "lifetime",
     currency: row.currency,
     couponCode: row.coupon_code ?? null,
     invoiceNumber: row.invoice_number ?? null,
     proofUrl: row.proof_url ?? null,
-    bankInfo: BANK_INFO,
+    bankInfo: {
+      bank_name: row.bank_name ?? BANK_INFO.bank_name,
+      account_number: row.account_number ?? BANK_INFO.account_number,
+      account_holder: row.account_holder ?? BANK_INFO.account_holder,
+    },
     estimatedVerificationHours: 24,
+    paymentDeadline: deadline.toISOString(),
+    createdAt,
   };
 }

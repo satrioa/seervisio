@@ -206,7 +206,7 @@ export async function getPlatformConsoleData(): Promise<PlatformConsoleData> {
     getPlatformAuditLogs({ limit: 8 }),
     (supabase as any)
       .from("licenses")
-      .select("id, status, is_trial, brand_id, package_id, expires_at, created_at, brands:brand_id(name), packages:package_id(name)"),
+      .select("id, status, is_trial, brand_id, package_id, expires_at, created_at, brands:brand_id(name), packages:package_id(name, billing_duration_enabled)"),
     (supabase as any)
       .from("license_payments")
       .select("id, status, total_amount, brand_id, package_id, created_at, brands:brand_id(name), packages:package_id(name)"),
@@ -227,7 +227,9 @@ export async function getPlatformConsoleData(): Promise<PlatformConsoleData> {
   const expiredLicenses = licenses.filter(
     (l: any) => l.status === "expired" || l.status === "cancelled",
   ).length;
-  const lifetimeLicenses = licenses.length;
+  const lifetimeLicenses = licenses.filter(
+    (l: any) => l.packages?.billing_duration_enabled === false,
+  ).length;
 
   const licenseStatusMap = new Map<string, number>();
   for (const l of licenses) {

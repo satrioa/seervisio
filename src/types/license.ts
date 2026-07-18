@@ -54,6 +54,7 @@ export interface License {
   brand_id: number;
   package_id: string;
   order_id: string | null;
+  license_payment_id: string | null;
   status: LicenseStatus;
   started_at: string;
   expires_at: string | null;

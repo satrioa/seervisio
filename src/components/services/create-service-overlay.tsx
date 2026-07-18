@@ -32,6 +32,25 @@ interface CreateServiceOverlayProps {
   onSuccess?: () => void | Promise<void>;
 }
 
+function hasFormChanges(data: CreateServiceFormData): boolean {
+  return (
+    data.customerName !== "" ||
+    data.customerPhone !== "" ||
+    data.customerAddress !== "" ||
+    data.estimatedCost !== "" ||
+    data.dpEnabled ||
+    data.dpAmount !== "" ||
+    data.deviceType !== "" ||
+    data.deviceBrand !== "" ||
+    data.deviceModel !== "" ||
+    data.serialNumber !== "" ||
+    data.issue !== "" ||
+    data.additionalNotes !== "" ||
+    data.branch !== "" ||
+    data.assignedTechnicianId !== ""
+  );
+}
+
 export function CreateServiceOverlay({ onSuccess }: CreateServiceOverlayProps) {
   const { isCreateServiceOpen, closeCreateService } = useRightSidebar();
   const [currentStep, setCurrentStep] = React.useState(1);
@@ -45,13 +64,28 @@ export function CreateServiceOverlay({ onSuccess }: CreateServiceOverlayProps) {
   }, [isCreateServiceOpen]);
 
   const handleClose = React.useCallback(() => {
+    if (hasFormChanges(formData)) {
+      if (!window.confirm("Ada perubahan yang belum disimpan. Yakin ingin menutup?")) return;
+    }
     closeCreateService();
-  }, [closeCreateService]);
+  }, [formData, closeCreateService]);
+
+  React.useEffect(() => {
+    if (!isCreateServiceOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isCreateServiceOpen, handleClose]);
 
   if (!isCreateServiceOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-2 md:p-4">
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-2 md:p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+    >
       <div className="relative flex min-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-border bg-card shadow-2xl md:min-h-0 md:h-[85vh]">
         <button
           type="button"

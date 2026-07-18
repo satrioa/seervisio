@@ -150,7 +150,7 @@ export function BrandThemeSettings() {
         // Dispatch custom event so BrandThemeProvider re-applies CSS vars globally
         window.dispatchEvent(
           new CustomEvent("brand-theme-updated", {
-            detail: { tokens, mode: effectiveMode },
+            detail: { tokens, mode: effectiveMode, primaryColor },
           })
         );
       } else {

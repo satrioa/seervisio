@@ -15,7 +15,6 @@ import { ROLES } from "@/lib/permissions/roles";
 import { getBrandBySlug } from "@/repositories/brand.repository";
 import { getBrandSettings } from "@/repositories/brand-settings.repository";
 import {
-  getMembershipForBrand,
   getBranchAccessForMembership,
   getDefaultBranchId,
 } from "@/repositories/profile.repository";
@@ -62,10 +61,105 @@ export async function resolveBrandContext(
       is_active: true,
     };
   } else {
-    membership = await getMembershipForBrand(supabase, session.profileId, brand.id);
+    // Use pre-loaded memberships from the session (avoids RLS issues
+    // and redundant DB queries). If not found in session, fall back
+    // to a direct DB query.
+    const sessionMembership = session.memberships.find(
+      (m) => m.brandId === brand.id,
+    );
+    if (sessionMembership) {
+      membership = {
+        id: sessionMembership.id,
+        profile_id: session.profileId,
+        brand_id: brand.id,
+        role: sessionMembership.role,
+        is_active: true,
+      };
+    }
   }
 
   if (!membership) {
+    // Self-heal: a brand may exist (created during signup / welcome wizard)
+    // without a linked membership if that step failed. If the current user
+    // owns an active license for this brand (or a profile-scoped license
+    // that was back-filled to it), repair the membership instead of
+    // hard-denying access.
+    try {
+      const { createServiceRoleSupabaseClient } = await import("@/lib/supabase/admin");
+      const { getActiveLicenseForProfile } = await import("@/server/repositories/license.repository");
+      const adminDb = createServiceRoleSupabaseClient();
+
+      const license = await getActiveLicenseForProfile(session.profileId);
+      const ownsBrand =
+        (license && (license as any).brand_id === brand.id) ||
+        (license && !(license as any).brand_id);
+
+      if (ownsBrand) {
+        const { data: existing } = await (adminDb as any)
+          .from("user_brand_memberships")
+          .select("id, is_active")
+          .eq("brand_id", brand.id)
+          .eq("profile_id", session.profileId)
+          .maybeSingle();
+
+        if (existing) {
+          if (!existing.is_active) {
+            await (adminDb as any)
+              .from("user_brand_memberships")
+              .update({ is_active: true })
+              .eq("id", existing.id);
+          }
+          membership = {
+            id: existing.id,
+            profile_id: session.profileId,
+            brand_id: brand.id,
+            role: "MASTER_ADMIN" as any,
+            is_active: true,
+          };
+        } else {
+          const { data: created, error: createErr } = await (adminDb as any)
+            .from("user_brand_memberships")
+            .insert({
+              profile_id: session.profileId,
+              brand_id: brand.id,
+              role: "MASTER_ADMIN",
+              is_active: true,
+            })
+            .select("id")
+            .single();
+
+          if (!createErr && created) {
+            membership = {
+              id: created.id,
+              profile_id: session.profileId,
+              brand_id: brand.id,
+              role: "MASTER_ADMIN" as any,
+              is_active: true,
+            };
+          }
+        }
+
+        // Back-fill the license brand if it was still profile-scoped.
+        if (license && !(license as any).brand_id) {
+          await (adminDb as any)
+            .from("licenses")
+            .update({ brand_id: brand.id })
+            .eq("id", (license as any).id);
+        }
+      }
+    } catch {
+      // fall through to the AuthError below
+    }
+  }
+
+  if (!membership) {
+    console.error("[resolveBrandContext] No membership found", {
+      profileId: session.profileId,
+      brandId: brand.id,
+      brandSlug,
+      sessionMembershipCount: session.memberships.length,
+      sessionMembershipBrandIds: session.memberships.map((m) => m.brandId),
+    });
     throw new AuthError(`Anda tidak memiliki akses ke brand "${brand.name}"`);
   }
 

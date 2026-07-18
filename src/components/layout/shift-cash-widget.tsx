@@ -71,6 +71,25 @@ const METHOD_TYPE_LABELS: Record<string, string> = {
   EWALLET: "E-Wallet",
 };
 
+const INCOME_CATEGORIES = [
+  "Pendapatan Lain",
+  "Refund Supplier",
+  "Penjualan Non-POS",
+  "Bonus / Cashback",
+  "Lainnya",
+];
+
+const EXPENSE_CATEGORIES = [
+  "Operasional",
+  "Transport",
+  "Listrik / Internet",
+  "Gaji / Kasbon",
+  "Biaya Bank",
+  "Konsumsi",
+  "Maintenance",
+  "Lainnya",
+];
+
 export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenShift, grouped = false }: ShiftCashWidgetProps) {
   const pathname = usePathname();
   const { activeBranchId, activeBranchName, branches } = useActiveBranch();
@@ -87,6 +106,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
   const [incAmount, setIncAmount] = useState("");
   const [incDesc, setIncDesc] = useState("");
   const [incAccount, setIncAccount] = useState("");
+  const [incCategory, setIncCategory] = useState(INCOME_CATEGORIES[0]);
   const [incAccounts, setIncAccounts] = useState<any[]>([]);
   const [incLoading, setIncLoading] = useState(false);
   const [incError, setIncError] = useState<string | null>(null);
@@ -96,6 +116,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
   const [expAmount, setExpAmount] = useState("");
   const [expDesc, setExpDesc] = useState("");
   const [expAccount, setExpAccount] = useState("");
+  const [expCategory, setExpCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [expAccounts, setExpAccounts] = useState<any[]>([]);
   const [expLoading, setExpLoading] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);
@@ -168,6 +189,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     setIncAmount("");
     setIncDesc("");
     setIncAccount("");
+    setIncCategory(INCOME_CATEGORIES[0]);
     setIncError(null);
     setIncLoading(true);
     const result = await listPaymentAccountsAction(brandSlug, activeBranchId!);
@@ -192,7 +214,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
       brandSlug,
       branchId: activeBranchId!,
       paymentAccountId: incAccount,
-      category: "Lainnya",
+      category: incCategory,
       amount,
       description: incDesc.trim(),
       date: today,
@@ -211,6 +233,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
     setExpAmount("");
     setExpDesc("");
     setExpAccount("");
+    setExpCategory(EXPENSE_CATEGORIES[0]);
     setExpError(null);
     setExpLoading(true);
     const result = await listPaymentAccountsAction(brandSlug, activeBranchId!);
@@ -235,7 +258,7 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
       brandSlug,
       branchId: activeBranchId!,
       paymentAccountId: expAccount,
-      category: "Lainnya",
+      category: expCategory,
       amount,
       description: expDesc.trim(),
       date: today,
@@ -477,7 +500,18 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
                 <SelectContent>
                   {incAccounts.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.account_name}</SelectItem>
+                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.accountName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Kategori</Label>
+              <Select value={incCategory} onValueChange={setIncCategory} disabled={incLoading}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INCOME_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -537,7 +571,18 @@ export function ShiftCashWidget({ brandSlug, role, canAccessAllBranches, onOpenS
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
                 <SelectContent>
                   {expAccounts.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.account_name}</SelectItem>
+                    <SelectItem key={a.id} value={a.id} className="text-xs">{a.accountName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Kategori</Label>
+              <Select value={expCategory} onValueChange={setExpCategory} disabled={expLoading}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EXPENSE_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

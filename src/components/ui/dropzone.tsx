@@ -14,7 +14,7 @@ import {
   FileRejection,
   useDropzone as rootUseDropzone,
 } from "react-dropzone";
-import { Button, ButtonProps } from "./ui/button";
+import { Button, ButtonProps } from "./button";
 
 type DropzoneResult<TUploadRes, TUploadError> =
   | {

@@ -36,7 +36,10 @@ export function PdfxThemeProvider({ theme, children }: PdfxThemeProviderProps) {
  */
 export function usePdfxTheme(): PdfxTheme {
   try {
-    return useContext(PdfxThemeContext);
+    // In a server-rendered PDF (e.g. @react-pdf/renderer renderToBuffer) React
+    // Context is not propagated, so useContext can resolve to null. Fall back to
+    // the default theme so pdfx components render headlessly without a provider.
+    return useContext(PdfxThemeContext) ?? defaultTheme;
   } catch (error) {
     // Suppress only known React dispatcher errors.
     if (

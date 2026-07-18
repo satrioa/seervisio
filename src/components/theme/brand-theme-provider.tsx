@@ -41,10 +41,10 @@ function injectBrandStyle(
 
   const toCss = (tokens: Record<string, string>) =>
     Object.entries(tokens)
-      .map(([key, value]) => `  --${key}: ${value};`)
+      .map(([key, value]) => `  --${key}: hsl(${value});`)
       .join("\n");
 
-  styleEl.textContent = `/* Brand Theme Tokens */\n:root {\n${toCss(lightTokens)}\n}\n\n.dark {\n${toCss(darkTokens)}\n}`;
+  styleEl.textContent = `/* Brand Theme Tokens */\n:root:root {\n${toCss(lightTokens)}\n}\n\n.dark:root:root {\n${toCss(darkTokens)}\n}`;
 }
 
 function removeBrandStyle() {
@@ -111,22 +111,23 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
 
     // Listen for theme updates from settings page
     const handleThemeUpdate = (e: CustomEvent) => {
-      if (e.detail?.tokens) {
-        // Settings page saved tokens for one mode — need both modes
-        // Use the stored primary color to generate the other mode
-        const sourceTokens = e.detail.tokens as Record<string, string>;
-        const sourceMode = (e.detail?.mode as "light" | "dark") ?? mode;
-        
-        // Re-generate both modes from the stored primary color
-        // This ensures light and dark are consistent
-        const pc = primaryColorRef.current;
+      const detail = e.detail ?? {};
+      const newPrimary = detail.primaryColor as string | undefined;
+      const newMode = detail.mode as "light" | "dark" | undefined;
+
+      if (newPrimary) {
+        primaryColorRef.current = newPrimary;
+      }
+
+      if (detail.tokens || newPrimary) {
+        const pc = newPrimary ?? primaryColorRef.current;
         const lightTokens = generateBrandTheme(pc, "light");
         const darkTokens = generateBrandTheme(pc, "dark");
         injectBrandStyle(lightTokens, darkTokens);
         setBrandTokens(lightTokens);
       }
-      if (e.detail?.mode) {
-        const newMode = e.detail.mode as "light" | "dark";
+
+      if (newMode) {
         setMode(newMode);
         document.documentElement.classList.toggle("dark", newMode === "dark");
         window.localStorage.setItem(themeKey, newMode);

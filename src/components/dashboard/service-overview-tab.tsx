@@ -26,12 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 import { SummaryCard } from "@/components/dashboard/summary-card";
-import PartitionBar, {
-  PartitionBarSegment,
-  PartitionBarSegmentTitle,
-  PartitionBarSegmentValue,
-} from "@/components/8starlabs-ui/partition-bar";
 import type { DashboardService } from "@/server/actions/dashboard.actions";
 
 /* ── Helpers ── */
@@ -149,7 +145,7 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-3">
         {/* ── KPI Cards ── */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Penghasilan Servis" value={formatRp(data?.totalServiceRevenue ?? 0)} helper="dari pembayaran servis" icon={Wallet} />
           <SummaryCard label="Servis Diterima" value={String(data?.serviceInCount ?? 0)} helper="servis masuk" icon={ClipboardList} />
           <SummaryCard label="Servis Selesai" value={String(data?.serviceDoneCount ?? 0)} helper="selesai" icon={CheckCircle2} />
@@ -157,21 +153,39 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
         </div>
 
         {/* ── Pipeline Servis ── */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Pipeline Servis</CardTitle>
-            <CardDescription className="text-xs">Distribusi status servis aktif hari ini</CardDescription>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline Servis</CardTitle>
+            <CardDescription>Distribusi status servis aktif hari ini</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="space-y-4">
             {pipelineData.length > 0 ? (
-              <PartitionBar size="lg" gap={1} className="w-full">
+              <>
+                <Separator />
+                <div className="space-y-0.5">
+                  <p className="font-medium text-xl">Total {pipelineData.reduce((s, p) => s + p.count, 0)} Servis</p>
+                  <p className="text-muted-foreground text-xs">Aktif berdasarkan periode terpilih</p>
+                </div>
+                <Separator />
                 {pipelineData.map((p) => (
-                  <PartitionBarSegment key={p.label} num={p.count} variant={p.variant} alignment="center">
-                    <PartitionBarSegmentTitle>{p.label}</PartitionBarSegmentTitle>
-                    <PartitionBarSegmentValue>{p.count}</PartitionBarSegmentValue>
-                  </PartitionBarSegment>
+                  <div key={p.label} className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <p className="font-medium text-sm">{p.label}</p>
+                      <p className="text-muted-foreground text-xs">Dalam status ini</p>
+                    </div>
+                    <Badge variant={p.variant === "destructive" ? "destructive" : "secondary"} className="tabular-nums">
+                      {p.count}
+                    </Badge>
+                  </div>
                 ))}
-              </PartitionBar>
+                <Separator />
+                <p className="text-muted-foreground text-xs">
+                  Pipeline health:{" "}
+                  <span className="font-medium text-primary">
+                    {pipelineData.some((p) => p.variant === "destructive") ? "Perlu perhatian" : "Stabil"}
+                  </span>
+                </p>
+              </>
             ) : (
               <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">
                 Belum ada data servis pada periode ini.

@@ -7,6 +7,7 @@ import { resolveBrandContext } from "@/lib/context/resolve-brand-context";
 import { resolveActiveOperator } from "@/lib/auth/active-operator";
 import { getImpersonationCookie } from "@/lib/auth/impersonation";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
+import { isFeatureFlagEnabled } from "@/server/repositories/feature-flags.repository";
 import { PanelLayoutClient } from "./panel-layout-client";
 import { ROLES } from "@/lib/permissions/roles";
 import { getActiveLicenseForBrand } from "@/server/repositories/license.repository";
@@ -22,27 +23,28 @@ export default async function PanelLayout({
 }: PanelLayoutProps) {
   const { brandSlug } = await params;
 
-  // Step 1: Authenticate
-  const authResult = await getCurrentUser();
+  // Step 1: Parallel — authenticate + detect impersonation
+  const [authResult, impersonatingBrandSlug] = await Promise.all([
+    getCurrentUser(),
+    getImpersonationCookie(),
+  ]);
 
   if (!authResult.user) {
     redirect("/login");
   }
 
-  // Step 2: Detect impersonation
-  const impersonatingBrandSlug = await getImpersonationCookie();
   const isPlatformOwner = authResult.user.memberships.some(
     (m) => m.role === ROLES.PLATFORM_OWNER
   );
   const isImpersonating = isPlatformOwner && impersonatingBrandSlug === brandSlug;
 
-  // Step 3: Resolve brand context (validates access)
+  // Step 2: Resolve brand context (validates access)
   const supabase = await createServerSupabase();
 
   try {
     const context = await resolveBrandContext(supabase, authResult.user, brandSlug);
 
-    // Step 4: Check active operator override (staff quick-switch)
+    // Step 3: Check active operator override (staff quick-switch)
     const activeOperator = await resolveActiveOperator(supabase, context.brandId, context.profileId);
 
     let effectiveContext = context;
@@ -50,37 +52,33 @@ export default async function PanelLayout({
       effectiveContext = await resolveBrandContext(supabase, authResult.user, brandSlug, activeOperator);
     }
 
-    const allBranches = await getBranchesByBrandId(supabase as any, effectiveContext.brandId);
+    // Step 4: Parallel — branches, license, onboarding, feature flags
+    const [allBranches, activeLicense, onboardingResult, aiEnabled] = await Promise.all([
+      getBranchesByBrandId(supabase as any, effectiveContext.brandId),
+      getActiveLicenseForBrand(effectiveContext.brandId).then((lic) =>
+        lic
+          ? { status: lic.status, expires_at: lic.expires_at, is_trial: lic.is_trial }
+          : null
+      ).catch(() => null),
+      (supabase as any)
+        .from("profiles")
+        .select("onboarding_completed, onboarding_completed_tasks")
+        .eq("id", effectiveContext.profileId)
+        .maybeSingle()
+        .then((r: any) => ({
+          onboardingCompleted: r.data?.onboarding_completed ?? false,
+          onboardingCompletedTasks: r.data?.onboarding_completed_tasks ?? [],
+        })),
+      isFeatureFlagEnabled("AI Insight Engine"),
+    ]);
+
     const accessibleBranches = effectiveContext.canAccessAllBranches
       ? allBranches.map((branch) => ({ id: branch.id, name: branch.name }))
       : allBranches
           .filter((branch) => effectiveContext.accessibleBranchIds.includes(branch.id))
           .map((branch) => ({ id: branch.id, name: branch.name }));
 
-    // Step 5: Fetch license status
-    let activeLicense: { status: string; expires_at: string | null; is_trial: boolean } | null = null;
-    try {
-      const lic = await getActiveLicenseForBrand(effectiveContext.brandId);
-      if (lic) {
-        activeLicense = {
-          status: lic.status,
-          expires_at: lic.expires_at,
-          is_trial: lic.is_trial,
-        };
-      }
-    } catch {
-      // License check failure should not block access
-    }
-
-    // Step 6: Fetch onboarding progress
-    const { data: onboardingData } = await (supabase as any)
-      .from("profiles")
-      .select("onboarding_completed, onboarding_completed_tasks")
-      .eq("id", effectiveContext.profileId)
-      .maybeSingle();
-
-    const onboardingCompleted = onboardingData?.onboarding_completed ?? false;
-    const onboardingCompletedTasks = onboardingData?.onboarding_completed_tasks ?? [];
+    const { onboardingCompleted, onboardingCompletedTasks } = onboardingResult;
 
     return (
       <PanelLayoutClient
@@ -103,6 +101,7 @@ export default async function PanelLayout({
         onboardingCompleted={onboardingCompleted}
         onboardingCompletedTasks={onboardingCompletedTasks}
         activeLicense={activeLicense}
+        aiCommandCenterEnabled={aiEnabled}
       >
         {children}
       </PanelLayoutClient>

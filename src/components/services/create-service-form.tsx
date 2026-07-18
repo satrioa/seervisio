@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { CustomerSearch } from "@/components/customers/customer-search";
-import type { CustomerMock } from "@/components/customers/customer-data";
+import type { CustomerListItem } from "@/server/actions/customer.actions";
 import {
   MOCK_PAYMENT_METHODS,
   MOCK_PAYMENT_ACCOUNTS,
@@ -152,13 +152,13 @@ export function CreateServiceForm({
 
   // Customer autofill handler
   const handleCustomerSelect = React.useCallback(
-    (customer: CustomerMock | null) => {
+    (customer: CustomerListItem | null) => {
       if (customer) {
         onFormChange({
           ...formData,
           customerId: customer.id,
           customerName: customer.name,
-          customerPhone: customer.phone,
+          customerPhone: customer.phone ?? "",
           customerAddress: customer.address ?? "",
         });
       } else {
@@ -259,6 +259,8 @@ export function CreateServiceForm({
           duration: 2200,
         });
         closeCreateService();
+        const { fireOnboardingEvent } = await import("@/lib/onboarding/events");
+        fireOnboardingEvent("service-created");
         console.log("[services:create] success refresh", {
           serviceId: result.data?.serviceId ?? null,
           branchId: formData.branch || null,
@@ -336,24 +338,21 @@ export function CreateServiceForm({
   };
 
   // Derive selected customer object for CustomerSearch
-  const selectedCustomer: CustomerMock | null = React.useMemo(() => {
+  const selectedCustomer: CustomerListItem | null = React.useMemo(() => {
     if (formData.customerId) {
       return {
         id: formData.customerId,
         name: formData.customerName,
-        phone: formData.customerPhone,
-        address: formData.customerAddress || null,
+        phone: formData.customerPhone || null,
         email: null,
-        notes: null,
+        address: formData.customerAddress || null,
         totalSpend: 0,
         totalServices: 0,
         activeServices: 0,
-        completedServices: 0,
         activeWarranties: 0,
-        createdAt: "",
-        updatedAt: "",
-        brandId: 1,
         lastServiceAt: null,
+        branchNames: [],
+        createdAt: "",
       };
     }
     return null;
@@ -377,6 +376,7 @@ export function CreateServiceForm({
             </div>
 
             <CustomerSearch
+              brandSlug={brandSlug}
               onSelect={handleCustomerSelect}
               selectedCustomer={selectedCustomer}
               onStartNewCustomer={handleStartNewCustomer}

@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { LoginForm } from "./login-form";
+import { AuthPage } from "@/components/auth/auth-page";
 
 export default function LoginPage() {
   return (
@@ -8,7 +8,7 @@ export default function LoginPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     }>
-      <LoginForm />
+      <AuthPage />
     </Suspense>
   );
 }

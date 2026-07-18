@@ -270,6 +270,7 @@ export async function createPaymentAccountAction(
     if (initialBalance > 0) {
       const { error: movError } = await (supabase as any).rpc("add_payment_account_movement", {
         p_payment_account_id: created.id,
+        p_brand_id: session.brandId,
         p_direction: "IN",
         p_amount: initialBalance,
         p_movement_type: "OPENING_BALANCE",
@@ -512,6 +513,7 @@ export async function adjustPaymentAccountBalanceAction(
 
     const { error: movError } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.accountId,
+      p_brand_id: account.brand_id,
       p_direction: input.direction,
       p_amount: input.amount,
       p_movement_type: "BALANCE_ADJUSTMENT",

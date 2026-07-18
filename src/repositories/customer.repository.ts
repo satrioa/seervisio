@@ -61,11 +61,12 @@ export async function findCustomerByPhone(
   return data;
 }
 
-export async function getCustomerById(id: string): Promise<CustomerRow | null> {
+export async function getCustomerById(brandId: number, id: string): Promise<CustomerRow | null> {
   const db = adminDb();
   const { data, error } = await db
     .from("customers")
     .select("*")
+    .eq("brand_id", brandId)
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();

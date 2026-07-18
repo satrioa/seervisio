@@ -31,6 +31,8 @@ import { useAmbientIntelligence } from "./use-ambient-intelligence";
 import { useIdleTracker } from "@/hooks/use-idle-tracker";
 import { AmbientEyes } from "@/components/ambient-eyes";
 import { Spokes } from "@/components/spokes";
+import { RouteTransitionWatcher } from "./route-transition-watcher";
+import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { TrendingUpIcon, ActivityIcon, ShoppingCartIcon, CheckCheckIcon, XIcon } from "@animateicons/react/lucide";
 
 /* ── Types ── */
@@ -42,30 +44,10 @@ const spring = { type: "spring" as const, stiffness: 400, damping: 30 };
 const feedbackTextTransition = { duration: 0.22, ease: "easeOut" as const };
 
 /* ── Helpers ── */
-function LicenseStatusBadge({ license }: { license: { status: string; expires_at: string | null; is_trial: boolean } }) {
-  const daysLeft = license.expires_at
-    ? Math.max(0, Math.ceil((new Date(license.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0;
-  const isActive = license.status === "active";
-  const isTrial = license.status === "trial" || license.is_trial;
-  const isExpired = license.status === "expired" || (!isActive && !isTrial && daysLeft === 0);
-  const color = isActive ? "text-green-400" : isExpired ? "text-red-400" : "text-amber-400";
-
-  return (
-    <div className={`flex shrink-0 items-center gap-1.5 pr-2 ${color}`}>
-      <span className="size-1.5 rounded-full bg-current" />
-      <span className="text-[10px] font-medium leading-none">
-        {license.status}
-        {daysLeft > 0 && ` · ${daysLeft}h`}
-      </span>
-    </div>
-  );
-}
-
 function getPresetDimensions(size: keyof typeof DynamicIslandSizePresets) {
   const preset = DynamicIslandSizePresets[size];
   if (!preset || preset.aspectRatio === 0) return { width: 0, height: 0 };
-  const w = Math.min(preset.width, 691);
+  const w = Math.min(preset.width, 720);
   return {
     width: w,
     height: preset.height ?? Math.round(preset.aspectRatio * w),
@@ -80,13 +62,13 @@ function getDynamicIslandFeedbackLines(title: string, description?: string | nul
 }
 
 function getFeedbackDimensions(actionState: ActionState) {
-  const height = 44;
+  const height = 32;
   switch (actionState) {
-    case "loading": return { width: 280, height };
-    case "success": return { width: 260, height };
-    case "error":   return { width: 260, height };
-    case "info":    return { width: 220, height };
-    default:        return { width: 220, height };
+    case "loading": return { width: 160, height };
+    case "success": return { width: 150, height };
+    case "error":   return { width: 150, height };
+    case "info":    return { width: 140, height };
+    default:        return { width: 140, height };
   }
 }
 
@@ -145,6 +127,27 @@ function SeervisIslandContent({
 
   const shouldReduceMotion = useReducedMotion();
   const isMobile = useIsMobile();
+  const { mode: theme } = useBrandTheme();
+
+  /* Theme transition pulse animation (delayed until View Transition finishes) */
+  const [themePulse, setThemePulse] = useState(false);
+  const prevTheme = useRef(theme);
+  useEffect(() => {
+    if (!shouldReduceMotion && prevTheme.current !== theme) {
+      // Wait for View Transition to complete before pulsing the island
+      const pulseTimer = setTimeout(() => setThemePulse(true), 40);
+      const clearTimer = setTimeout(() => {
+        setThemePulse(false);
+      }, 540);
+      prevTheme.current = theme;
+      return () => {
+        clearTimeout(pulseTimer);
+        clearTimeout(clearTimer);
+      };
+    }
+  }, [theme, shouldReduceMotion]);
+
+  /* Tour overlay removed — island stays clean during guided tours. */
 
   /* Ticker for multi-line feedback */
   useEffect(() => {
@@ -282,19 +285,19 @@ function SeervisIslandContent({
 
   /* Current dimensions based on mode */
   const dims =
-    mode === "expanded" && hasActiveShift
-      ? { width: 371, height: 150 }
-      : mode === "expanded" && !hasActiveShift
-        ? { width: 371, height: 150 }
-        : mode === "welcome"
-          ? { width: 371, height: 84 }
-          : mode === "feedback"
-            ? getFeedbackDimensions(actionState)
-            : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
-              ? { width: 280, height: 44 }
-              : mode === "idle" && hasActiveShift
-                ? { width: 220, height: 44 }
-                : getPresetDimensions(mode === "expanded" ? "medium" : "compact");
+    mode === "expanded"
+      ? { width: 330, height: 120 }
+      : mode === "welcome"
+        ? { width: 300, height: 68 }
+        : mode === "feedback"
+          ? getFeedbackDimensions(actionState)
+          : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
+            ? { width: isMobile ? 320 : 380, height: 31 }
+            : mode === "idle" && hasActiveShift
+              ? { width: isMobile ? 240 : 220, height: 31 }
+              : mode === "idle" && !hasActiveShift
+                ? { width: isMobile ? 240 : 240, height: 31 }
+                : getPresetDimensions("compact");
   const initialDims =
     mode === "welcome" ? getPresetDimensions("compact") : dims;
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
@@ -306,11 +309,12 @@ function SeervisIslandContent({
     <motion.div
       ref={islandRef}
       data-island-root
-      className="flex origin-center cursor-pointer items-center justify-center rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-black/10 dark:bg-white dark:text-black dark:hover:border-black/20"
+      data-tour="dynamic-island"
+      className="flex origin-center cursor-pointer items-stretch rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
       initial={{
         width: initialDims.width,
         height: initialDims.height,
-        borderRadius: 46,
+        borderRadius: 36,
       }}
       animate={{
         width: dims.width,
@@ -318,11 +322,21 @@ function SeervisIslandContent({
         borderRadius: islandBorderRadius,
         boxShadow: islandShadow,
         x: errorShake ? [0, -4, 4, -4, 4, -2, 2, 0] : 0,
+        scale: themePulse ? [1, 1.06, 1] : 1,
+        borderColor: themePulse
+          ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
+          : "rgba(255,255,255,0.1)",
       }}
-      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 371px)" }}
+      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
       transition={{
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,
+        scale: themePulse
+          ? { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
+          : { duration: 0 },
+        borderColor: themePulse
+          ? { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
+          : { duration: 0 },
       }}
       onClick={handleToggle}
       role="button"
@@ -340,7 +354,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex items-center gap-3 px-5 py-3"
+            className="flex w-full items-center gap-3 px-0.5 py-0.5"
           >
             <img
               src="/images/welcome-wave.gif"
@@ -349,10 +363,10 @@ function SeervisIslandContent({
               aria-hidden="true"
             />
             <div className="flex min-w-0 flex-col gap-0.5 text-left">
-              <span className="truncate text-xs font-medium text-white/90 dark:text-black/90">
+              <span className="truncate text-xs font-medium text-white/90 dark:text-white/90">
                 Selamat datang, {userName ?? "User"}
               </span>
-              <span className="truncate text-[10px] leading-tight text-white/50 dark:text-black/50">
+              <span className="truncate text-[10px] leading-tight text-white/50 dark:text-white/50">
                 Pantau operasional toko dari satu tempat.
               </span>
             </div>
@@ -367,10 +381,10 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-center justify-between gap-2 px-2"
+            className="flex w-full items-stretch justify-center gap-2 px-0.5 py-0.5"
           >
             <div
-              className="relative min-w-0 flex-1 overflow-hidden"
+              className="relative flex min-w-0 flex-1 items-center overflow-hidden"
               aria-label="Buka toko untuk memulai session"
               style={{
                 WebkitMaskImage:
@@ -388,17 +402,17 @@ function SeervisIslandContent({
                   repeat: Infinity,
                 }}
               >
-                <span className="pr-6 text-xs text-white/60 dark:text-black/60">
+                <span className="pr-6 text-xs text-white/60 dark:text-white/60">
                   {displayBranchName} · Buka toko untuk memulai session
                 </span>
-                <span className="pr-6 text-xs text-white/60 dark:text-black/60" aria-hidden="true">
+                <span className="pr-6 text-xs text-white/60 dark:text-white/60" aria-hidden="true">
                   {displayBranchName} · Buka toko untuk memulai session
                 </span>
               </motion.div>
             </div>
             <Button
-              size="sm"
-              className="h-9 shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
+              size="xs"
+              className="h-full shrink-0 rounded-full border-white/20 bg-white px-3 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
               onClick={(e) => {
                 e.stopPropagation();
                 handleBukaToko();
@@ -406,9 +420,6 @@ function SeervisIslandContent({
             >
               Buka Toko
             </Button>
-            {activeLicense && (
-              <LicenseStatusBadge license={activeLicense} />
-            )}
           </motion.div>
         )}
 
@@ -420,19 +431,19 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="flex items-center gap-2.5 px-4"
+            className="flex w-full items-center gap-2.5 px-0.5 py-0.5"
           >
             {ambient.mode === "idle" && showEyes ? (
-              <div className="flex items-center justify-center text-white/40 dark:text-black/40">
+              <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">
               <AmbientEyes />
               </div>
             ) : ambient.mode === "idle" ? (
               <>
                 <span className="size-1.5 shrink-0 rounded-full bg-green-400/80" />
-                <span className="whitespace-nowrap text-xs font-medium text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs font-medium text-white/80 dark:text-white/80">
                   {displayBranchName}
                 </span>
-                <span className="text-[10px] text-white/40 dark:text-black/40 tabular-nums">
+                <span className="text-[10px] text-white/40 dark:text-white/40 tabular-nums">
                   {shiftDuration}
                 </span>
               </>
@@ -446,34 +457,34 @@ function SeervisIslandContent({
             ) : ambient.currentText?.startsWith("Revenue") ? (
               <>
                 <TrendingUpIcon size={14} isAnimated color="currentColor" />
-                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-white/80">
                   {ambient.currentText}
                 </span>
               </>
             ) : ambient.currentText?.startsWith("Shift") ? (
               <>
                 <ActivityIcon size={14} isAnimated color="currentColor" />
-                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-white/80">
                   {ambient.currentText}
                 </span>
               </>
             ) : ambient.currentText?.startsWith("Transaksi") ? (
               <>
                 <ShoppingCartIcon size={14} isAnimated color="currentColor" />
-                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-white/80">
                   {ambient.currentText}
                 </span>
               </>
             ) : ambient.currentText?.startsWith("Servis") ? (
               <>
                 <CheckCheckIcon size={14} isAnimated color="currentColor" />
-                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-white/80">
                   {ambient.currentText}
                 </span>
               </>
             ) : (
               <>
-                <span className="whitespace-nowrap text-xs text-white/80 dark:text-black/80">
+                <span className="whitespace-nowrap text-xs text-white/80 dark:text-white/80">
                   {ambient.currentText}
                 </span>
               </>
@@ -489,10 +500,10 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex items-center justify-center gap-2.5 px-5"
+            className="flex w-full items-center justify-center gap-2.5 px-0.5 py-0.5"
           >
-            <Loader2 className="size-3.5 animate-spin text-white/50 dark:text-black/50" />
-            <span className="text-xs text-white/50 dark:text-black/50">Memuat shift...</span>
+            <Loader2 className="size-3.5 animate-spin text-white/100 dark:text-white/100" />
+            <span className="text-xs text-white/50 dark:text-white/50">Memuat shift...</span>
           </motion.div>
         )}
 
@@ -504,25 +515,25 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
-            className="flex w-full flex-col gap-3 p-4"
+            className="flex w-full flex-col gap-1 p-0.5"
           >
-            <div className="space-y-0.5">
-              <p className="text-sm font-medium text-white dark:text-black">Session belum dimulai</p>
-              <p className="text-xs leading-relaxed text-white/50 dark:text-black/50">
+            <div className="space-y-1 px-2 py-1"  >
+              <p className="text-sm font-medium text-white dark:text-white">Session belum dimulai</p>
+              <p className="text-xs leading-relaxed text-white/50 dark:text-white/50">
                 Buka toko untuk mulai mencatat transaksi, servis, dan kas hari
                 ini.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex gap-5" >
               <Button
                 size="sm"
-                className="h-9 gap-1.5 rounded-full border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-black/20 dark:bg-black dark:text-white dark:hover:bg-black/90"
+                className="h-9 gap-1.5 rounded-2xl border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleBukaToko();
                 }}
               >
-                <Store className="size-3.5" />
+                <Store className="size-3.5 " />
                 Buka Toko
               </Button>
             </div>
@@ -537,11 +548,11 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
-            className="flex w-full flex-col gap-3 p-4"
+            className="flex w-full flex-col gap-3 p-0.5"
           >
             <div className="flex items-center gap-2">
               <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
-              <p className="text-sm font-medium text-white dark:text-black">
+              <p className="text-sm font-medium text-white dark:text-white">
                 {displayBranchName} · {shiftLabel}
               </p>
             </div>
@@ -579,11 +590,11 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex h-full items-center justify-center gap-2.5 overflow-hidden px-5"
+            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-0.5 py-0.5"
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
-                <Spokes className="size-[18px] text-white/70 dark:text-black/70" style={{ "--duration": "0.9s" } as React.CSSProperties} />
+                <Spokes className="size-[18px] text-white/70 dark:text-white/70" style={{ "--duration": "0.9s" } as React.CSSProperties} />
               )}
               {actionState === "success" && (
                 <CheckCheckIcon size={16} isAnimated color="currentColor" className="text-green-400" />
@@ -602,7 +613,7 @@ function SeervisIslandContent({
                   key={`${actionState}-${activeLineIndex}-${feedbackLines[activeLineIndex]}`}
                   className={`whitespace-nowrap text-xs font-semibold ${
                     actionState === "loading"
-                      ? "text-white dark:text-black"
+                      ? "text-white dark:text-white"
                       : actionState === "success"
                         ? "text-green-400"
                         : actionState === "error"
@@ -649,10 +660,10 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[11px] text-white/50 dark:text-black/50">{label}</span>
+      <span className="text-[11px] text-white/50 dark:text-white/50">{label}</span>
       <span
         className={`text-right text-xs font-medium ${
-          highlight ? "text-amber-300" : "text-white/80 dark:text-black/80"
+          highlight ? "text-amber-300" : "text-white/80 dark:text-white/80"
         }`}
       >
         {value}
@@ -673,6 +684,7 @@ export function SeervisDynamicIsland({
 }) {
   return (
     <DynamicIslandProvider initialSize={"medium" as any}>
+      <RouteTransitionWatcher />
       <SeervisIslandContent userName={userName} onOpenShift={onOpenShift} activeLicense={activeLicense} />
     </DynamicIslandProvider>
   );

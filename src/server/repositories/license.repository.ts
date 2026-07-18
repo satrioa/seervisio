@@ -44,6 +44,7 @@ function mapLicense(row: any): License {
     brand_id: row.brand_id,
     package_id: row.package_id,
     order_id: row.order_id,
+    license_payment_id: row.license_payment_id ?? null,
     status: row.status,
     started_at: row.started_at,
     expires_at: row.expires_at,
@@ -71,9 +72,9 @@ function mapPackage(row: any): LicensePackage {
     max_storage_mb: row.max_storage_mb,
     max_transactions: row.max_transactions,
     is_active: row.is_active,
-    billing_duration_enabled: row.billing_duration_enabled ?? true,
-    billing_duration_type: row.billing_duration_type ?? "month",
-    billing_duration_value: row.billing_duration_value ?? 1,
+    billing_duration_enabled: row.billing_duration_enabled ?? false,
+    billing_duration_type: row.billing_duration_type ?? null,
+    billing_duration_value: row.billing_duration_value ?? null,
   };
 }
 

@@ -13,6 +13,7 @@ import {
   type BillingCycle,
 } from "@/lib/customer-journey/checkout-session";
 import { getProfileByAuthUserId } from "@/repositories/profile.repository";
+import { getActiveCouponByCode } from "@/repositories/coupon.repository";
 
 function generateUuid(): string {
   const c = (globalThis as any).crypto;
@@ -84,7 +85,7 @@ export async function createCheckoutSessionAction(input: {
 
     const { data: pkg, error: pkgError } = await (adminDb as any)
       .from("packages")
-      .select("id, slug, name, price")
+      .select("id, slug, name, price, billing_duration_enabled")
       .eq("id", input.packageId)
       .eq("is_active", true)
       .maybeSingle();
@@ -92,6 +93,10 @@ export async function createCheckoutSessionAction(input: {
     if (pkgError || !pkg) {
       return errorResult("Paket tidak ditemukan.");
     }
+
+    // Lifetime packages (billing_duration_enabled = false) use "lifetime" as billing cycle
+    const isLifetime = pkg.billing_duration_enabled === false;
+    const defaultBillingCycle = isLifetime ? "lifetime" : "monthly";
 
     const token = generateToken();
     const sessionId = generateUuid();
@@ -102,20 +107,23 @@ export async function createCheckoutSessionAction(input: {
       package_slug: pkg.slug,
       package_name: pkg.name,
       price: Number(pkg.price),
-      billing_cycle: input.billingCycle ?? "monthly",
+      billing_cycle: input.billingCycle ?? defaultBillingCycle,
     });
 
-    let coupon: Coupon | null = null;
     if (input.couponCode) {
-      // Stubbed coupon lookup: a real coupon service would validate
-      // here. We accept a simple well-known dev coupon for now.
-      if (input.couponCode.toUpperCase() === "WELCOME10") {
-        coupon = { code: "WELCOME10", type: "percent", value: 10, currency: session.currency };
-      }
-      try {
-        session = applyCoupon(session, coupon);
-      } catch {
-        return errorResult("Kupon tidak valid untuk mata uang ini.");
+      const couponRow = await getActiveCouponByCode(input.couponCode);
+      if (couponRow) {
+        const coupon: Coupon = {
+          code: couponRow.code,
+          type: couponRow.discountType,
+          value: couponRow.discountValue,
+          currency: couponRow.currency,
+        };
+        try {
+          session = applyCoupon(session, coupon);
+        } catch {
+          return errorResult("Kupon tidak valid untuk mata uang ini.");
+        }
       }
     }
 
@@ -229,6 +237,84 @@ export async function afterLoginRebindCheckoutAction(): Promise<ActionResult<voi
   return bindActiveCheckoutSessionToUserAction();
 }
 
+// Apply or remove a coupon on an existing active session.
+// Validates the coupon against the DB before applying.
+export async function applyCouponToSessionAction(
+  token: string,
+  couponCode: string | null,
+): Promise<ActionResult<CheckoutSessionView>> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient() as any;
+
+    const { data: row, error: fetchError } = await adminDb
+      .from("checkout_sessions")
+      .select("*")
+      .eq("token", token)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (fetchError || !row) {
+      return errorResult("Sesi checkout tidak ditemukan.");
+    }
+
+    let session: CheckoutSession = { ...row, status: "active" };
+
+    if (couponCode) {
+      const couponRow = await getActiveCouponByCode(couponCode);
+      if (!couponRow) {
+        return errorResult("Kode kupon tidak valid atau sudah kadaluarsa.");
+      }
+
+      // Check min order amount
+      if (couponRow.minOrderAmount && session.price < couponRow.minOrderAmount) {
+        return errorResult(
+          `Minimal pembelian ${couponRow.minOrderAmount} untuk kupon ini.`,
+        );
+      }
+
+      // Check max uses
+      if (couponRow.maxUses && couponRow.usedCount >= couponRow.maxUses) {
+        return errorResult("Kuota pemakaian kupon sudah habis.");
+      }
+
+      const coupon: Coupon = {
+        code: couponRow.code,
+        type: couponRow.discountType,
+        value: couponRow.discountValue,
+        currency: couponRow.currency,
+      };
+
+      try {
+        session = applyCoupon(session, coupon);
+      } catch {
+        return errorResult("Kupon tidak valid untuk mata uang ini.");
+      }
+    } else {
+      session = { ...session, coupon_code: null, discount_amount: 0, total_amount: session.price };
+    }
+
+    const { data: updated, error: updateError } = await adminDb
+      .from("checkout_sessions")
+      .update({
+        coupon_code: session.coupon_code,
+        discount_amount: session.discount_amount,
+        total_amount: session.total_amount,
+      })
+      .eq("token", token)
+      .select()
+      .single();
+
+    if (updateError || !updated) {
+      return errorResult("Gagal menerapkan kupon.");
+    }
+
+    return successResult(mapSessionView(updated));
+  } catch (err: any) {
+    console.error("[checkout] applyCouponToSessionAction:", err.message);
+    return errorResult("Gagal menerapkan kupon.");
+  }
+}
+
 // After a successful login, re-bind any active session belonging to this
 // user (covers the case where the session was created pre-login).
 export async function bindActiveCheckoutSessionToUserAction(): Promise<ActionResult<void>> {
@@ -238,13 +324,17 @@ export async function bindActiveCheckoutSessionToUserAction(): Promise<ActionRes
     if (!user) return successResult(undefined);
 
     const profile = (await getProfileByAuthUserId(supabase as any, user.id)) as any;
-    if (!profile) return successResult(undefined);
+    if (!profile || !profile.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id)) {
+      // Profile missing or has an invalid (e.g. "null") id — skip rebind to
+      // avoid "invalid input syntax for type uuid".
+      return successResult(undefined);
+    }
 
     const adminDb = createServiceRoleSupabaseClient();
     const { error } = await (adminDb as any)
       .from("checkout_sessions")
       .update({ profile_id: profile.id })
-      .eq("profile_id", null)
+      .is("profile_id", null)
       .eq("status", "active")
       .filter("expires_at", "gt", new Date().toISOString())
       .maybeSingle();

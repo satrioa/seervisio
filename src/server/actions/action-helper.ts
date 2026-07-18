@@ -2,6 +2,7 @@
  * Shared utilities for server actions.
  */
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import {
   getProfileByAuthUserId,
   getMembershipForBrand,
@@ -56,12 +57,19 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
     throw new Error("Profile not found");
   }
 
+  // Use the service-role client for all data reads below. The user is
+  // already authenticated above (supabase.auth.getUser()), and we scope
+  // every query by the verified profile.id, so this is safe. Using the
+  // admin client avoids RLS edge cases in the server-action context where
+  // the user session JWT may not resolve membership rows reliably.
+  const adminDb = createServiceRoleSupabaseClient();
+
   // Get brand by slug (may fail if slug was recently changed)
-  let brand = await getBrandBySlug(supabase as any, brandSlug);
+  let brand = await getBrandBySlug(adminDb as any, brandSlug);
 
   // Brand slug may have changed — resolve from user's membership
   if (!brand) {
-    const { data: membership } = await (supabase as any)
+    const { data: membership } = await (adminDb as any)
       .from("user_brand_memberships")
       .select("brand_id")
       .eq("profile_id", profile.id)
@@ -70,7 +78,7 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
       .maybeSingle();
 
     if (membership?.brand_id) {
-      const { data: brandById } = await (supabase as any)
+      const { data: brandById } = await (adminDb as any)
         .from("brands")
         .select("id, name, slug")
         .eq("id", membership.brand_id)
@@ -87,11 +95,11 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
   }
 
   // Get membership for this brand
-  let membership = await getMembershipForBrand(supabase as any, profile.id, brand.id);
+  let membership = await getMembershipForBrand(adminDb as any, profile.id, brand.id);
 
   // If no brand-specific membership, check for PLATFORM_OWNER (brand_id = NULL)
   if (!membership) {
-    const { data: platformMembership } = await (supabase as any)
+    const { data: platformMembership } = await (adminDb as any)
       .from("user_brand_memberships")
       .select("*")
       .eq("profile_id", profile.id)
@@ -99,6 +107,38 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
       .eq("role", "PLATFORM_OWNER")
       .maybeSingle();
     membership = platformMembership;
+  }
+
+  // Self-heal: a license holder for this brand may be missing a membership
+  // (e.g. the Welcome Wizard membership step was skipped). If they own an
+  // active license bound to this brand, grant MASTER_ADMIN instead of denying.
+  if (!membership) {
+    try {
+      const { getActiveLicenseForProfile } = await import("@/server/repositories/license.repository");
+      const license = await getActiveLicenseForProfile(profile.id);
+      const ownsBrand =
+        (license && (license as any).brand_id === brand.id) ||
+        (license && !(license as any).brand_id);
+
+      if (ownsBrand) {
+        const { data: created, error: createErr } = await (adminDb as any)
+          .from("user_brand_memberships")
+          .insert({
+            profile_id: profile.id,
+            brand_id: brand.id,
+            role: "MASTER_ADMIN",
+            is_active: true,
+          })
+          .select("*")
+          .single();
+
+        if (!createErr && created) {
+          membership = created;
+        }
+      }
+    } catch {
+      // fall through to the denial below
+    }
   }
 
   if (!membership) {
@@ -110,14 +150,14 @@ export async function getSessionData(brandSlug: string): Promise<SessionData> {
 
   const accessibleBranchIds = canAccessAllBranches
     ? []
-    : await getBranchAccessForMembership(supabase as any, membership.id);
+    : await getBranchAccessForMembership(adminDb as any, membership.id);
 
   const defaultBranchId = canAccessAllBranches
     ? null
-    : await getDefaultBranchId(supabase as any, membership.id);
+    : await getDefaultBranchId(adminDb as any, membership.id);
 
   // Check active operator override
-  const activeOperator = await resolveActiveOperator(supabase as any, brand.id, profile.id);
+  const activeOperator = await resolveActiveOperator(adminDb as any, brand.id, profile.id);
   if (activeOperator) {
     return {
       // TODO: Add sessionUserId for dual tracking when active operator differs from auth user

@@ -7,17 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  type CustomerMock,
-  searchCustomers,
-  formatCurrency,
-} from "@/components/customers/customer-data";
+import { searchCustomersAction, type CustomerListItem } from "@/server/actions/customer.actions";
+
+function formatCurrency(amount: number): string {
+  return "Rp" + amount.toLocaleString("id-ID");
+}
 
 /* ─── Customer Search ─── */
 
 interface CustomerSearchProps {
-  onSelect: (customer: CustomerMock | null) => void;
-  selectedCustomer: CustomerMock | null;
+  brandSlug: string;
+  onSelect: (customer: CustomerListItem | null) => void;
+  selectedCustomer: CustomerListItem | null;
   /** Called when user wants to create a new customer with entered text */
   onStartNewCustomer: (searchText: string) => void;
   /** Current manual input values (used when no customer selected) */
@@ -28,6 +29,7 @@ interface CustomerSearchProps {
 }
 
 export function CustomerSearch({
+  brandSlug,
   onSelect,
   selectedCustomer,
   onStartNewCustomer,
@@ -37,7 +39,7 @@ export function CustomerSearch({
   onManualChange,
 }: CustomerSearchProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CustomerMock[]>([]);
+  const [results, setResults] = useState<CustomerListItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,14 +47,22 @@ export function CustomerSearch({
 
   // Search as user types
   useEffect(() => {
-    if (query.trim().length >= 1) {
-      setResults(searchCustomers(query));
-      setIsOpen(true);
+    if (query.trim().length >= 2) {
+      const timer = setTimeout(async () => {
+        const res = await searchCustomersAction(brandSlug, query.trim());
+        if (res.success) {
+          setResults(res.data);
+        } else {
+          setResults([]);
+        }
+        setIsOpen(true);
+      }, 300);
+      return () => clearTimeout(timer);
     } else {
       setResults([]);
       setIsOpen(false);
     }
-  }, [query]);
+  }, [query, brandSlug]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -72,7 +82,7 @@ export function CustomerSearch({
 
   // Handle customer selection
   const handleSelect = useCallback(
-    (customer: CustomerMock) => {
+    (customer: CustomerListItem) => {
       onSelect(customer);
       setQuery(customer.name);
       setIsOpen(false);

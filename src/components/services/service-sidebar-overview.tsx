@@ -65,7 +65,7 @@ export function ServiceSidebarOverview() {
           <ClipboardList className="size-4 shrink-0 text-muted-foreground" />
           <h3 className="truncate text-sm font-semibold">Overview Servis</h3>
         </div>
-        <Button size="sm" className="h-8 shrink-0 gap-1.5 px-2.5 text-xs" onClick={openCreateService}>
+        <Button size="sm" className="h-8 shrink-0 gap-1.5 px-2.5 text-xs" onClick={openCreateService} data-tour="new-service">
           <Plus className="size-3.5" />
           Buat Servis Baru
         </Button>
@@ -138,21 +138,10 @@ export function ServiceSidebarOverview() {
             <div className="w-full">
               <ChartContainer config={chartConfig} className="h-[180px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={stats.trend14Days} margin={{ top: 5, right: 8, bottom: 5, left: -20 }}>
+                  <LineChart data={stats.trend14Days} margin={{ top: 5, right: 8, bottom: 5, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10 }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(val: string) => val.slice(3)}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10 }}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                    />
+                    <XAxis hide />
+                    <YAxis hide />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Line
                       type="monotone"

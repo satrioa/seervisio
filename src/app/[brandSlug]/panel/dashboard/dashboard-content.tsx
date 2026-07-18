@@ -15,6 +15,7 @@ import type { DateRange } from "react-day-picker";
 import type { DateRangeMode, ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { getChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { getDashboardOverviewAction, type DashboardData } from "@/server/actions/dashboard.actions";
+import { consumeDashboardPrefetch, type DashboardPrefetchResult } from "@/lib/dashboard/dashboard-prefetch";
 
 const GeneralOverviewTab = dynamic(
   () =>
@@ -56,6 +57,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
   const [endYear, setEndYear] = React.useState<number|undefined>(undefined);
   const [granularity, setGranularity] = React.useState<ChartGranularity>("day");
 
+  const prefetched = React.useRef<Promise<DashboardPrefetchResult> | null>(consumeDashboardPrefetch(brandSlug));
   const [dashboardData, setDashboardData] = React.useState<DashboardData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -81,9 +83,21 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
   React.useEffect(() => {
     let cancelled = false;
     async function fetchData() {
-      setLoading(true);
       setError(null);
       try {
+        /* Check prefetched data (only for initial load w/ default params) */
+        if (prefetched.current) {
+          const cached = await prefetched.current;
+          prefetched.current = null;
+          if (cancelled) return;
+          if (cached.success && cached.data) {
+            setDashboardData(cached.data);
+            setLoading(false);
+            return;
+          }
+        }
+
+        setLoading(true);
         const dateFrom = dateRange?.from
           ? dateRange.from.toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0];
@@ -116,7 +130,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
   }, [brandSlug, activeBranchId, dateRange?.from?.getTime(), dateRange?.to?.getTime()]);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-4" data-tour="dashboard-overview">
       {/* ── Page Header ── */}
       <PageHeader
         title="Dashboard"
@@ -139,36 +153,26 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
       />
 
       {/* ── Tabs ── */}
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto border-b bg-transparent p-0">
-          <TabsTrigger
-            value="general"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Store className="mr-1.5 size-3.5" /> General
-          </TabsTrigger>
-          <TabsTrigger
-            value="servis"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Wrench className="mr-1.5 size-3.5" /> Servis
-          </TabsTrigger>
-          <TabsTrigger
-            value="finance"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <DollarSign className="mr-1.5 size-3.5" /> Finance
-          </TabsTrigger>
-          <TabsTrigger
-            value="inventory"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Package className="mr-1.5 size-3.5" /> Inventory
-          </TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="general" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList className="gap-1">
+            <TabsTrigger value="general">
+              <Store /> General
+            </TabsTrigger>
+            <TabsTrigger value="servis">
+              <Wrench /> Servis
+            </TabsTrigger>
+            <TabsTrigger value="finance">
+              <DollarSign /> Finance
+            </TabsTrigger>
+            <TabsTrigger value="inventory">
+              <Package /> Inventory
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* TAB 1 — GENERAL */}
-        <TabsContent value="general" className="mt-3">
+        <TabsContent value="general" className="flex flex-col gap-4">
           <GeneralOverviewTab
             brandSlug={brandSlug}
             dateRange={dateRange}
@@ -180,17 +184,17 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
         </TabsContent>
 
         {/* TAB 2 — SERVIS */}
-        <TabsContent value="servis" className="mt-3">
+        <TabsContent value="servis" className="flex flex-col gap-4">
           <ServiceOverviewTab data={dashboardData?.service ?? null} />
         </TabsContent>
 
         {/* TAB 3 — FINANCE */}
-        <TabsContent value="finance" className="mt-3">
+        <TabsContent value="finance" className="flex flex-col gap-4">
           <FinanceOverviewTab data={dashboardData?.finance ?? null} />
         </TabsContent>
 
         {/* TAB 4 — INVENTORY */}
-        <TabsContent value="inventory" className="mt-3">
+        <TabsContent value="inventory" className="flex flex-col gap-4">
           <InventoryOverviewTab data={dashboardData?.inventory ?? null} />
         </TabsContent>
       </Tabs>

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 
-const DURATION = 300;
+const DURATION = 350;
 const GLOW_DURATION = 200;
 
 interface UseThemeTransitionOptions {
@@ -11,6 +11,14 @@ interface UseThemeTransitionOptions {
 
 export function useThemeTransition({ onToggle }: UseThemeTransitionOptions) {
   const glowingRef = useRef(false);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  const cleanupOverlay = useCallback(() => {
+    if (overlayRef.current) {
+      overlayRef.current.remove();
+      overlayRef.current = null;
+    }
+  }, []);
 
   const toggleTheme = useCallback(() => {
     const island = document.querySelector<HTMLElement>("[data-island-root]");
@@ -27,6 +35,22 @@ export function useThemeTransition({ onToggle }: UseThemeTransitionOptions) {
 
     document.documentElement.style.setProperty("--transition-origin-x", `${cx}px`);
     document.documentElement.style.setProperty("--transition-origin-y", `${cy}px`);
+
+    // Blur-pulse overlay
+    const overlay = document.createElement("div");
+    overlayRef.current = overlay;
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      pointer-events: none;
+      clip-path: circle(0% at ${cx}px ${cy}px);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      background: radial-gradient(circle at ${cx}px ${cy}px, rgba(255,255,255,0.06) 0%, transparent 60%);
+      animation: blur-pulse-expand ${DURATION}ms ease-in-out forwards;
+    `;
+    document.body.appendChild(overlay);
 
     // Start glow
     glowingRef.current = true;
@@ -47,10 +71,11 @@ export function useThemeTransition({ onToggle }: UseThemeTransitionOptions) {
       glowingRef.current = false;
       delete island.dataset.islandGlow;
       clearTimeout(glowTimer);
+      cleanupOverlay();
       document.documentElement.style.removeProperty("--transition-origin-x");
       document.documentElement.style.removeProperty("--transition-origin-y");
     });
-  }, [onToggle]);
+  }, [onToggle, cleanupOverlay]);
 
   return { toggleTheme };
 }

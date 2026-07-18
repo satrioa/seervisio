@@ -4,6 +4,7 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { successResult, errorResult, type ActionResult } from "./action-helper";
 import { getProfileByAuthUserId } from "@/repositories/profile.repository";
+import { Mailer } from "@/server/mail/mailer";
 
 
 export interface SignupInput {
@@ -50,7 +51,7 @@ export async function signupAction(
       .insert({
         auth_user_id: authUserId,
         email: input.email,
-        name: input.companyName,
+        name: input.fullName,
         business_name: input.companyName,
         is_active: true,
         account_type: 'customer',
@@ -92,6 +93,19 @@ export async function signupAction(
         console.warn("[auth] Failed to bind checkout session:", e);
       }
     }
+
+    // Non-blocking: send welcome email
+    void Mailer.send({
+      to: input.email,
+      toName: input.fullName,
+      subject: "Selamat Datang di Seervisio!",
+      template: "welcome-email",
+      data: {
+        customerName: input.fullName,
+        businessName: input.companyName,
+        dashboardUrl: "https://app.seervisio.com",
+      },
+    });
 
     return successResult({ profileId: profile.id, brandId });
   } catch (err: any) {

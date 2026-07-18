@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { fontVars } from "@/lib/fonts/registry";
 import { PREFERENCE_DEFAULTS } from "@/lib/preferences/preferences-config";
 import { ThemeBootScript } from "@/scripts/theme-boot";
@@ -25,6 +27,7 @@ export default function RootLayout({
   return (
     <html
       lang="id"
+      className="dark"
       data-theme-mode={theme_mode}
       data-theme-preset={theme_preset}
       data-content-layout={content_layout}
@@ -37,15 +40,18 @@ export default function RootLayout({
       <head>
         <ThemeBootScript />
       </head>
-      <body className={fontVars}>
+      <body className={`${fontVars} min-h-screen antialiased`}>
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var p=window.location.pathname;if(p.includes('/mockup')){try{localStorage.setItem('theme','dark')}catch(e){}document.documentElement.classList.add('dark')}})()`,
           }}
         />
-        <PreferencesStoreProvider initialValues={PREFERENCE_DEFAULTS}>
-          <Providers>{children}</Providers>
-        </PreferencesStoreProvider>
+        <TooltipProvider>
+          <PreferencesStoreProvider initialValues={PREFERENCE_DEFAULTS}>
+            <Providers>{children}</Providers>
+            <Toaster />
+          </PreferencesStoreProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

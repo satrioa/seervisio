@@ -18,7 +18,6 @@ export async function getProfileByAuthUserId(
   supabase: SupabaseClient<any, any, any>,
   authUserId: string
 ): Promise<DbProfile | null> {
-  console.log("[profile.repository] getProfileByAuthUserId called with authUserId:", authUserId);
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -28,7 +27,6 @@ export async function getProfileByAuthUserId(
   if (error) {
     console.error("[profile.repository] Query error:", error.message, error.details, error.hint);
   }
-  console.log("[profile.repository] Result:", data ? `found profile id=${data.id} name=${data.name}` : "null");
   return data ?? null;
 }
 
@@ -61,9 +59,13 @@ export async function getMembershipForBrand(
     .select("*")
     .eq("profile_id", profileId)
     .eq("brand_id", brandId)
-    .single();
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  return data ?? null;
+  return (data as DbMembership) ?? null;
 }
 
 /**

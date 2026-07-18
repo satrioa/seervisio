@@ -62,7 +62,7 @@ export function UnifiedTopFrame({
             style={{ filter: `url(#${GOOEY_ID})`, maxWidth: 371 }}
           >
             <div className="pointer-events-none h-3 w-full bg-[#050505]" />
-            <div className="-mt-[1px] pointer-events-auto">
+            <div className="-mt-[1px] mb-2 pointer-events-auto">
               <SeervisDynamicIsland
                 userName={userName}
                 onOpenShift={onOpenShift}

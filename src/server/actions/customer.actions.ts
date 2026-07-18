@@ -21,6 +21,71 @@ export interface CustomerListItem {
   createdAt: string;
 }
 
+export async function searchCustomersAction(
+  brandSlug: string,
+  query: string,
+): Promise<ActionResult<CustomerListItem[]>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "customer.view");
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const q = `%${query.trim()}%`;
+
+    const { data: customers, error } = await (adminDb as any)
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        email,
+        address,
+        created_at,
+        services!left(
+          id,
+          final_cost,
+          current_status,
+          warranty_until,
+          created_at
+        )
+      `)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .or(`name.ilike.${q},phone.ilike.${q},email.ilike.${q}`)
+      .order("name", { ascending: true })
+      .limit(10);
+
+    if (error) throw error;
+
+    const now = new Date().toISOString();
+    const result: CustomerListItem[] = (customers ?? []).map((c: any) => {
+      const svcs: any[] = Array.isArray(c.services) ? c.services : [];
+      return {
+        id: c.id,
+        name: c.name,
+        phone: c.phone ?? null,
+        email: c.email ?? null,
+        address: c.address ?? null,
+        totalSpend: svcs.reduce((sum: number, s: any) => sum + Number(s.final_cost ?? 0), 0),
+        totalServices: svcs.length,
+        activeServices: svcs.filter((s: any) => !["DONE", "CANCELLED"].includes(s.current_status)).length,
+        activeWarranties: svcs.filter((s: any) => s.warranty_until && s.warranty_until > now).length,
+        lastServiceAt: svcs.length > 0
+          ? svcs.reduce((latest: string | null, s: any) =>
+              !latest || s.created_at > latest ? s.created_at : latest, null)
+          : null,
+        branchNames: [],
+        createdAt: c.created_at,
+      };
+    });
+
+    return successResult(result);
+  } catch (err: any) {
+    console.error("[searchCustomersAction]", err);
+    return errorResult(err.message ?? "Gagal mencari pelanggan.");
+  }
+}
+
 export async function listCustomersAction(
   brandSlug: string,
   branchId?: string | null,

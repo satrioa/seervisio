@@ -2,21 +2,22 @@
 
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   SidebarProvider,
   SidebarTrigger,
   SidebarInset,
 } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import dynamic from "next/dynamic";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { SeervisDynamicIsland } from "@/components/layout/seervis-dynamic-island";
 import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
 import { NotificationPopover } from "@/components/notifications/NotificationPopover";
-import { Moon, Sun } from "lucide-react";
 import { BrandThemeProvider } from "@/components/theme/brand-theme-provider";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
+import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 import { RightSidebarProvider } from "@/components/layout/right-sidebar-context";
 import { RightSidebarPanel } from "@/components/layout/right-sidebar-panel";
 import GradualBlur from "@/components/GradualBlur";
@@ -30,7 +31,7 @@ import { ROLE_LABELS } from "@/lib/permissions/roles";
 import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileNav } from "@/components/layout/mobile-nav";
-import { useThemeTransition } from "@/hooks/use-theme-transition";
+import { ThemeTogglerButton } from "@/components/matos-ui/theme-toggler-button";
 import { SystemLoader } from "@/components/system-loader/SystemLoader";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +39,17 @@ import { useAutoClose } from "@/hooks/use-auto-close";
 import { LanguageProviderWrapper } from "@/components/settings/language-provider-wrapper";
 import { OnboardingProvider, useOnboarding } from "@/components/onboarding/onboarding-provider";
 import { LicenseGuard } from "@/components/layout/license-guard";
+import { TourProvider, useTour } from "@/features/tour/TourContext";
+
+const SeervisDynamicIsland = dynamic(
+  () => import("@/components/layout/seervis-dynamic-island").then((m) => ({ default: m.SeervisDynamicIsland })),
+  { ssr: false }
+);
+
+const CommandMenu = dynamic(
+  () => import("@/components/layout/command-menu").then((m) => ({ default: m.CommandMenu })),
+  { ssr: false }
+);
 
 interface PanelLayoutClientProps {
   children: React.ReactNode;
@@ -60,6 +72,8 @@ interface PanelLayoutClientProps {
   onboardingCompleted?: boolean;
   onboardingCompletedTasks?: string[];
   activeLicense: { status: string; expires_at: string | null; is_trial: boolean } | null;
+  aiCommandCenterEnabled?: boolean;
+  baseHref?: string;
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -106,6 +120,8 @@ export function PanelLayoutClient({
   onboardingCompleted,
   onboardingCompletedTasks,
   activeLicense,
+  aiCommandCenterEnabled,
+  baseHref,
 }: PanelLayoutClientProps) {
   return (
     <BrandThemeProvider brandSlug={brandSlug}>
@@ -113,7 +129,9 @@ export function PanelLayoutClient({
             <ActiveBranchProvider brandSlug={brandSlug} branches={branches} initialBranchId={initialBranchId} userRole={role}>
             <PosCartProvider>
           <OnboardingProvider brandSlug={brandSlug} role={role} onboardingCompleted={onboardingCompleted ?? false}>
-            <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks} activeLicense={activeLicense}>{children}</PanelLayoutShell>
+            <TourProvider profileId={profileId}>
+            <PanelLayoutShell brandSlug={brandSlug} brandId={brandId} brandName={brandName} brandLogoUrl={brandLogoUrl} branches={branches} initialBranchId={initialBranchId} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} isImpersonating={isImpersonating} profileId={profileId} onboardingCompleted={onboardingCompleted} onboardingCompletedTasks={onboardingCompletedTasks} activeLicense={activeLicense} baseHref={baseHref}>{children}</PanelLayoutShell>
+            </TourProvider>
           </OnboardingProvider>
           </PosCartProvider>
         </ActiveBranchProvider>
@@ -141,6 +159,8 @@ function PanelLayoutShell({
   onboardingCompleted,
   onboardingCompletedTasks,
   activeLicense,
+  aiCommandCenterEnabled,
+  baseHref,
 }: PanelLayoutClientProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
@@ -163,6 +183,59 @@ function PanelLayoutShell({
   const resolvedBranchName = resolvedBranchId
     ? branches.find((b) => b.id === resolvedBranchId)?.name ?? activeBranchName ?? undefined
     : undefined;
+
+  // Auto-start guided tour if onboarding is not yet complete.
+  // Reads persisted progress from tour_progress — no query param needed.
+  // Uses a ref so it only fires once per mount (tourCtx object identity
+  // changes every render, which would otherwise re-trigger and flicker).
+  const tourCtx = useTour();
+  const tourStartedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (onboardingCompleted || tourStartedRef.current) return;
+    tourStartedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const { getTourProgressAction } = await import("@/server/actions/tour-progress.actions");
+      const res = await getTourProgressAction("dashboard-v1");
+      if (cancelled) return;
+      if (res.success) {
+        const progress = res.data;
+        const shouldStart = !progress || (!progress.completed && !progress.skipped);
+        if (shouldStart) {
+          tourCtx.startTour("dashboard-v1", progress?.current_step ?? 0);
+        }
+      } else {
+        // No progress record yet — start fresh.
+        tourCtx.startTour("dashboard-v1", 0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [onboardingCompleted]);
+
+  // Resume the guided tour after a route change (e.g. dashboard → branches).
+  // The Driver instance is torn down on navigation but the tour + step
+  // index are preserved in the TourManager singleton.
+  const prevPath = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (prevPath.current && prevPath.current !== pathname) {
+      if (tourCtx.status === "touring") {
+        tourCtx.resumeCurrent();
+      }
+    }
+    prevPath.current = pathname;
+  }, [pathname, tourCtx.status, tourCtx]);
+
+  // Drive cross-page tour navigation via SPA routing (keeps the tour
+  // singleton alive so it can resume on the destination page).
+  const router = useRouter();
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<string>).detail;
+      if (path) router.push(path);
+    };
+    window.addEventListener("seervis:tour-navigate", handler as EventListener);
+    return () => window.removeEventListener("seervis:tour-navigate", handler as EventListener);
+  }, [router]);
 
   React.useEffect(() => {
     const handler = () => setOpenShiftModal(true);
@@ -279,46 +352,19 @@ function PanelLayoutShell({
     if (bootStarted.current) return;
     bootStarted.current = true;
 
-    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
     const supabase = createClient();
     const tasks: BootTask[] = [
       {
         id: "session",
         label: "Validate Session",
         action: async () => {
-          const s = Date.now();
           await supabase.auth.getSession();
-          const e = Date.now() - s;
-          if (e < 300) await wait(300 - e);
-        },
-      },
-      {
-        id: "profile",
-        label: "Load User",
-        action: async () => {
-          await wait(350);
-        },
-      },
-      {
-        id: "branch",
-        label: "Set Branch",
-        action: async () => {
-          await wait(300);
-        },
-      },
-      {
-        id: "permissions",
-        label: "Load Permissions",
-        action: async () => {
-          await wait(300);
         },
       },
       {
         id: "theme",
         label: "Apply Theme",
         action: async () => {
-          const s = Date.now();
           try {
             const { getBrandThemeAction } = await import(
               "@/server/actions/brand-theme.actions"
@@ -330,66 +376,35 @@ function PanelLayoutShell({
           } catch {
             // Non-critical
           }
-          const e = Date.now() - s;
-          if (e < 400) await wait(400 - e);
-        },
-      },
-      {
-        id: "shift",
-        label: "Check Shift",
-        action: async () => {
-          await wait(350);
-        },
-      },
-      {
-        id: "payments",
-        label: "Load Payment Methods",
-        action: async () => {
-          await wait(320);
-        },
-      },
-      {
-        id: "cache",
-        label: "Warm Cache",
-        action: async () => {
-          await wait(300);
-        },
-      },
-      {
-        id: "dashboard",
-        label: "Load Dashboard",
-        action: async () => {
-          await wait(350);
-        },
-      },
-      {
-        id: "sidebar",
-        label: "Build Navigation",
-        action: async () => {
-          await wait(280);
-        },
-      },
-      {
-        id: "features",
-        label: "Load Feature Flags",
-        action: async () => {
-          await wait(250);
-        },
-      },
-      {
-        id: "ready",
-        label: "Prepare Workspace",
-        action: async () => {
-          await wait(200);
         },
       },
     ];
 
     boot.start(tasks);
+
+    /* Prefetch initial dashboard data while loader shows */
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const today = new Date();
+    const df = thirtyDaysAgo.toISOString().split("T")[0];
+    const dt = today.toISOString().split("T")[0];
+    (async () => {
+      const { setDashboardPrefetch } = await import("@/lib/dashboard/dashboard-prefetch");
+      const { getDashboardOverviewAction } = await import("@/server/actions/dashboard.actions");
+      const p = getDashboardOverviewAction(brandSlug, { dateFrom: df, dateTo: dt });
+      setDashboardPrefetch(brandSlug, p.then((result) => {
+        if (result.success) return { success: true, data: result.data };
+        return { success: false, error: result.error ?? "Prefetch failed" };
+      }));
+    })();
   }, [brandSlug, boot, setBrandColor]);
 
   const { mode: theme, toggleTheme: brandToggleTheme } = useBrandTheme();
-  const { toggleTheme } = useThemeTransition({ onToggle: brandToggleTheme });
+  const setPreference = usePreferencesStore((s) => s.setPreference);
+  const handleThemeToggle = React.useCallback(() => {
+    setPreference("theme_mode", theme === "dark" ? "light" : "dark");
+    brandToggleTheme();
+  }, [theme, brandToggleTheme, setPreference]);
 
   return (
     <>
@@ -401,58 +416,57 @@ function PanelLayoutShell({
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
       )}
       <div className={`flex overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100dvh-40px)]" : "h-dvh"}`}>
-        <SidebarProvider>
-          <AppSidebar brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
+        <SidebarProvider
+            style={{ "--sidebar-width": "calc(var(--spacing) * 68)" } as React.CSSProperties}
+          >
+          <AppSidebar brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} aiCommandCenterEnabled={aiCommandCenterEnabled ?? false} baseHref={baseHref} />
 
-          <SidebarInset className={`h-dvh min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
-            {/* ── Desktop header ── */}
-            <header className="relative z-40 flex h-14 items-center overflow-visible !bg-sidebar px-3 text-sidebar-foreground md:h-16 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger />
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                  {pageTitle}
-                </h1>
-              </div>
-
-              {/* Dynamic Island — desktop only, sticky viewport top anchor */}
-              <motion.div
-                className="pointer-events-none absolute left-1/2 top-3 z-50 hidden md:block"
-                initial={false}
-                animate={{
-                  x: "-50%",
-                  scale: isIslandDetached ? 0.95 : 1,
-                  y: isIslandDetached ? -1 : 0,
-                }}
-                transition={{
-                  type: "spring",
-                  stiffness: 360,
-                  damping: 32,
-                  mass: 0.7,
-                }}
-              >
-                <div className="pointer-events-auto">
-                  <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
+          <SidebarInset className={cn("h-dvh min-w-0 overflow-x-clip", "[html[data-content-layout=centered]_&>*]:mx-auto", "[html[data-content-layout=centered]_&>*]:w-full", "[html[data-content-layout=centered]_&>*]:max-w-screen-2xl", "peer-data-[variant=inset]:border", "[--dashboard-header-height:--spacing(12)]")}>
+            {/* ── Header ── */}
+            <header className={cn(
+              "relative flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
+              "[html[data-navbar-style=sticky]_&]:sticky [html[data-navbar-style=sticky]_&]:top-0 [html[data-navbar-style=sticky]_&]:z-50 [html[data-navbar-style=sticky]_&]:overflow-hidden [html[data-navbar-style=sticky]_&]:rounded-t-[inherit] [html[data-navbar-style=sticky]_&]:bg-background/50 [html[data-navbar-style=sticky]_&]:backdrop-blur-md",
+            )}>
+              <div className="flex w-full items-center justify-between px-4 lg:px-6">
+                <div className="flex items-center gap-1 lg:gap-2">
+                  <SidebarTrigger className="-ml-1" />
+                  <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center" />
+                  <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                    {pageTitle}
+                  </h1>
                 </div>
-              </motion.div>
 
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  onClick={toggleTheme}
-                  aria-label={
-                    theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-                  }
+                {/* Dynamic Island — centered */}
+                <motion.div
+                  className="pointer-events-none absolute left-1/2 top-2 z-50 hidden md:block"
+                  initial={false}
+                  animate={{
+                    x: "-50%",
+                    scale: isIslandDetached ? 0.95 : 1,
+                    y: isIslandDetached ? -1 : 0,
+                  }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 360,
+                    damping: 32,
+                    mass: 0.7,
+                  }}
                 >
-                  {theme === "dark" ? (
-                    <Sun className="size-4" />
-                  ) : (
-                    <Moon className="size-4" />
-                  )}
-                </Button>
-                <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
+                  <div className="pointer-events-auto">
+                    <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
+                  </div>
+                </motion.div>
+
+                <div className="flex items-center gap-1 lg:gap-2">
+                  <CommandMenu brandSlug={brandSlug} />
+                  <ThemeTogglerButton
+                    size="icon"
+                    currentTheme={theme}
+                    onToggleTheme={handleThemeToggle}
+                    className="rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  />
+                  <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
+                </div>
               </div>
             </header>
 
@@ -462,43 +476,18 @@ function PanelLayoutShell({
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isInventoryV4Page ? "rounded-[14px] border-none bg-sidebar shadow-none" : isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
-              <main
-                ref={mainScrollRef}
-                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"} ${isMobile ? "pb-14" : ""}`}
-              >
-                <LicenseGuard
-                  brandSlug={brandSlug}
-                  licenseStatus={activeLicense?.status ?? null}
-                  expiresAt={activeLicense?.expires_at ?? null}
-                >
-                  {children}
-                </LicenseGuard>
-              </main>
-            <GradualBlur
-              target="parent"
-              position="bottom"
-              height="3.5rem"
-              strength={2}
-              divCount={5}
-              curve="bezier"
-              exponential
-              opacity={1}
-              zIndex={10}
-              animated
-              duration="0.42s"
-              easing="cubic-bezier(0.22, 1, 0.36, 1)"
-              style={{
-                background:
-                  "linear-gradient(to top, hsl(var(--card)) 0%, hsl(var(--card) / 0.82) 42%, transparent 100%)",
-                opacity: showMainBottomBlur ? 1 : 0,
-                transform: showMainBottomBlur ? "translateY(0)" : "translateY(10px)",
-                transition:
-                  "opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1)",
-                willChange: "opacity, transform",
-              }}
-            />
-          </div>
+          <main
+            ref={mainScrollRef}
+            className={`relative z-0 h-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1" : "p-3 sm:p-4 md:p-6"} ${isMobile ? "pb-14" : ""}`}
+          >
+            <LicenseGuard
+              brandSlug={brandSlug}
+              licenseStatus={activeLicense?.status ?? null}
+              expiresAt={activeLicense?.expires_at ?? null}
+            >
+              {children}
+            </LicenseGuard>
+          </main>
         </SidebarInset>
       </SidebarProvider>
           {pathname?.includes("/panel/services") && <RightSidebarPanel />}

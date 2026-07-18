@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ShieldCheck,
   Terminal,
+  Newspaper,
+  ExternalLink,
 } from "lucide-react";
 import {
   Sidebar,
@@ -23,6 +25,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
@@ -38,7 +41,12 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const CONTENT_ITEMS: NavItem[] = [
+  { href: "/platform/changelog", label: "Changelog", icon: Newspaper },
+  { href: "/blog", label: "Blog", icon: ExternalLink },
+];
+
+const MANAGEMENT_ITEMS: NavItem[] = [
   { href: "/platform/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/platform/tenants", label: "Tenants", icon: Building2 },
   { href: "/platform/subscriptions", label: "Subscriptions", icon: CreditCard },
@@ -78,9 +86,39 @@ export function PlatformSidebar({ userName, userEmail }: PlatformSidebarProps) {
 
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel className="px-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+            Content
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
+              {CONTENT_ITEMS.map((item) => {
+                const isActive = pathname?.startsWith(item.href);
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.label}
+                    >
+                      <Link href={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+            Management
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {MANAGEMENT_ITEMS.map((item) => {
                 const isActive = pathname?.startsWith(item.href);
                 return (
                   <SidebarMenuItem key={item.href}>

@@ -14,6 +14,7 @@ import {
   animate,
   useAnimationFrame,
   useReducedMotion,
+  useTransform,
 } from "framer-motion";
 
 /* ─── Types ─────────────────────────────────── */
@@ -245,76 +246,73 @@ export function SeervisioEye({
   }, [prefersReduced]);
 
   /* ── Expression transforms ── */
-  const narrowL = useMotionValue(1);
-  const narrowR = useMotionValue(1);
-  const tiltL = useMotionValue(0);
-  const tiltR = useMotionValue(0);
+  /* Single source of truth for symmetric states — both eyes read the same value,
+     avoiding drift between left/right springs. Asymmetry offsets are only used
+     for success/error (squint in opposite directions). */
+  const narrow = useMotionValue(1);
+  const tilt = useMotionValue(0);
+  const asymTiltL = useMotionValue(0);
+  const asymTiltR = useMotionValue(0);
 
   useEffect(() => {
     const d = prefersReduced ? 0.01 : 0.45;
     const fast = prefersReduced ? 0.01 : 0.25;
 
+    /* Reset asymmetry on every transition */
+    animate(asymTiltL, 0, { duration: 0.15 });
+    animate(asymTiltR, 0, { duration: 0.15 });
+
     switch (currentState) {
       case "thinking":
-        animate(narrowL, 0.82, { duration: d });
-        animate(narrowR, 0.82, { duration: d });
-        animate(tiltL, 0, { duration: d });
-        animate(tiltR, 0, { duration: d });
+        animate(narrow, 0.82, { duration: d });
+        animate(tilt, 0, { duration: d });
         break;
 
       case "processing":
-        animate(narrowL, 0.88, { duration: d });
-        animate(narrowR, 0.88, { duration: d });
-        animate(tiltL, 0, { duration: d });
-        animate(tiltR, 0, { duration: d });
+        animate(narrow, 0.88, { duration: d });
+        animate(tilt, 0, { duration: d });
         break;
 
       case "success":
-        animate(narrowL, 0.72, { duration: fast });
-        animate(narrowR, 0.72, { duration: fast });
-        animate(tiltL, -2.5, { duration: fast });
-        animate(tiltR, 2.5, { duration: fast });
+        animate(narrow, 0.72, { duration: fast });
+        animate(tilt, 0, { duration: fast });
+        animate(asymTiltL, -2.5, { duration: fast });
+        animate(asymTiltR, 2.5, { duration: fast });
         break;
 
       case "error":
-        animate(narrowL, 0.65, { duration: 0.2 });
-        animate(narrowR, 0.65, { duration: 0.2 });
-        animate(tiltL, 3.5, { duration: 0.2 });
-        animate(tiltR, -3.5, { duration: 0.2 });
+        animate(narrow, 0.65, { duration: 0.2 });
+        animate(tilt, 0, { duration: 0.2 });
+        animate(asymTiltL, 3.5, { duration: 0.2 });
+        animate(asymTiltR, -3.5, { duration: 0.2 });
         if (!prefersReduced) doBlink();
         break;
 
       case "notification":
-        animate(narrowL, 1.18, { duration: fast });
-        animate(narrowR, 1.18, { duration: fast });
-        animate(tiltL, 0, { duration: fast });
-        animate(tiltR, 0, { duration: fast });
+        animate(narrow, 1.18, { duration: fast });
+        animate(tilt, 0, { duration: fast });
         rawGx.set(notificationDirection === "left" ? -MAX_GX * 0.7 : MAX_GX * 0.7);
         rawGy.set(0);
         break;
 
       case "sleep":
-        animate(narrowL, 0, { duration: 1.2, ease: "easeInOut" });
-        animate(narrowR, 0, { duration: 1.2, ease: "easeInOut" });
-        animate(tiltL, 0, { duration: 0.5 });
-        animate(tiltR, 0, { duration: 0.5 });
+        animate(narrow, 0, { duration: 1.2, ease: "easeInOut" });
+        animate(tilt, 0, { duration: 0.5 });
         rawGx.set(0);
         rawGy.set(0);
         break;
 
       default:
-        animate(narrowL, 1, { duration: d });
-        animate(narrowR, 1, { duration: d });
-        animate(tiltL, 0, { duration: d });
-        animate(tiltR, 0, { duration: d });
+        animate(narrow, 1, { duration: d });
+        animate(tilt, 0, { duration: d });
     }
   }, [
     currentState,
     prefersReduced,
-    narrowL,
-    narrowR,
-    tiltL,
-    tiltR,
+    narrow,
+    tilt,
+    asymTiltL,
+    asymTiltR,
     rawGx,
     rawGy,
     notificationDirection,
@@ -349,10 +347,11 @@ export function SeervisioEye({
   const cr = `seervisio-${rid}-r`;
 
   /* ── Spring-wrapped expression values for smooth transitions ── */
-  const sNL = useSpring(narrowL, exprSpring);
-  const sNR = useSpring(narrowR, exprSpring);
-  const sTL = useSpring(tiltL, exprSpring);
-  const sTR = useSpring(tiltR, exprSpring);
+  const sNarrow = useSpring(narrow, exprSpring);
+  const tiltCombinedL = useTransform(() => tilt.get() + asymTiltL.get());
+  const tiltCombinedR = useTransform(() => tilt.get() + asymTiltR.get());
+  const sTiltL = useSpring(tiltCombinedL, exprSpring);
+  const sTiltR = useSpring(tiltCombinedR, exprSpring);
 
   const s = size;
 
@@ -387,8 +386,8 @@ export function SeervisioEye({
       >
         <motion.g
           style={{
-            scaleY: sNL,
-            rotate: sTL,
+            scaleY: sNarrow,
+            rotate: sTiltL,
             originX: L_CX,
             originY: L_CY,
           }}
@@ -428,8 +427,8 @@ export function SeervisioEye({
       >
         <motion.g
           style={{
-            scaleY: sNR,
-            rotate: sTR,
+            scaleY: sNarrow,
+            rotate: sTiltR,
             originX: R_CX,
             originY: R_CY,
           }}

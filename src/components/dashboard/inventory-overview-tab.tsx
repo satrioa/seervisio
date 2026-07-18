@@ -33,7 +33,7 @@ export function InventoryOverviewTab({ data }: InventoryOverviewTabProps) {
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-3">
         {/* ── KPI Cards ── */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Stok Menipis"
             value={String(data?.lowStockCount ?? 0)}

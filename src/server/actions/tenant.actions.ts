@@ -10,6 +10,7 @@ import {
   type ActionResult,
 } from "./action-helper";
 import { ROLES } from "@/lib/permissions/roles";
+import { calculateLicenseExpiry } from "@/lib/license/license-duration";
 
 export interface CreateTenantInput {
   brandName: string;
@@ -101,10 +102,16 @@ export async function createTenantAction(
         store_name: input.brandName,
       });
 
-    // 6. Create license
+    // 6. Create license with proper expiry based on package billing
     const now = new Date();
-    const expiresAt = new Date(now);
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    const expiresAt = calculateLicenseExpiry(
+      {
+        billing_duration_enabled: pkg.billing_duration_enabled ?? true,
+        billing_duration_type: pkg.billing_duration_type ?? null,
+        billing_duration_value: pkg.billing_duration_value ?? null,
+      },
+      now,
+    );
 
     await (supabase as any)
       .from("licenses")
@@ -113,7 +120,7 @@ export async function createTenantAction(
         package_id: pkg.id,
         status: "active",
         started_at: now.toISOString(),
-        expires_at: expiresAt.toISOString(),
+        expires_at: expiresAt,
         is_trial: false,
       });
 

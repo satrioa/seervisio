@@ -350,7 +350,7 @@ export async function getDashboardOverviewAction(
       /* Finance ledger */
       (supabase as any)
         .from("finance_ledger")
-        .select("entry_type, direction, amount, branch_id, ledger_date")
+        .select("entry_type, direction, amount, branch_id, ledger_date, category")
         .eq("brand_id", session.brandId)
         .in("branch_id", branchFilter)
         .gte("ledger_date", dateFromStr)
@@ -543,42 +543,43 @@ export async function getDashboardOverviewAction(
       p.percentage = totalRevenueForPct > 0 ? Math.round((p.netAmount / totalRevenueForPct) * 100) : 0;
     }
 
-    /* ── Expense category breakdown ── */
-    const expenseLabels: Record<string, string> = {
-      STOCK_PURCHASE: "Belanja Stok",
-      OPERATING_EXPENSE: "Operasional",
-      BANK_FEE: "Fee Bank",
-      MDR_FEE: "MDR",
-      CASH_EXPENSE: "Pengeluaran Tunai",
-      POS_PAYMENT: "Pembayaran POS",
-      SERVICE_PAYMENT: "Pembayaran Servis",
-      OTHER_INCOME: "Pemasukan Lain",
+    /* ── Expense category breakdown (by user-chosen category) ── */
+    const SYSTEM_CATEGORY_LABELS: Record<string, string> = {
+      adjustment: "Penyesuaian",
+      mdr: "MDR",
+      other: "Lainnya",
+      pos: "POS",
+      service: "Servis",
+      cogs: "HPP",
+      bank_fee: "Biaya Bank",
     };
-    const expenseMap = new Map<string, number>();
-    for (const m of movements) {
-      if (m.direction !== "OUT") continue;
-      if (NON_OPERATIONAL.has(m.movement_type)) continue;
-      const type = m.movement_type || "OTHER";
-      expenseMap.set(type, (expenseMap.get(type) || 0) + Number(m.amount || 0));
-    }
-    // Add MDR from pos_sales and service_payments as an expense category
+    const titleCase = (s: string) =>
+      s.replace(/[_-]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const prettyCategory = (raw: string | null) => {
+      const key = (raw || "Lainnya").toLowerCase();
+      if (key === "lainnya") return "Lainnya";
+      return SYSTEM_CATEGORY_LABELS[key] ?? titleCase(key);
+    };
+
     const mdrFromPos = posSales.reduce((s: number, p: any) => s + Number(p.mdr_amount || 0), 0);
     const mdrFromSvcp = servicePayments.reduce((s: number, p: any) => s + Number(p.mdr_amount || 0), 0);
     const totalMdrFromSales = mdrFromPos + mdrFromSvcp;
-    if (totalMdrFromSales > 0) {
-      // Add to existing MDR_FEE category or create a new one
-      const existingMdr = expenseMap.get("MDR_FEE") || 0;
-      expenseMap.set("MDR_FEE", existingMdr + totalMdrFromSales);
+
+    const expenseCategoryMap = new Map<string, number>();
+    for (const r of ledgerRows) {
+      if (r.direction !== "DEBIT") continue;
+      const raw = r.category || "Lainnya";
+      expenseCategoryMap.set(raw, (expenseCategoryMap.get(raw) || 0) + Number(r.amount || 0));
     }
-    const allCategoryKeys = Array.from(new Set([...Object.keys(expenseLabels), ...expenseMap.keys()]));
-    const expenseCategoryRadar = allCategoryKeys.map((type) => {
-      const amount = expenseMap.get(type) ?? 0;
-      return {
-        category: expenseLabels[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
-        amount,
-        percentage: 0,
-      };
-    });
+    if (totalMdrFromSales > 0) {
+      expenseCategoryMap.set("mdr", (expenseCategoryMap.get("mdr") || 0) + totalMdrFromSales);
+    }
+
+    const expenseCategoryRadar = Array.from(expenseCategoryMap.entries()).map(([raw, amount]) => ({
+      category: prettyCategory(raw),
+      amount,
+      percentage: 0,
+    }));
     const totalExpenseAmount = expenseCategoryRadar.reduce((s, e) => s + e.amount, 0);
     for (const e of expenseCategoryRadar) {
       e.percentage = totalExpenseAmount > 0 ? Math.round((e.amount / totalExpenseAmount) * 100) : 0;

@@ -22,6 +22,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // SHORT-CIRCUIT: For mockup routes, bypass middleware entirely.
+  // Mockup is a static demo route — no auth, no brand check needed.
+  if (request.nextUrl.pathname.startsWith("/mockup")) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -51,17 +57,6 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  console.log("[middleware] getUser result:", {
-    pathname: request.nextUrl.pathname,
-    hasUser: Boolean(user),
-    userId: user?.id,
-  });
-
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
 
@@ -80,6 +75,41 @@ export async function middleware(request: NextRequest) {
   // Check route types
   const isPanelRoute = /^\/[^/]+\/panel(\/.*)?$/.test(pathname);
   const isPlatformRoute = pathname.startsWith("/platform");
+
+  // Refresh + read the user for ALL routes so the server components
+  // (including landing layout) can call getSession() without triggering
+  // another refresh attempt. When the refresh token is invalid, clear
+  // the cookies immediately to prevent repeated failed refresh attempts.
+  let user: { id: string } | null = null;
+  const needsUser = isPanelRoute || isPlatformRoute || pathname === "/login" || pathname === "/platform/login";
+
+  if (needsUser) {
+    try {
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      user = u;
+    } catch {
+      user = null;
+    }
+  } else {
+    // For public routes (including landing), still attempt a passive session
+    // refresh so that the landing layout's getSession() won't trigger a
+    // failed refresh attempt. If it fails, clear the stale cookies.
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        user = { id: sessionData.session.user.id };
+        // Re-set the session so subsequent getUser calls in server actions
+        // don't trigger a double refresh. The access token was refreshed.
+      }
+    } catch {
+      // Refresh token invalid — clear stale cookies so the landing layout
+      // doesn't keep trying to refresh on every request.
+      await supabase.auth.signOut().catch(() => {});
+      user = null;
+    }
+  }
 
   // For public routes — redirect authenticated users away from public pages
   if (isPublicRoute) {
@@ -214,11 +244,6 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      if (!profile.onboarding_completed) {
-        url.pathname = "/welcome";
-        return NextResponse.redirect(url);
-      }
-
       // ── All checks pass → allow panel access ──────────────────
     } else {
       // Brand slug may have changed — redirect to user's first brand
@@ -259,7 +284,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all routes except static files, _next, and api
+    // Match all routes except static files, _next, api, and landing page
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip the landing page — auth state is handled client-side via getAuthState()
+    "/(?!\\(landing\\).*)",
   ],
 };

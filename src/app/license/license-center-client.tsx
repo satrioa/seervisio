@@ -1,13 +1,20 @@
 ﻿"use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Check, Loader2, Building2, Upload, FileText, X } from "lucide-react";
-import { useDropzone } from "react-dropzone";
+import { Check, Loader2, Building2, ChevronDown, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrencyIDR } from "@/lib/utils/money";
 import type { LicensePackage } from "@/types/license";
+import { PaymentHeader } from "./_components/payment-header";
+import { PaymentCountdown } from "./_components/payment-countdown";
+import { PaymentInstructions } from "./_components/payment-instructions";
+import { UploadDropzone } from "./_components/upload-dropzone";
+import { ImportantNotice } from "./_components/important-notice";
+import { PrimaryCta } from "./_components/primary-cta";
+import { SecondaryActions } from "./_components/secondary-actions";
+import { WaitingVerification } from "./_components/waiting-verification";
+import { SuccessState } from "./_components/success-state";
+import { isLifetimeBilling, getBillingLabel } from "@/lib/billing/billing-helpers";
 
 interface PaymentView {
   id: string;
@@ -18,12 +25,15 @@ interface PaymentView {
   discountAmount: number;
   totalAmount: number;
   billingCycle: string;
+  billingDurationEnabled: boolean;
   currency: string;
   couponCode: string | null;
   invoiceNumber: string | null;
   proofUrl: string | null;
   bankInfo: { bank_name: string; account_number: string; account_holder: string };
   estimatedVerificationHours: number;
+  paymentDeadline: string | null;
+  createdAt: string;
 }
 
 interface Props {
@@ -36,19 +46,6 @@ interface Props {
   } | null;
   bankInfo: { bank_name: string; account_number: string; account_holder: string } | null;
   initialPackages: LicensePackage[];
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  pending_payment: "Menunggu Pembayaran",
-  waiting_verification: "Menunggu Verifikasi",
-  paid: "Terverifikasi",
-  rejected: "Ditolak",
-  expired: "Kadaluarsa",
-  cancelled: "Dibatalkan",
-};
-
-function formatPrice(price: number): string {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
 }
 
 function buildFeatureList(pkg: LicensePackage): string[] {
@@ -66,33 +63,103 @@ const STATIC_FEATURES: Record<string, string[]> = {
   enterprise: ["Unlimited branches & users", "Custom integrations & API", "Dedicated account manager", "SLA guarantee"],
 };
 
+function formatPrice(price: number): string {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending_payment: "Menunggu Pembayaran",
+  waiting_verification: "Menunggu Verifikasi",
+  paid: "Terverifikasi",
+  rejected: "Ditolak",
+  expired: "Kadaluarsa",
+  cancelled: "Dibatalkan",
+};
+
+/* ── Bank Logo ── */
+
+const LOGO_PALETTE = [
+  "bg-blue-600", "bg-emerald-600", "bg-violet-600", "bg-rose-600",
+  "bg-amber-600", "bg-cyan-600", "bg-pink-600", "bg-orange-600",
+];
+
+const BANK_LOGOS: Record<string, string> = {
+  "bank mandiri": "/images/Payment/Transfer/livin-logo.svg",
+  mandiri: "/images/Payment/Transfer/livin-logo.svg",
+  "bank bca": "/images/Payment/Transfer/Bank_Central_Asia.svg",
+  bca: "/images/Payment/Transfer/Bank_Central_Asia.svg",
+  "bank bni": "/images/Payment/Transfer/bank-negara-indonesia-(bni)-logo.svg",
+  bni: "/images/Payment/Transfer/bank-negara-indonesia-(bni)-logo.svg",
+  "bank btn": "/images/Payment/Transfer/bank-btn-logo.svg",
+  btn: "/images/Payment/Transfer/bank-btn-logo.svg",
+  "cimb niaga": "/images/Payment/Transfer/bank-cimb-niaga-logo.svg",
+  "bank cimb niaga": "/images/Payment/Transfer/bank-cimb-niaga-logo.svg",
+  "bank danamon": "/images/Payment/Transfer/bank-danamon-logo.svg",
+  "bank permata": "/images/Payment/Transfer/bank-permata-logo.svg",
+  "bank ocbc": "/images/Payment/Transfer/bank-ocbc-logo.png",
+  ocbc: "/images/Payment/Transfer/bank-ocbc-logo.png",
+  "bank hsbc": "/images/Payment/Transfer/bank-hsbc-logo.svg",
+  "bank raya": "/images/Payment/Transfer/bank-raya-logo.svg",
+  "bank jago": "/images/Payment/Transfer/bank-jago-logo.png",
+  "bank saqu": "/images/Payment/Transfer/bank-saqu-logo.png",
+  "bank bsn": "/images/Payment/Transfer/bank-bsn-logo.png",
+  seabank: "/images/Payment/Transfer/seabank-logo.svg",
+  gopay: "/images/Payment/EWallet/Gopay_logo.svg",
+  ovo: "/images/Payment/EWallet/Logo_ovo_purple.svg",
+  dana: "/images/Payment/EWallet/Logo_dana_blue.svg",
+  shopeepay: "/images/Payment/EWallet/shopee-pay.png",
+};
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+function getColorIndex(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash) % LOGO_PALETTE.length;
+}
+
+function BankLogo({ name }: { name: string }) {
+  const key = name.toLowerCase().trim();
+  const logoUrl = BANK_LOGOS[key];
+  const [failed, setFailed] = useState(false);
+
+  if (logoUrl && !failed) {
+    return (
+      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-white">
+        <img
+          src={logoUrl}
+          alt={name}
+          className="size-full object-contain p-1.5"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  const initials = getInitials(name) || "?";
+  const color = LOGO_PALETTE[getColorIndex(name)];
+  return (
+    <span className={`flex size-12 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white ${color}`}>
+      {initials}
+    </span>
+  );
+}
+
 export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }: Props) {
-  const router = useRouter();
   const [status, setStatus] = useState(initialStatus);
   const [file, setFile] = useState<File | null>(null);
-  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [justUploaded, setJustUploaded] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    maxFiles: 1,
-    accept: { "image/jpeg": [".jpg", ".jpeg"], "image/png": [".png"], "application/pdf": [".pdf"] },
-    onDropAccepted: (accepted) => {
-      setFile(accepted[0] ?? null);
-      setError(null);
-    },
-    onDropRejected: (rejections) => {
-      const err = rejections[0]?.errors[0];
-      if (err?.code === "file-invalid-type") {
-        setError("Hanya file JPG, PNG, dan PDF yang diperbolehkan.");
-      } else if (err?.code === "too-many-files") {
-        setError("Maksimal 1 file.");
-      } else {
-        setError(err?.message ?? "File tidak valid.");
-      }
-    },
-  });
 
   const handleChoosePlan = async (pkg: LicensePackage) => {
     setLoadingId(pkg.id);
@@ -100,47 +167,65 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
       const mod = await import("@/server/actions/checkout.actions");
       const result = await mod.createCheckoutSessionAction({ packageId: pkg.id });
       if (!result.success) {
-        console.error("Failed to create checkout session:", result.error);
         setLoadingId(null);
         return;
       }
-      router.push("/checkout?token=" + encodeURIComponent(result.data.token));
+      window.location.href = "/checkout?token=" + encodeURIComponent(result.data.token);
     } catch {
       setLoadingId(null);
     }
   };
 
+  const handleUploadComplete = useCallback((updatedPayment: PaymentView) => {
+    setJustUploaded(true);
+    setFile(null);
+    setStatus((s) =>
+      s
+        ? { ...s, payment: updatedPayment }
+        : s
+    );
+  }, []);
+
   if (!status) {
     return (
-      <Shell>
-        <p className="text-sm text-muted-foreground">Memuat pusat lisensi…</p>
-      </Shell>
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
     );
   }
 
   if (status.hasActiveLicense) {
     return (
-      <Shell>
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
-          Lisensi Aktif
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">
-          {status.licensePackage}
-        </h1>
-        {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            Berlaku {status.daysRemaining} hari lagi.
-          </p>
-        )}
-        <div className="mt-6">
-          <Link
-            href="/welcome"
-            className="inline-block rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
-          >
-            Lanjutkan ke Pengaturan Awal
-          </Link>
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
+              <Check className="size-7 text-emerald-600" />
+            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
+              Lisensi Aktif
+            </p>
+            <h1 className="mt-2 text-xl font-semibold text-foreground">
+              {status.licensePackage}
+            </h1>
+            {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Berlaku {status.daysRemaining} hari lagi.
+              </p>
+            )}
+            <div className="mt-8 w-full">
+              <Link
+                href="/welcome"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Lanjutkan ke Pengaturan Awal
+              </Link>
+            </div>
+          </div>
         </div>
-      </Shell>
+      </div>
     );
   }
 
@@ -149,190 +234,211 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
   }
 
   const p = status.payment;
+  const bank = p.bankInfo ?? (bankInfo as typeof p.bankInfo | null);
+  const showPaymentForm = p.status === "pending_payment" && !justUploaded;
+  const isLifetime = !p.billingDurationEnabled || isLifetimeBilling(p.billingCycle);
 
-  async function handleUpload() {
-    setError(null);
-    if (!file) {
-      setError("Pilih file bukti transfer terlebih dahulu.");
-      return;
-    }
-    const fd = new FormData();
-    fd.append("proof", file);
-    startTransition(async () => {
-      const { uploadLicensePaymentProofAction } = await import(
-        "@/server/actions/license.actions"
-      );
-      const res = await uploadLicensePaymentProofAction(p.id, fd);
-      if (!res.success) {
-        setError(res.error || "Gagal mengunggah bukti.");
-        return;
-      }
-      setDone(true);
-      setStatus((s) => (s ? { ...s, payment: res.data ?? s.payment } : s));
-    });
+  if (p.status === "waiting_verification" || justUploaded) {
+    return (
+      <Shell>
+        <WaitingVerification
+          proofUrl={p.proofUrl}
+          estimatedVerificationHours={p.estimatedVerificationHours}
+        />
+      </Shell>
+    );
+  }
+
+  if (p.status === "paid") {
+    return (
+      <Shell>
+        <SuccessState />
+      </Shell>
+    );
+  }
+
+  // expired (natural or replaced) / cancelled (from replacePaymentAction) → no active payment → show pricing grid
+  if (p.status === "expired" || p.status === "cancelled") {
+    return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
+  }
+
+  if (p.status === "rejected") {
+    return (
+      <Shell>
+        <div className="flex flex-col items-center text-center py-8">
+          <div className="mb-6 flex size-16 items-center justify-center rounded-full bg-red-500/10">
+            <svg className="size-8 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Pesanan Ditolak</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Silakan hubungi kami untuk bantuan lebih lanjut.</p>
+          <div className="mt-8 w-full">
+            <a
+              href="https://wa.me/6281234567890"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Hubungi Kami
+            </a>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  // cancelled payments (from replacePaymentAction) → no active payment → show pricing grid
+  if (p.status === "cancelled") {
+    return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
   }
 
   return (
-    <Shell>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Pusat Lisensi
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold">{p.packageName}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {p.billingCycle === "yearly" ? "Tahunan" : "Bulanan"}
-      </p>
+    <div className="mx-auto max-w-[520px] px-4 py-8 sm:py-12">
+      <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
+        <div className="space-y-6">
+          <PaymentHeader
+            packageName={p.packageName}
+            billingCycle={p.billingCycle}
+          />
 
-      <dl className="mt-6 space-y-2 text-sm">
-        <div className="flex justify-between">
-          <dt className="text-muted-foreground">Total</dt>
-          <dd>{formatCurrencyIDR(p.totalAmount)}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-muted-foreground">Status</dt>
-          <dd>{STATUS_LABEL[p.status] ?? p.status}</dd>
-        </div>
-      </dl>
+          {p.paymentDeadline && !isLifetime && (
+            <PaymentCountdown
+              deadline={p.paymentDeadline}
+              createdAt={p.createdAt}
+            />
+          )}
 
-      {bankInfo && p.status === "pending_payment" && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-sm">
-          <p className="font-medium">Transfer ke:</p>
-          <p className="mt-1">{bankInfo.bank_name}</p>
-          <p>{bankInfo.account_number}</p>
-          <p className="text-muted-foreground">{bankInfo.account_holder}</p>
-        </div>
-      )}
+          {/* ── Combined: Total Pembayaran + Transfer ke + Ringkasan Pesanan ── */}
+          <div className="overflow-hidden rounded-xl border-2 border-primary/20 bg-primary/[0.03]">
+            {/* Total */}
+            <div className="border-b border-primary/10 p-5 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Total Pembayaran
+              </p>
+              <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                {formatPrice(p.totalAmount)}
+              </p>
+            </div>
 
-      {p.status === "pending_payment" && (
-        <div className="mt-6 space-y-3">
-          <div
-            {...getRootProps()}
-            className={
-              "flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors " +
-              (isDragActive
-                ? "border-primary bg-primary/5"
-                : file
-                  ? "border-emerald-500/50 bg-emerald-500/5"
-                  : "border-border hover:border-muted-foreground/50")
-            }
-          >
-            <input {...getInputProps()} />
-            {file ? (
-              <div className="flex items-center gap-2">
-                <FileText className="size-5 text-emerald-600" />
-                <span className="text-sm font-medium">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                    setError(null);
-                  }}
-                  className="ml-1 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <Upload className="size-6 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  {isDragActive
-                    ? "Lepaskan file di sini..."
-                    : "Seret file ke sini atau klik untuk memilih"}
+            {/* Transfer ke */}
+            {bank && (
+              <div className="border-b border-primary/10 p-5">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Transfer ke
                 </p>
-                <p className="text-xs text-muted-foreground">JPG, PNG, PDF — Maks. 1 file</p>
-              </>
+                <div className="flex items-center gap-4">
+                  <BankLogo name={bank.bank_name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <p className="font-mono text-lg font-bold tracking-wider text-foreground">
+                        {bank.account_number}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(bank.account_number)}
+                        className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Copy className="size-4" />
+                      </button>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
+                  </div>
+                </div>
+              </div>
             )}
+
+            {/* Ringkasan Pesanan (accordion) */}
+            <details className="group" open>
+              <summary className="flex cursor-pointer items-center gap-2 bg-muted/20 px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/30 list-none [&::-webkit-details-marker]:hidden">
+                Ringkasan Pesanan
+                <ChevronDown className="ml-auto size-4 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="divide-y divide-border/60 text-sm">
+                <div className="flex items-center justify-between px-5 py-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">{p.packageName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {isLifetime ? "1x Bayar, Aktif Selamanya" : "1x Bayar, 1 Bulan"}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-foreground">{formatPrice(p.price)}</span>
+                </div>
+                <div className="flex items-center justify-between px-5 py-2.5">
+                  <span className="text-muted-foreground">Tipe Tagihan</span>
+                  <span className="font-medium text-foreground">
+                    {getBillingLabel(p.billingCycle)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-5 py-2.5">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-amber-500" />
+                    <span className="font-medium text-foreground">
+                      {STATUS_LABEL[p.status] ?? p.status}
+                    </span>
+                  </span>
+                </div>
+                {p.invoiceNumber && (
+                  <div className="flex items-center justify-between px-5 py-2.5 text-sm">
+                    <span className="text-muted-foreground">Nomor Pesanan</span>
+                    <span className="font-mono text-xs font-medium text-foreground">
+                      {p.invoiceNumber}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </details>
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <Button
-            type="button"
-            onClick={handleUpload}
-            disabled={isPending || !file}
-            className="w-full"
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Mengunggah…
-              </>
-            ) : (
-              "Upload Bukti Transfer"
-            )}
-          </Button>
-        </div>
-      )}
 
-      {(p.status === "waiting_verification" || done) && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-sm space-y-3">
-          {done && (
-            <p className="text-emerald-600 font-medium">
-              ✅ Bukti berhasil terunggah!
-            </p>
-          )}
-          <p>
-            Bukti sedang diverifikasi. Estimasi {p.estimatedVerificationHours} jam.
-          </p>
-          {p.proofUrl && (
-            <a
-              href={p.proofUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block text-primary underline"
-            >
-              Lihat bukti
-            </a>
-          )}
-          <a
-            href="https://wa.me/6281234567890?text=Halo%20saya%20ingin%20verifikasi%20pembayaran%20lisensi"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
-          >
-            <svg className="size-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-            Verifikasi Via WhatsApp
-          </a>
-          {done && (
-            <a
-              href="/"
-              className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-            >
-              Kembali ke Halaman Awal
-            </a>
+          {bank && <PaymentInstructions bankName={bank.bank_name} />}
+
+          {showPaymentForm && (
+            <>
+              <UploadDropzone
+                file={file}
+                error={error}
+                onFileAccepted={(f) => {
+                  setFile(f);
+                  setError(null);
+                }}
+                onFileRemove={() => {
+                  setFile(null);
+                  setError(null);
+                }}
+                onError={setError}
+              />
+
+              <ImportantNotice />
+
+              <PrimaryCta
+                paymentId={p.id}
+                packageName={p.packageName}
+                invoiceNumber={p.invoiceNumber}
+                file={file}
+                disabled={!showPaymentForm}
+                onUploadComplete={handleUploadComplete}
+              />
+
+              <SecondaryActions paymentId={p.id} invoiceNumber={p.invoiceNumber} />
+            </>
           )}
         </div>
-      )}
-
-      {p.status === "rejected" && (
-        <div className="mt-6 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
-          <p>Pesanan ditolak. Silakan hubungi kami untuk bantuan.</p>
-        </div>
-      )}
-
-      <div className="mt-8 flex flex-col gap-2 text-xs text-muted-foreground">
-        <Link href="/checkout" className="underline">
-          Ubah Paket
-        </Link>
-        <a
-          href="https://wa.me/6281234567890"
-          target="_blank"
-          rel="noreferrer"
-          className="underline"
-        >
-          Hubungi WhatsApp
-        </a>
       </div>
-    </Shell>
+    </div>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-lg px-4 py-16">
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <div className="mx-auto max-w-[520px] px-4 py-8 sm:py-12">
+      <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
         {children}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -397,7 +503,7 @@ function PricingGrid({
                     <span className="text-3xl font-bold text-foreground">
                       {pkg.price === 0 ? "Free" : formatPrice(pkg.price)}
                     </span>
-                    {pkg.price > 0 && (
+                    {pkg.price > 0 && pkg.billing_duration_enabled && (
                       <span className="text-sm text-muted-foreground">
                         /{pkg.billing_duration_type === "year" ? "year" : "month"}
                       </span>

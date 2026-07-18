@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface SummaryCardProps {
   label: string;
@@ -18,30 +20,30 @@ export function SummaryCard({
   icon: Icon,
 }: SummaryCardProps) {
   return (
-    <Card className="shadow-xs">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
-          {label}
+    <Card data-slot="card" className="@container/card shadow-xs w-full">
+      <CardHeader>
+        <CardTitle>
+          {Icon && (
+            <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+              <Icon className="size-4" />
+            </div>
+          )}
         </CardTitle>
-        {Icon && <Icon className="size-4 text-muted-foreground/60" />}
+        <CardDescription>{label}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-1">
-        <div className="text-lg sm:text-xl font-semibold tracking-tight">{value}</div>
-        {(helper || trend !== undefined) && (
-          <div className="flex items-center gap-1.5">
-            {trend !== undefined && trend > 0 && (
-              <TrendingUp className="size-3 text-emerald-500" />
-            )}
-            {trend !== undefined && trend < 0 && (
-              <TrendingDown className="size-3 text-red-500" />
-            )}
-            {helper && (
-              <span className="text-[11px] text-muted-foreground">
-                {helper}
-              </span>
-            )}
+      <CardContent className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="font-medium text-2xl sm:text-3xl tabular-nums leading-none tracking-tight">
+            {value}
           </div>
-        )}
+          {trend !== undefined && (
+            <Badge variant={trend >= 0 ? "default" : "destructive"} className="text-xs">
+              {trend >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+              {trend > 0 ? "+" : ""}{trend}%
+            </Badge>
+          )}
+        </div>
+        {helper && <p className="text-muted-foreground text-xs sm:text-sm">{helper}</p>}
       </CardContent>
     </Card>
   );

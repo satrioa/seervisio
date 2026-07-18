@@ -81,7 +81,7 @@ function ServicesPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const brandSlug = pathname.split("/")[1];
-  const { setOnServiceUpdated, showDetail } = useRightSidebar();
+  const { setOnServiceUpdated, showDetail, closeCreateService } = useRightSidebar();
   const { activeBranchId } = useActiveBranch();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
@@ -304,6 +304,14 @@ function ServicesPageContent() {
     }
     fetchServices().then(() => router.refresh());
   }, [brandSlug, fetchServices, showDetail, router]);
+
+  // Reset create-service overlay state on mount and when leaving the page.
+  // Guards against stale context state from previous navigation sessions
+  // or race conditions (e.g. tour, dev-mode strict double-mount).
+  React.useEffect(() => {
+    closeCreateService();
+    return () => closeCreateService();
+  }, [closeCreateService]);
 
   // Wire refresh callback into right sidebar context so sidebar mutations refresh the page
   React.useEffect(() => {

@@ -391,8 +391,18 @@ export async function createOtherIncomeAction(
     const supabase = await createServerSupabase();
     await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
+    // Get active shift ID for store_shift_cash_movements
+    const { data: activeShift } = await (supabase as any)
+      .from("store_shifts")
+      .select("id, cash_account_id")
+      .eq("brand_id", session.brandId)
+      .eq("branch_id", input.branchId)
+      .eq("shift_status", "OPEN")
+      .maybeSingle();
+
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
+      p_brand_id: session.brandId,
       p_direction: "IN",
       p_amount: input.amount,
       p_movement_type: "OTHER_INCOME",
@@ -422,6 +432,24 @@ export async function createOtherIncomeAction(
       p_ledger_date: input.date || new Date().toISOString().split("T")[0],
       p_created_by: session.profileId,
     });
+
+    // Record in store_shift_cash_movements if shift is active
+    if (activeShift) {
+      await (supabase as any).from("store_shift_cash_movements").insert({
+        brand_id: session.brandId,
+        branch_id: input.branchId,
+        shift_id: activeShift.id,
+        cash_account_id: input.paymentAccountId,
+        payment_account_movement_id: movementId,
+        movement_type: "OTHER_INCOME",
+        direction: "IN",
+        amount: input.amount,
+        description: input.description,
+        metadata: { category: input.category },
+        created_by: session.profileId,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     const { data: created } = await (supabase as any)
       .from("payment_account_movements")
@@ -459,8 +487,18 @@ export async function createOperatingExpenseAction(
     const supabase = await createServerSupabase();
     await requireActiveStoreSession(supabase, session.brandId, input.branchId);
 
+    // Get active shift ID for store_shift_cash_movements
+    const { data: activeShift } = await (supabase as any)
+      .from("store_shifts")
+      .select("id, cash_account_id")
+      .eq("brand_id", session.brandId)
+      .eq("branch_id", input.branchId)
+      .eq("shift_status", "OPEN")
+      .maybeSingle();
+
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
+      p_brand_id: session.brandId,
       p_direction: "OUT",
       p_amount: input.amount,
       p_movement_type: "OPERATING_EXPENSE",
@@ -474,6 +512,24 @@ export async function createOperatingExpenseAction(
     if (movError) {
       console.error("[FinanceTransaction] create expense movement error:", movError);
       return errorResult(movError.message || "Gagal membuat pergerakan akun.");
+    }
+
+    // Record in store_shift_cash_movements if shift is active
+    if (activeShift) {
+      await (supabase as any).from("store_shift_cash_movements").insert({
+        brand_id: session.brandId,
+        branch_id: input.branchId,
+        shift_id: activeShift.id,
+        cash_account_id: input.paymentAccountId,
+        payment_account_movement_id: movementId,
+        movement_type: "OPERATING_EXPENSE",
+        direction: "OUT",
+        amount: input.amount,
+        description: input.description,
+        metadata: { category: input.category },
+        created_by: session.profileId,
+        created_at: new Date().toISOString(),
+      });
     }
 
     // Also insert into finance_ledger via SECURITY DEFINER RPC
@@ -549,6 +605,7 @@ export async function voidFinanceTransactionAction(
 
     const { error: revError } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: original.payment_account_id,
+      p_brand_id: session.brandId,
       p_direction: reverseDirection,
       p_amount: Number(original.amount),
       p_movement_type: "BALANCE_ADJUSTMENT",

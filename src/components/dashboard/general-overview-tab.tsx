@@ -50,6 +50,7 @@ import type { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SummaryCard } from "@/components/dashboard/summary-card";
+import { SparklineCard } from "@/components/dashboard/sparkline-card";
 import { OperationalHourHeatmap } from "@/components/dashboard/operational-hour-heatmap";
 import {
   ChartContainer,
@@ -67,6 +68,7 @@ import {
 } from "recharts";
 import type { ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { calculateOperationalHealth, type OperationalHealthInput } from "@/lib/dashboard/operational-health-score";
+import { HealthGauge } from "@/components/dashboard/health-gauge";
 import type {
   DashboardGeneral,
   RevenueTrendPoint,
@@ -315,7 +317,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
 
   const healthInput = React.useMemo<OperationalHealthInput>(() => ({
     shift: {
-      totalBranches: totalBranchCount || 1,
+      totalBranches: totalBranchCount,
       openBranches: activeShiftCount,
       unclosedShifts: data?.unclosedShiftsCount ?? 0,
     },
@@ -341,7 +343,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
     },
     branchActivity: {
       activeBranches: activeShiftCount,
-      totalBranches: totalBranchCount || 1,
+      totalBranches: totalBranchCount,
       totalActivities: todayActivityTotal,
     },
   }), [
@@ -420,7 +422,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
         {error && renderError()}
 
         {/* ── Top Summary Cards ── */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-3">
           <SummaryCard
             label="Revenue"
             value={formatRp(data?.revenue ?? 0)}
@@ -442,10 +444,10 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
         </div>
 
         {/* ── Chart 1: Statistik Revenue ── */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Statistik Revenue</CardTitle>
-            <CardDescription className="text-xs">{descriptionText}</CardDescription>
+        <Card className="@container/card">
+          <CardHeader>
+            <CardTitle>Statistik Revenue</CardTitle>
+            <CardDescription>{descriptionText}</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <div className="h-52 min-w-[450px] sm:min-w-0">
@@ -495,10 +497,10 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
 
         {/* ── Chart 2: Statistik Revenue Tiap Cabang ── */}
         {branchData.length > 0 && branchNames.size > 0 && (
-        <Card className="shadow-xs">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Statistik Revenue Tiap Cabang</CardTitle>
-            <CardDescription className="text-xs">Per cabang ({descriptionText.toLowerCase()})</CardDescription>
+        <Card className="@container/card">
+          <CardHeader>
+            <CardTitle>Statistik Revenue Tiap Cabang</CardTitle>
+            <CardDescription>Per cabang ({descriptionText.toLowerCase()})</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto px-2 sm:px-4">
             <div className="h-[220px] min-w-[500px] sm:min-w-0">
@@ -541,49 +543,20 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
         {/* ── Operational Health Score + Revenue vs Target ── */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           {/* Operational Health Score */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">Operational Health Score</CardTitle>
-              <CardDescription className="text-xs">
+          <Card className="@container/card">
+            <CardHeader>
+              <CardTitle>Operational Health Score</CardTitle>
+              <CardDescription>
                 Ringkasan kesehatan operasional berdasarkan data terkini.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Score + Badge */}
-              <div className="flex items-end gap-3">
-                <span className="text-3xl font-bold tabular-nums">{healthResult.score}</span>
-                <span className="text-lg leading-none text-muted-foreground">/ 100</span>
-                <Badge
-                  variant={
-                    healthResult.label === "Kritis"
-                      ? "destructive"
-                      : healthResult.label === "Perlu Perhatian"
-                        ? "secondary"
-                        : "default"
-                  }
-                  className="ml-auto"
-                >
-                  {healthResult.label}
-                </Badge>
-              </div>
-
-              {/* Progress bar */}
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${healthResult.score}%`,
-                    backgroundColor:
-                      healthResult.score >= 85
-                        ? "hsl(var(--chart-2))"
-                        : healthResult.score >= 70
-                          ? "hsl(var(--chart-1))"
-                          : healthResult.score >= 50
-                            ? "hsl(35, 92%, 50%)"
-                            : "hsl(0, 84%, 60%)",
-                  }}
-                />
-              </div>
+              {/* Animated gauge */}
+              <HealthGauge
+                score={healthResult.score}
+                label={healthResult.label}
+                usageStatus={activeShiftCount > 0 ? "Beroperasi" : "Standby"}
+              />
 
               {/* Factors */}
               <div className="space-y-2 pt-1">
@@ -609,10 +582,10 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
           </Card>
 
           {/* Revenue vs Target */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">Revenue vs Target</CardTitle>
-              <CardDescription className="text-xs">
+          <Card className="@container/card">
+            <CardHeader>
+              <CardTitle>Revenue vs Target</CardTitle>
+              <CardDescription>
                 Progress pencapaian target revenue pada periode terpilih.
               </CardDescription>
             </CardHeader>
@@ -692,6 +665,16 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
 
       {/* ══ RIGHT INSIGHT COLUMN ══ */}
       <div className="flex flex-col gap-6">
+        {/* ── Revenue Trend Sparkline ── */}
+        {revenueData.length > 1 && (
+          <SparklineCard
+            title="Revenue Trend"
+            data={revenueData.map((d: any) => ({ value: d.revenue, label: d.label }))}
+            color="hsl(var(--chart-1))"
+            valueFormatter={(v) => formatRp(v)}
+          />
+        )}
+
         {/* ── Activity Log ── */}
         <Card className="overflow-hidden shadow-xs">
           <CardHeader className="flex flex-col gap-3 pb-3">

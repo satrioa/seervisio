@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Send, Coins, PiggyBank } from "lucide-react";
 import { createServiceAction } from "@/server/actions/service.actions";

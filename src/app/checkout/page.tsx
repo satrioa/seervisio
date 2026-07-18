@@ -2,6 +2,7 @@ import React, { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { getCheckoutSessionAction } from "@/server/actions/checkout.actions";
+import { getPlatformPaymentMethodsAction } from "@/server/actions/license.actions";
 import { CheckoutClient } from "./checkout-client";
 
 interface CheckoutPageProps {
@@ -65,9 +66,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     }
   }
 
+  // Fetch active platform payment methods from Console settings
+  const paymentMethodsResult = await getPlatformPaymentMethodsAction();
+  const paymentMethods = paymentMethodsResult.success ? paymentMethodsResult.data! : [];
+
   return (
     <Suspense fallback={null}>
-      <CheckoutClient session={result.data} profile={profile} email={email} ownerName={ownerName} />
+      <CheckoutClient session={result.data} profile={profile} email={email} ownerName={ownerName} paymentMethods={paymentMethods} />
     </Suspense>
   );
 }

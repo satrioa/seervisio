@@ -9,7 +9,7 @@
 // reduces the total. Persistence itself is done by the caller (DB / cookie);
 // these helpers only compute and validate.
 
-export type BillingCycle = "monthly" | "yearly";
+export type BillingCycle = "monthly" | "yearly" | "lifetime";
 
 export interface Coupon {
   code: string;

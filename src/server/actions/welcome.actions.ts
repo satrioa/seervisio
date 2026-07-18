@@ -109,6 +109,15 @@ export async function backfillLicenseBrandAction(profileId: string, brandId: num
       .eq("id", (license as any).id);
   }
 
+  // Link every profile-scoped license_payment that has no brand yet to the
+  // freshly-created brand. Without this, license_payments.brand_id stays NULL
+  // forever (Finance/reporting can't attribute revenue to the tenant).
+  await (adminDb as any)
+    .from("license_payments")
+    .update({ brand_id: brandId })
+    .eq("profile_id", profileId)
+    .is("brand_id", null);
+
   // Keep the legacy brand_subscriptions mirror in sync so downstream
   // limit enforcement (branches/users) works for the new brand.
   const { data: pkg } = await (adminDb as any)

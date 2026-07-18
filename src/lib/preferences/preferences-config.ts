@@ -70,14 +70,14 @@ export const PREFERENCE_REGISTRY = {
 
   navbar_style: definePreference({
     values: NAVBAR_STYLE_VALUES,
-    defaultValue: "sticky",
+    defaultValue: "scroll",
     persistence: "client-cookie",
     attribute: "data-navbar-style",
   }),
 
   sidebar_variant: defineSSRPreference({
     values: SIDEBAR_VARIANT_VALUES,
-    defaultValue: "sidebar",
+    defaultValue: "inset",
     persistence: "client-cookie",
     attribute: "data-sidebar-variant",
   }),

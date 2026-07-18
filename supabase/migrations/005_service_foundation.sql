@@ -564,7 +564,28 @@ create policy customers_select on public.customers
     'PLATFORM_OWNER' = any(public.get_user_roles())
     or brand_id = any(public.get_user_brand_ids())
   );
--- TODO: Add INSERT/UPDATE/DELETE policies with role checks
+drop policy if exists customers_insert on public.customers;
+create policy customers_insert on public.customers
+  for insert with check (
+    'PLATFORM_OWNER' = any(public.get_user_roles())
+    or brand_id = any(public.get_user_brand_ids())
+  );
+drop policy if exists customers_update on public.customers;
+create policy customers_update on public.customers
+  for update using (
+    'PLATFORM_OWNER' = any(public.get_user_roles())
+    or brand_id = any(public.get_user_brand_ids())
+  )
+  with check (
+    'PLATFORM_OWNER' = any(public.get_user_roles())
+    or brand_id = any(public.get_user_brand_ids())
+  );
+drop policy if exists customers_delete on public.customers;
+create policy customers_delete on public.customers
+  for delete using (
+    'PLATFORM_OWNER' = any(public.get_user_roles())
+    or brand_id = any(public.get_user_brand_ids())
+  );
 
 -- service_number_counters: managed by generate_service_number() function
 alter table public.service_number_counters enable row level security;

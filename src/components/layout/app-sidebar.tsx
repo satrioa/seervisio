@@ -8,6 +8,8 @@ import {
   LayoutDashboard,
   Sparkles,
   Wrench,
+  ShoppingCart,
+  Store,
   Package,
   Banknote,
   Users,
@@ -20,7 +22,7 @@ import {
   UserPlus,
   UserCog,
   BookOpen,
-  Compass,
+  Newspaper,
 } from "lucide-react";
 
 import {
@@ -70,6 +72,7 @@ import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { useBootLoader, type BootTask } from "@/components/system-loader/BootProvider";
 import { ShiftCashWidget } from "@/components/layout/shift-cash-widget";
+import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
 
 
@@ -174,6 +177,7 @@ interface CollapsibleGroup {
   label: string;
   icon: React.ElementType;
   items: SubNavItem[];
+  collapsible?: boolean;
 }
 
 const TOUR_ID_MAP: Record<string, string> = {
@@ -187,15 +191,6 @@ const TOUR_ID_MAP: Record<string, string> = {
 };
 
 const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
-  {
-    label: "Operation",
-    icon: Wrench,
-    items: [
-      { href: "services", label: "Service" },
-      { href: "pos-v4", label: "POS" },
-      { href: "store-shift", label: "Store Shift" },
-    ],
-  },
   {
     label: "Stok Manajemen",
     icon: Package,
@@ -253,10 +248,13 @@ interface AppSidebarProps {
   userName: string;
   userEmail: string;
   userAvatarUrl?: string | null;
+  aiCommandCenterEnabled?: boolean;
+  baseHref?: string;
 }
 
-export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail, userAvatarUrl }: AppSidebarProps) {
+export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccessAllBranches, authUserId, activeOperatorId, activeOperatorName, userName, userEmail, userAvatarUrl, aiCommandCenterEnabled, baseHref }: AppSidebarProps) {
   const pathname = usePathname();
+  const panelPath = (path: string) => baseHref ? `${baseHref}${path}` : `/${brandSlug}/panel${path}`;
   const router = useRouter();
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
     {}
@@ -266,10 +264,6 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
   const { activeBranchId, activeBranchName, branches, setActiveBranchId, isSwitching, setIsSwitching } = useActiveBranch();
   const { isMobile, setOpenMobile } = useSidebar();
   const boot = useBootLoader();
-  const restartTour = React.useCallback(() => {
-    (window as any).__onboardingReset?.();
-  }, []);
-
   const handleNavClick = React.useCallback(() => {
     if (isMobile) setOpenMobile(false);
   }, [isMobile, setOpenMobile]);
@@ -371,8 +365,11 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
     }));
   }
 
+  const sidebarVariant = usePreferencesStore((s) => s.values.sidebar_variant);
+  const sidebarCollapsible = usePreferencesStore((s) => s.values.sidebar_collapsible);
+
   return (
-    <Sidebar variant="inset" collapsible="icon">
+    <Sidebar variant={sidebarVariant} collapsible={sidebarCollapsible}>
       {/* ── Brand / Branch Switcher ── */}
       <SidebarHeader >
         <SidebarMenu>
@@ -488,7 +485,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
       </SidebarHeader>
 
       {/* ── Navigation ── */}
-      <div className="relative min-h-0 flex-1 bg-sidebar">
+      <div className="relative min-h-0 flex-1 bg-sidebar" data-tour="sidebar-nav">
         <SidebarContent className="h-full bg-sidebar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <SidebarGroup>
             <SidebarGroupContent>
@@ -506,15 +503,15 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     }
                     asChild
                   >
-                    <Link href={`/${brandSlug}/panel/dashboard`} onClick={handleNavClick}>
+                    <Link href={panelPath('/dashboard')} onClick={handleNavClick}>
                       <LayoutDashboard />
                       <span>Dashboard</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* AI Command Center — owner/master_admin only */}
-                {(role === "MASTER_ADMIN" || role === "PLATFORM_OWNER") && (
+                {/* AI Command Center — owner/master_admin only, gated by feature flag */}
+                {(role === "MASTER_ADMIN" || role === "PLATFORM_OWNER") && aiCommandCenterEnabled && (
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={isActive("ai")}
@@ -526,7 +523,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                       }
                       asChild
                     >
-                      <Link href={`/${brandSlug}/panel/ai`} onClick={handleNavClick}>
+                      <Link href={panelPath('/ai')} onClick={handleNavClick}>
                         <Sparkles className="size-4" />
                         <span>AI Command Center</span>
                       </Link>
@@ -534,73 +531,173 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                   </SidebarMenuItem>
                 )}
 
+                {/* Operation — top-level items */}
+                <li className="px-3 pb-0.5 pt-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                    Operation
+                  </span>
+                </li>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("services")}
+                    tooltip="Service"
+                    className={
+                      isActive("services")
+                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                        : ""
+                    }
+                    asChild
+                  >
+                    <Link href={panelPath('/services')} onClick={handleNavClick}>
+                      <Wrench />
+                      <span>Service</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("pos-v4")}
+                    tooltip="POS"
+                    className={
+                      isActive("pos-v4")
+                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                        : ""
+                    }
+                    asChild
+                  >
+                    <Link href={panelPath('/pos-v4')} onClick={handleNavClick}>
+                      <ShoppingCart />
+                      <span>POS</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("store-shift")}
+                    tooltip="Store Shift"
+                    className={
+                      isActive("store-shift")
+                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                        : ""
+                    }
+                    asChild
+                  >
+                    <Link href={panelPath('/store-shift')} onClick={handleNavClick}>
+                      <Store />
+                      <span>Store Shift</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <li className="mx-4 my-1.5 border-t border-sidebar-border/50" />
+
                 {/* Collapsible nav groups */}
                 {visibleGroups.map((group) => {
                   const isOpen = openGroups[group.label] ?? false;
                   const hasActiveChild = group.items.some((item) => isActive(item.href));
                   const Icon = group.icon;
+                  const isCollapsible = group.collapsible !== false;
 
                   return (
                     <React.Fragment key={group.label}>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton
-                          tooltip={group.label}
-                          onClick={() => toggleGroup(group.label)}
-                          className={`cursor-pointer ${
-                            hasActiveChild
-                              ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
-                              : ""
-                          }`}
-                        >
-                          <Icon />
-                          <span>{group.label}</span>
-                          <ChevronRight
-                            className={`ml-auto size-4 shrink-0 transition-transform duration-200 ${
-                              hasActiveChild ? "text-foreground" : "text-muted-foreground"
-                            } ${
-                              isOpen ? "rotate-90" : ""
-                            }`}
-                          />
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
+                      {isCollapsible ? (
+                        <React.Fragment>
+                          <SidebarMenuItem>
+                            <SidebarMenuButton
+                              tooltip={group.label}
+                              onClick={() => toggleGroup(group.label)}
+                              className={`cursor-pointer ${
+                                hasActiveChild
+                                  ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
+                                  : ""
+                              }`}
+                            >
+                              <Icon />
+                              <span>{group.label}</span>
+                              <ChevronRight
+                                className={`ml-auto size-4 shrink-0 transition-transform duration-200 ${
+                                  hasActiveChild ? "text-foreground" : "text-muted-foreground"
+                                } ${
+                                  isOpen ? "rotate-90" : ""
+                                }`}
+                              />
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
 
-                      <AnimatePresence initial={false}>
-                        {isOpen && (
-                          <motion.ul
-                            key={`${group.label}-submenu`}
+                          <AnimatePresence initial={false}>
+                            {isOpen && (
+                              <motion.ul
+                                key={`${group.label}-submenu`}
+                                data-sidebar="menu-sub"
+                                variants={submenuContainerVariants}
+                                initial="closed"
+                                animate="open"
+                                exit="closed"
+                                className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
+                              >
+                                {group.items.map((item) => (
+                                  <motion.li
+                                    key={item.href}
+                                    variants={submenuItemVariants}
+                                  >
+                                    <SidebarMenuSubButton
+                                      isActive={isActive(item.href)}
+                                      asChild
+                                    >
+                                      <Link
+                                        href={panelPath('/' + item.href)}
+                                        data-tour={TOUR_ID_MAP[item.href] || undefined}
+                                        onClick={handleNavClick}
+                                      >
+                                        <span>{item.label}</span>
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  </motion.li>
+                                ))}
+                              </motion.ul>
+                            )}
+                          </AnimatePresence>
+                        </React.Fragment>
+                      ) : (
+                        <React.Fragment>
+                          <SidebarMenuItem>
+                            <SidebarMenuButton
+                              tooltip={group.label}
+                              className="cursor-default"
+                            >
+                              <Icon />
+                              <span>{group.label}</span>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                          <ul
                             data-sidebar="menu-sub"
-                            variants={submenuContainerVariants}
-                            initial="closed"
-                            animate="open"
-                            exit="closed"
-                            className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
+                            className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
                           >
                             {group.items.map((item) => (
-                              <motion.li
-                                key={item.href}
-                                variants={submenuItemVariants}
-                              >
+                              <li key={item.href}>
                                 <SidebarMenuSubButton
                                   isActive={isActive(item.href)}
                                   asChild
                                 >
                                   <Link
-                                    href={`/${brandSlug}/panel/${item.href}`}
+                                    href={panelPath('/' + item.href)}
                                     data-tour={TOUR_ID_MAP[item.href] || undefined}
                                     onClick={handleNavClick}
                                   >
                                     <span>{item.label}</span>
                                   </Link>
                                 </SidebarMenuSubButton>
-                              </motion.li>
+                              </li>
                             ))}
-                          </motion.ul>
-                        )}
-                      </AnimatePresence>
+                          </ul>
+                        </React.Fragment>
+                      )}
                     </React.Fragment>
                   );
                 })}
               </SidebarMenu>
+
+              <div className="mx-4 my-2 border-t border-sidebar-border/50" />
 
                 {/* Documentation */}
                 <SidebarMenuItem>
@@ -614,10 +711,24 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     }
                     asChild
                   >
-                    <Link href={`/${brandSlug}/panel/documentation`} onClick={handleNavClick}>
+                    <Link href={panelPath('/documentation')} onClick={handleNavClick}>
                       <BookOpen />
                       <span>Documentation</span>
                     </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                {/* Blog — opens in new tab */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Blog"
+                    className="text-muted-foreground hover:text-foreground"
+                    asChild
+                  >
+                    <a href="/blog" target="_blank" rel="noreferrer">
+                      <Newspaper />
+                      <span>Blog</span>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
             </SidebarGroupContent>
@@ -640,7 +751,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
             />
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} avatarUrl={userAvatarUrl ?? null} restartTour={restartTour} />
+            <AccountSwitcher brandSlug={brandSlug} role={role} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} avatarUrl={userAvatarUrl ?? null} baseHref={baseHref} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -669,7 +780,7 @@ function AccountSwitcher({
   userName,
   userEmail,
   avatarUrl,
-  restartTour,
+  baseHref,
 }: {
   brandSlug: string;
   role: string;
@@ -679,7 +790,7 @@ function AccountSwitcher({
   userName: string;
   userEmail: string;
   avatarUrl: string | null;
-  restartTour: () => void;
+  baseHref?: string;
 }) {
   const router = useRouter();
   const { setActiveBranchId } = useActiveBranch();
@@ -794,7 +905,7 @@ function AccountSwitcher({
       setLoginModalOpen(false);
       setActiveBranchId(null);
       window.localStorage.removeItem(`seervis:selected-branch:${brandSlug}`);
-      window.location.href = `/${brandSlug}/panel/dashboard`;
+      window.location.href = baseHref ? `${baseHref}/dashboard` : `/${brandSlug}/panel/dashboard`;
     } catch {
       setLoginError("Terjadi kesalahan. Silakan coba lagi.");
     } finally {
@@ -945,16 +1056,6 @@ function AccountSwitcher({
                 <UserCog className="size-4" />
               </span>
               Pengaturan Akun
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-sidebar-accent"
-              onClick={restartTour}
-            >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted-foreground/30">
-                <Compass className="size-4" />
-              </span>
-              Restart Guided Tour
             </button>
             <button
               type="button"

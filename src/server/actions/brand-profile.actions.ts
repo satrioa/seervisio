@@ -167,3 +167,44 @@ export async function updateBrandProfileAction(
     return errorResult(err.message ?? "Gagal menyimpan profil brand.");
   }
 }
+
+export async function uploadBrandLogoFileAction(
+  brandSlug: string,
+  formData: FormData,
+): Promise<{ url?: string; error?: string }> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "settings.manage");
+
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "File tidak ditemukan." };
+
+    const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+    if (!ALLOWED.includes(file.type)) {
+      return { error: "Format file tidak didukung. Gunakan JPG, PNG, atau WebP." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { error: "File terlalu besar. Maksimal 5MB." };
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext =
+      file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
+    const filePath = `${session.brandId}/logo-${Date.now()}.${ext}`;
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const { error: uploadError } = await (adminDb as any).storage
+      .from("brands")
+      .upload(filePath, buffer, { contentType: file.type, upsert: true });
+
+    if (uploadError) return { error: "Gagal mengunggah logo." };
+
+    const { data: publicUrlData } = (adminDb as any).storage
+      .from("brands")
+      .getPublicUrl(filePath);
+
+    return { url: publicUrlData?.publicUrl ?? "" };
+  } catch (err: any) {
+    return { error: err.message || "Gagal mengunggah logo." };
+  }
+}

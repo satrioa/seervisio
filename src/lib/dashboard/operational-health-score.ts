@@ -99,7 +99,9 @@ function calcShiftHealth(input: OperationalHealthInput["shift"]): FactorResult {
   const score = clamp(Math.round(openRatio - penalty), 0, 100);
 
   const messages: string[] = [];
-  if (input.openBranches === input.totalBranches) {
+  if (input.totalBranches === 0) {
+    messages.push("Belum ada cabang — buat cabang untuk mulai operasi");
+  } else if (input.openBranches === input.totalBranches) {
     messages.push("Semua cabang sedang beroperasi");
   } else {
     const closed = input.totalBranches - input.openBranches;
@@ -253,7 +255,9 @@ function calcBranchActivityHealth(
   const score = clamp(Math.round(coverage + activityScore), 0, 100);
 
   const messages: string[] = [];
-  if (input.activeBranches === input.totalBranches) {
+  if (input.totalBranches === 0) {
+    messages.push("Belum ada cabang — tambahkan cabang untuk mulai operasi");
+  } else if (input.activeBranches === input.totalBranches) {
     messages.push("Semua cabang aktif");
   } else {
     const inactive = input.totalBranches - input.activeBranches;

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Building2, Globe, Save, Loader2, Check, AlertCircle } from "lucide-react";
+import { Building2, Globe, Save, Loader2, Check, AlertCircle, ImageUp, RotateCw, X } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,24 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Dropzone,
+  DropZoneArea,
+  DropzoneTrigger,
+  DropzoneMessage,
+  DropzoneFileList,
+  DropzoneFileListItem,
+  DropzoneFileMessage,
+  DropzoneRemoveFile,
+  DropzoneRetryFile,
+  InfiniteProgress,
+  useDropzone,
+} from "@/components/ui/dropzone";
 import {
   getBrandProfileAction,
   updateBrandProfileAction,
+  uploadBrandLogoFileAction,
   type BrandProfileData,
 } from "@/server/actions/brand-profile.actions";
 
@@ -56,6 +71,28 @@ export function BrandProfileSettings() {
   const handleChange = (field: keyof BrandProfileData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value || null }));
   };
+
+  const logoDropzone = useDropzone<string, string>({
+    validation: {
+      accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
+      maxFiles: 1,
+      maxSize: 5 * 1024 * 1024,
+    },
+    onDropFile: async (file) => {
+      try {
+        const fd = new FormData();
+        fd.set("file", file);
+        const result = await uploadBrandLogoFileAction(brandSlug, fd);
+        if (result.error) return { status: "error", error: result.error };
+        return { status: "success", result: result.url ?? "" };
+      } catch {
+        return { status: "error", error: "Gagal mengunggah logo." };
+      }
+    },
+    onFileUploaded: (url) => setForm((prev) => ({ ...prev, logoUrl: url || null })),
+    onRemoveFile: () => setForm((prev) => ({ ...prev, logoUrl: null })),
+    shapeUploadError: (e) => e,
+  });
 
   const handleSave = async () => {
     if (!brandSlug) return;
@@ -127,6 +164,52 @@ export function BrandProfileSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="logoUrl" className="text-xs font-medium">Logo Brand</Label>
+            <Dropzone {...logoDropzone}>
+              <DropZoneArea className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/20 py-8 text-center transition-colors hover:border-primary/50">
+                <Avatar className="size-16">
+                  {form.logoUrl ? (
+                    <AvatarImage src={form.logoUrl} alt="Logo brand" />
+                  ) : null}
+                  <AvatarFallback>
+                    <ImageUp className="size-6 text-muted-foreground" />
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <DropzoneTrigger className="cursor-pointer">
+                    <span className="text-sm font-medium text-primary">
+                      {form.logoUrl ? "Ganti logo" : "Pilih logo"}
+                    </span>
+                  </DropzoneTrigger>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    JPG, PNG, WebP · Maks 5MB
+                  </p>
+                </div>
+              </DropZoneArea>
+              <DropzoneMessage />
+              <DropzoneFileList className="mt-2">
+                {logoDropzone.fileStatuses.map((fs) => (
+                  <DropzoneFileListItem key={fs.id} file={fs}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-medium">{fs.fileName}</span>
+                      <div className="flex items-center gap-1">
+                        <DropzoneRetryFile>
+                          <RotateCw className="size-4" />
+                        </DropzoneRetryFile>
+                        <DropzoneRemoveFile>
+                          <X className="size-4" />
+                        </DropzoneRemoveFile>
+                      </div>
+                    </div>
+                    <InfiniteProgress status={fs.status} />
+                    <DropzoneFileMessage />
+                  </DropzoneFileListItem>
+                ))}
+              </DropzoneFileList>
+            </Dropzone>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="storeName" className="text-xs font-medium">
@@ -204,27 +287,15 @@ export function BrandProfileSettings() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp" className="text-xs font-medium">WhatsApp</Label>
-              <Input
-                id="whatsapp"
-                value={form.whatsappNumber ?? ""}
-                onChange={(e) => handleChange("whatsappNumber", e.target.value)}
-                className="h-9 text-xs"
-                placeholder="No. WhatsApp"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="logoUrl" className="text-xs font-medium">Logo URL</Label>
-              <Input
-                id="logoUrl"
-                value={form.logoUrl ?? ""}
-                onChange={(e) => handleChange("logoUrl", e.target.value)}
-                className="h-9 text-xs"
-                placeholder="URL logo brand"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp" className="text-xs font-medium">WhatsApp</Label>
+            <Input
+              id="whatsapp"
+              value={form.whatsappNumber ?? ""}
+              onChange={(e) => handleChange("whatsappNumber", e.target.value)}
+              className="h-9 text-xs"
+              placeholder="No. WhatsApp"
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

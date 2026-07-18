@@ -46,8 +46,6 @@ type FormData = {
   picName: string;
   picPhone: string;
   companyAddress: string;
-  npwp: string;
-  invoiceEmail: string;
   notes: string;
 };
 
@@ -71,8 +69,6 @@ export function PurchaseWizardClient({ brandSlug }: PurchaseWizardClientProps) {
     picName: "",
     picPhone: "",
     companyAddress: "",
-    npwp: "",
-    invoiceEmail: "",
     notes: "",
   });
 
@@ -109,7 +105,7 @@ export function PurchaseWizardClient({ brandSlug }: PurchaseWizardClientProps) {
   };
 
   const canProceedToStep3 = () => {
-    return form.packageId && form.picName.trim() && form.picPhone.trim() && form.invoiceEmail.trim();
+    return form.packageId && form.picName.trim() && form.picPhone.trim();
   };
 
   const submitOrder = async () => {
@@ -121,8 +117,6 @@ export function PurchaseWizardClient({ brandSlug }: PurchaseWizardClientProps) {
         pic_name: form.picName,
         pic_phone: form.picPhone,
         company_address: form.companyAddress,
-        npwp: form.npwp || undefined,
-        invoice_email: form.invoiceEmail,
         notes: form.notes || undefined,
       });
       if (!result.success) {
@@ -337,28 +331,6 @@ export function PurchaseWizardClient({ brandSlug }: PurchaseWizardClientProps) {
                   onChange={(e) => handleFormChange("companyAddress", e.target.value)}
                   rows={3}
                 />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="npwp">NPWP</Label>
-                  <Input
-                    id="npwp"
-                    placeholder="XX.XXX.XXX.X-XXX.XXX"
-                    value={form.npwp}
-                    onChange={(e) => handleFormChange("npwp", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invoiceEmail">Email Invoice *</Label>
-                  <Input
-                    id="invoiceEmail"
-                    type="email"
-                    placeholder="email@example.com"
-                    value={form.invoiceEmail}
-                    onChange={(e) => handleFormChange("invoiceEmail", e.target.value)}
-                  />
-                </div>
               </div>
 
               <div className="space-y-2">

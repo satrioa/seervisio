@@ -1,9 +1,42 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImageUp, Check, Loader2, Palette } from "lucide-react";
+import { ImageUp, Loader2, Palette, Building2, ArrowRight, ArrowLeft, Check, RotateCw, X } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Dropzone,
+  DropZoneArea,
+  DropzoneTrigger,
+  DropzoneMessage,
+  DropzoneFileList,
+  DropzoneFileListItem,
+  DropzoneFileMessage,
+  DropzoneRemoveFile,
+  DropzoneRetryFile,
+  InfiniteProgress,
+  useDropzone,
+} from "@/components/ui/dropzone";
+import { uploadBrandLogoAction } from "@/server/actions/welcome.actions";
 
 interface Props {
   profileId: string;
@@ -45,7 +78,6 @@ export function WelcomeWizardClient({
   const [step, setStep] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [brand, setBrand] = useState<BrandProfileData>({
     name: businessName,
@@ -54,32 +86,29 @@ export function WelcomeWizardClient({
     accentColor: COLOR_PRESETS[0].accent,
   });
   const [branchName, setBranchName] = useState("Main Branch");
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
-  async function handleLogoUpload(file: File) {
-    if (!brandId) return;
-    setLogoUploading(true);
-    setError(null);
-    try {
-      const fd = new FormData();
-      fd.set("file", file);
-      const { uploadBrandLogoAction } = await import(
-        "@/server/actions/welcome.actions"
-      );
-      const result = await uploadBrandLogoAction(brandId, fd);
-      if (result.error) {
-        setError(result.error);
-      } else if (result.url) {
-        setBrand((prev) => ({ ...prev, logoUrl: result.url! }));
-        setLogoPreview(URL.createObjectURL(file));
+  const logoDropzone = useDropzone<string, string>({
+    validation: {
+      accept: { "image/jpeg": [], "image/png": [], "image/webp": [] },
+      maxFiles: 1,
+      maxSize: 5 * 1024 * 1024,
+    },
+    onDropFile: async (file) => {
+      if (!brandId) return { status: "error", error: "Brand tidak ditemukan." };
+      try {
+        const fd = new FormData();
+        fd.set("file", file);
+        const result = await uploadBrandLogoAction(brandId, fd);
+        if (result.error) return { status: "error", error: result.error };
+        return { status: "success", result: result.url ?? "" };
+      } catch {
+        return { status: "error", error: "Gagal mengunggah logo." };
       }
-    } catch (e) {
-      setError("Gagal mengunggah logo.");
-    } finally {
-      setLogoUploading(false);
-    }
-  }
+    },
+    onFileUploaded: (url) => setBrand((prev) => ({ ...prev, logoUrl: url })),
+    onRemoveFile: () => setBrand((prev) => ({ ...prev, logoUrl: null })),
+    shapeUploadError: (e) => e,
+  });
 
   function handleSaveBrand() {
     setError(null);
@@ -139,148 +168,162 @@ export function WelcomeWizardClient({
     });
   }
 
-  const selectedPreset = COLOR_PRESETS.find(
-    (p) => p.primary === brand.primaryColor && p.accent === brand.accentColor,
-  );
+  const selectedPresetLabel =
+    COLOR_PRESETS.find(
+      (p) =>
+        p.primary === brand.primaryColor && p.accent === brand.accentColor,
+    )?.label ?? "";
+
+  const progress = Math.round(((step + 1) / STEPS.length) * 100);
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-16">
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Onboarding · {packageName}
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">Set up your workspace</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Customize your brand and branch before entering the dashboard.
-        </p>
+    <main className="mx-auto flex max-w-lg flex-col gap-4 px-4 py-16">
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <CardDescription className="flex items-center gap-2">
+                Onboarding
+                <Badge variant="secondary" className="font-normal">
+                  {packageName}
+                </Badge>
+              </CardDescription>
+              <CardTitle className="text-2xl">Set up your workspace</CardTitle>
+            </div>
+            <Badge variant="outline" className="shrink-0">
+              Step {step + 1}/{STEPS.length}
+            </Badge>
+          </div>
+          <Progress value={progress} className="mt-4" />
+          <div className="mt-2 flex gap-1.5">
+            {STEPS.map((label, i) => (
+              <span
+                key={label}
+                className={cn(
+                  "h-1.5 flex-1 rounded-full transition-colors",
+                  i <= step ? "bg-primary" : "bg-muted",
+                )}
+              />
+            ))}
+          </div>
+        </CardHeader>
 
-        <ol className="mt-6 flex gap-2">
-          {STEPS.map((label, i) => (
-            <li
-              key={label}
-              className={`flex-1 rounded-full px-2 py-1 text-center text-xs font-medium ${
-                i === step
-                  ? "bg-primary text-primary-foreground"
-                  : i < step
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {i + 1}. {label}
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-6 space-y-4">
+        <CardContent className="flex flex-col gap-6">
           {error && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-              {error}
-            </p>
+            <Alert variant="destructive">
+              <AlertTitle>Terjadi kesalahan</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
           {/* Step 0: Brand Profile */}
           {step === 0 && (
-            <div className="space-y-5">
-              {/* Logo upload */}
-              <div>
-                <label className="text-sm font-medium">Brand Logo</label>
-                <div className="mt-1.5 flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={logoUploading}
-                    className="flex size-20 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/20 transition-colors hover:border-primary/50"
-                  >
-                    {logoUploading ? (
-                      <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                    ) : logoPreview ? (
-                      <img
-                        src={logoPreview}
-                        alt="Logo preview"
-                        className="size-full object-contain"
-                      />
-                    ) : (
-                      <ImageUp className="size-6 text-muted-foreground" />
-                    )}
-                  </button>
-                  <div className="text-xs text-muted-foreground">
-                    <p>JPG, PNG, or WebP</p>
-                    <p>Max 5MB</p>
-                  </div>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleLogoUpload(file);
-                  }}
-                />
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <Label>Brand Logo</Label>
+                <Dropzone {...logoDropzone}>
+                  <DropZoneArea className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/20 py-8 text-center transition-colors hover:border-primary/50">
+                    <Avatar className="size-16">
+                      {brand.logoUrl ? (
+                        <AvatarImage src={brand.logoUrl} alt="Logo preview" />
+                      ) : null}
+                      <AvatarFallback>
+                        <ImageUp className="size-6 text-muted-foreground" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <DropzoneTrigger className="cursor-pointer">
+                        <span className="text-sm font-medium text-primary">
+                          Pilih logo
+                        </span>
+                      </DropzoneTrigger>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        JPG, PNG, atau WebP · Maks 5MB
+                      </p>
+                    </div>
+                  </DropZoneArea>
+                  <DropzoneMessage />
+                  <DropzoneFileList className="mt-2">
+                    {logoDropzone.fileStatuses.map((fs) => (
+                      <DropzoneFileListItem key={fs.id} file={fs}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-medium">
+                            {fs.fileName}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <DropzoneRetryFile>
+                              <RotateCw className="size-4" />
+                            </DropzoneRetryFile>
+                            <DropzoneRemoveFile>
+                              <X className="size-4" />
+                            </DropzoneRemoveFile>
+                          </div>
+                        </div>
+                        <InfiniteProgress status={fs.status} />
+                        <DropzoneFileMessage />
+                      </DropzoneFileListItem>
+                    ))}
+                  </DropzoneFileList>
+                </Dropzone>
               </div>
 
-              {/* Brand name */}
-              <div>
-                <label htmlFor="brand-name" className="text-sm font-medium">
-                  Brand Name
-                </label>
-                <input
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="brand-name">Brand Name</Label>
+                <Input
                   id="brand-name"
                   value={brand.name}
                   onChange={(e) =>
                     setBrand((prev) => ({ ...prev, name: e.target.value }))
                   }
-                  className="mt-1 block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="Your business name"
+                  placeholder="Nama bisnis Anda"
                 />
               </div>
 
-              {/* Color theme */}
-              <div>
-                <label className="text-sm font-medium">Color Theme</label>
-                <div className="mt-1.5 grid grid-cols-3 gap-2">
+              <Separator />
+
+              <div className="flex flex-col gap-3">
+                <Label>Color Theme</Label>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  value={selectedPresetLabel}
+                  onValueChange={(v) => {
+                    if (!v) return;
+                    const preset = COLOR_PRESETS.find((p) => p.label === v);
+                    if (preset) {
+                      setBrand((prev) => ({
+                        ...prev,
+                        primaryColor: preset.primary,
+                        accentColor: preset.accent,
+                      }));
+                    }
+                  }}
+                  className="grid w-full grid-cols-2 gap-2"
+                >
                   {COLOR_PRESETS.map((preset) => (
-                    <button
+                    <ToggleGroupItem
                       key={preset.label}
-                      type="button"
-                      onClick={() =>
-                        setBrand((prev) => ({
-                          ...prev,
-                          primaryColor: preset.primary,
-                          accentColor: preset.accent,
-                        }))
-                      }
-                      className={`relative flex items-center gap-2 rounded-lg border p-2.5 text-left text-xs font-medium transition-colors ${
-                        selectedPreset?.label === preset.label
-                          ? "border-primary ring-1 ring-primary"
-                          : "border-border hover:border-muted-foreground/40"
-                      }`}
+                      value={preset.label}
+                      className="flex items-center justify-start gap-2"
                     >
                       <span
-                        className="size-4 shrink-0 rounded-full"
+                        className="size-4 shrink-0 rounded-full ring-1 ring-border"
                         style={{ backgroundColor: preset.primary }}
                       />
                       <span
-                        className="size-4 shrink-0 rounded-full"
+                        className="size-4 shrink-0 rounded-full ring-1 ring-border"
                         style={{ backgroundColor: preset.accent }}
                       />
-                      <span className="text-foreground">{preset.label}</span>
-                      {selectedPreset?.label === preset.label && (
-                        <Check className="ml-auto size-3.5 text-primary" />
-                      )}
-                    </button>
+                      <span className="text-xs font-medium">{preset.label}</span>
+                    </ToggleGroupItem>
                   ))}
-                </div>
+                </ToggleGroup>
               </div>
 
-              {/* Custom colors */}
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label htmlFor="primary-color" className="text-xs font-medium">
-                    Primary Color
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="primary-color">Primary Color</Label>
+                  <div className="flex items-center gap-2">
                     <input
                       id="primary-color"
                       type="color"
@@ -291,18 +334,16 @@ export function WelcomeWizardClient({
                           primaryColor: e.target.value,
                         }))
                       }
-                      className="size-8 cursor-pointer rounded border"
+                      className="size-9 cursor-pointer rounded-md border border-input"
                     />
                     <span className="text-xs text-muted-foreground">
                       {brand.primaryColor}
                     </span>
                   </div>
                 </div>
-                <div className="flex-1">
-                  <label htmlFor="accent-color" className="text-xs font-medium">
-                    Accent Color
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="accent-color">Accent Color</Label>
+                  <div className="flex items-center gap-2">
                     <input
                       id="accent-color"
                       type="color"
@@ -313,7 +354,7 @@ export function WelcomeWizardClient({
                           accentColor: e.target.value,
                         }))
                       }
-                      className="size-8 cursor-pointer rounded border"
+                      className="size-9 cursor-pointer rounded-md border border-input"
                     />
                     <span className="text-xs text-muted-foreground">
                       {brand.accentColor}
@@ -321,109 +362,127 @@ export function WelcomeWizardClient({
                   </div>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={handleSaveBrand}
-                disabled={isPending || !brand.name.trim()}
-                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
-                {isPending ? "Saving..." : "Continue"}
-              </button>
             </div>
           )}
 
           {/* Step 1: Branch */}
           {step === 1 && (
-            <div className="space-y-5">
-              <div>
-                <label htmlFor="branch-name" className="text-sm font-medium">
-                  Branch Name
-                </label>
-                <input
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="branch-name">Branch Name</Label>
+                <Input
                   id="branch-name"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="e.g. Main Branch"
+                  placeholder="Contoh: Main Branch"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  You can add more branches later in Settings.
+                <p className="text-xs text-muted-foreground">
+                  Anda dapat menambahkan cabang lainnya nanti di Pengaturan.
                 </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(0)}
-                  className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveBranch}
-                  disabled={isPending || !branchName.trim()}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-                >
-                  {isPending ? "Saving..." : "Continue"}
-                </button>
               </div>
             </div>
           )}
 
           {/* Step 2: Done */}
           {step === 2 && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10">
-                  <Palette className="size-6 text-primary" />
-                </div>
-                <p className="mt-3 text-base font-semibold">All Set!</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Your workspace{" "}
+            <div className="flex flex-col items-center gap-4 py-4 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
+                <Palette className="size-7 text-primary" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-lg font-semibold">All Set!</p>
+                <p className="text-sm text-muted-foreground">
+                  Workspace{" "}
                   <span className="font-medium text-foreground">
                     {brand.name}
                   </span>{" "}
-                  is ready.
+                  sudah siap digunakan.
                 </p>
               </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  disabled={isPending}
-                  className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-60"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinish}
-                  disabled={isPending}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 inline size-4 animate-spin" />
-                      Finishing...
-                    </>
-                  ) : (
-                    "Go to Dashboard"
-                  )}
-                </button>
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                <Building2 className="size-4 text-muted-foreground" />
+                <span className="font-medium">{brand.name}</span>
               </div>
             </div>
           )}
-        </div>
+        </CardContent>
 
-        <div className="mt-8 text-xs text-muted-foreground">
-          <Link href="/license" className="underline hover:text-foreground">
-            Back to License Center
-          </Link>
-        </div>
-      </div>
+        <CardFooter className="flex justify-between gap-2">
+          {step > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStep((s) => s - 1)}
+              disabled={isPending}
+            >
+              <ArrowLeft />
+              Back
+            </Button>
+          ) : (
+            <span />
+          )}
+
+          {step === 0 && (
+            <Button
+              type="button"
+              onClick={handleSaveBrand}
+              disabled={isPending || !brand.name.trim()}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight />
+                </>
+              )}
+            </Button>
+          )}
+
+          {step === 1 && (
+            <Button
+              type="button"
+              onClick={handleSaveBranch}
+              disabled={isPending || !branchName.trim()}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight />
+                </>
+              )}
+            </Button>
+          )}
+
+          {step === 2 && (
+            <Button type="button" onClick={handleFinish} disabled={isPending}>
+              {isPending ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Finishing...
+                </>
+              ) : (
+                "Go to Dashboard"
+              )}
+            </Button>
+          )}
+        </CardFooter>
+      </Card>
+
+      <Link
+        href="/license"
+        className="text-center text-xs text-muted-foreground underline hover:text-foreground"
+      >
+        Back to License Center
+      </Link>
     </main>
   );
 }

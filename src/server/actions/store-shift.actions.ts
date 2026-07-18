@@ -210,6 +210,38 @@ export async function openStoreShiftAction(
     const shiftId: string = resultData.shift_id ?? (typeof resultData === "string" ? resultData : "");
     const shiftNumberStr: string = resultData.shift_number ?? "";
 
+    // Credit cash account with opening cash difference
+    try {
+      const { data: shiftRow } = await (supabase as any)
+        .from("store_shifts")
+        .select("opening_difference, cash_account_id")
+        .eq("id", shiftId)
+        .single();
+
+      const openingDiff = Number(shiftRow?.opening_difference || 0);
+      const cashAccountId = shiftRow?.cash_account_id;
+
+      if (openingDiff > 0 && cashAccountId) {
+        const { error: initError } = await (supabase as any).rpc("add_payment_account_movement", {
+          p_payment_account_id: cashAccountId,
+          p_brand_id: session.brandId,
+          p_direction: "IN",
+          p_amount: openingDiff,
+          p_movement_type: "BALANCE_ADJUSTMENT",
+          p_description: `Saldo awal shift #${shiftNumberStr}`,
+          p_reference_type: "SHIFT_OPENING",
+          p_reference_id: shiftId,
+          p_created_by: session.profileId,
+          p_metadata: { shift_id: shiftId, shift_number: shiftNumberStr },
+        });
+        if (initError) {
+          console.warn("[StoreShiftActions] opening balance movement error:", initError);
+        }
+      }
+    } catch (balErr: any) {
+      console.warn("[StoreShiftActions] failed to credit opening balance:", balErr.message);
+    }
+
     console.log("[store-shift:open] created session", {
       sessionId: shiftId,
       branchId,

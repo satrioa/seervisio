@@ -10,7 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { PlatformSidebar } from "@/components/layout/platform-sidebar";
 import { NotificationCenter } from "@/components/layout/notification-center";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, House } from "lucide-react";
+import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 import { cn } from "@/lib/utils";
 
 interface PlatformLayoutClientProps {
@@ -34,6 +35,7 @@ function getPageTitle(pathname: string | null): string {
     "audit-logs": "Audit Logs",
     "system-logs": "System Logs",
     settings: "Platform Settings",
+    changelog: "Changelog",
   };
   return titles[segment] ?? segment.replace(/-/g, " ");
 }
@@ -46,14 +48,17 @@ export function PlatformLayoutClient({
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+  const setPreference = usePreferencesStore((s) => s.setPreference);
 
   React.useEffect(() => {
     document.documentElement.classList.add("dark");
-  }, []);
+    setPreference("theme_mode", "dark");
+  }, [setPreference]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
+    setPreference("theme_mode", next);
     document.documentElement.classList.toggle("dark", next === "dark");
   };
 
@@ -65,7 +70,17 @@ export function PlatformLayoutClient({
         <SidebarInset className="h-screen min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none">
           {/* Header */}
           <header className="relative z-40 flex h-14 items-center overflow-visible !bg-sidebar px-3 text-sidebar-foreground md:h-16 md:px-6">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                onClick={() => window.location.href = "/"}
+                aria-label="Back to landing page"
+              >
+                <House className="size-4" />
+              </Button>
               <SidebarTrigger />
               <h1 className="text-lg font-semibold tracking-tight text-foreground">
                 {pageTitle}

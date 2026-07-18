@@ -5,7 +5,7 @@ import { BootProvider } from "@/components/system-loader/BootProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange storageKey="seervis-theme">
       <BootProvider>
         {children}
       </BootProvider>
