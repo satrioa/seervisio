@@ -1,0 +1,274 @@
+/* ============================================================
+   driver-theme.css
+   Complete override of Driver.js default styling.
+   Uses the Seervisio Design System (CSS variables).
+   Do NOT rely on Driver.js default blue theme.
+   ============================================================ */
+
+/* ── Overlay (dark transparent) ─────────────────────────── */
+div#driver-popover-container,
+.driver-overlay,
+.driver-active .driver-overlay {
+  background: rgba(15, 23, 42, 0.82) !important;
+  z-index: 10000 !important;
+  backdrop-filter: blur(2px);
+}
+
+/* ── Popover card (above create dialogs at z-10010) ───── */
+div#driver-popover-container {
+  z-index: 10020 !important;
+}
+
+/* ── Stage / Spotlight ──────────────────────────────────── */
+.driver-active .driver-stage,
+.driver-stage {
+  border-radius: 16px !important;
+  box-shadow: 
+    0 0 0 4px rgba(255, 255, 255, 0.95),
+    0 0 0 6px rgba(59, 130, 246, 0.3),
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    0 0 80px rgba(59, 130, 246, 0.15) !important;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* ── Popover card ──────────────────────────────────────── */
+div#driver-popover-container .seervis-tour-popover,
+.seervis-tour-popover {
+  position: relative;
+  background: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.08),
+    0 12px 32px -8px rgba(15, 23, 42, 0.25),
+    0 24px 64px -12px rgba(15, 23, 42, 0.2) !important;
+  padding: 24px 24px 20px !important;
+  max-width: 360px !important;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  overflow: hidden;
+  animation: seervis-tour-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Accent bar on top of the card */
+.seervis-tour-popover::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.6));
+  border-radius: 20px 20px 0 0;
+}
+
+@keyframes seervis-tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Title */
+.seervis-tour-popover .driver-popover-title {
+  font-size: 1.125rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.015em;
+  color: hsl(var(--foreground)) !important;
+  margin-bottom: 8px !important;
+  line-height: 1.4 !important;
+}
+
+/* Description */
+.seervis-tour-popover .driver-popover-description {
+  font-size: 0.9375rem !important;
+  line-height: 1.65 !important;
+  color: hsl(var(--muted-foreground)) !important;
+  margin-bottom: 0 !important;
+}
+
+/* ── Progress indicator (top of card) ─────────────────── */
+.seervis-tour-popover .driver-popover-progress-text {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  color: hsl(var(--primary)) !important;
+  text-transform: uppercase;
+  margin-bottom: 10px !important;
+  display: block !important;
+}
+
+.seervis-tour-popover .driver-popover-progress {
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: hsl(var(--muted)) !important;
+  margin-bottom: 18px !important;
+  overflow: hidden;
+}
+
+.seervis-tour-popover .driver-popover-progress-bar {
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.75)) !important;
+  border-radius: 999px !important;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+/* ── Footer / Buttons ─────────────────────────────────── */
+.seervis-tour-popover .driver-popover-footer {
+  margin-top: 22px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+  padding-top: 16px !important;
+  border-top: 1px solid hsl(var(--border)) !important;
+}
+
+.seervis-tour-popover .driver-popover-footer button,
+.seervis-tour-popover button.driver-next-btn,
+.seervis-tour-popover button.driver-prev-btn,
+.seervis-tour-popover button.driver-done-btn {
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  border-radius: 12px !important;
+  padding: 10px 18px !important;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  border: 1px solid transparent !important;
+}
+
+/* Primary (Next / Done) — shadcn primary */
+.seervis-tour-popover button.driver-next-btn,
+.seervis-tour-popover button.driver-done-btn {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  order: 3;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
+}
+.seervis-tour-popover button.driver-next-btn:hover,
+.seervis-tour-popover button.driver-done-btn:hover {
+  background: hsl(var(--primary) / 0.92) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.15) !important;
+}
+.seervis-tour-popover button.driver-next-btn:active,
+.seervis-tour-popover button.driver-done-btn:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Disabled state for Next button */
+.seervis-tour-popover button.driver-next-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Previous — ghost secondary */
+.seervis-tour-popover button.driver-prev-btn {
+  background: transparent !important;
+  color: hsl(var(--muted-foreground)) !important;
+  order: 1;
+}
+.seervis-tour-popover button.driver-prev-btn:hover {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Skip — ghost, pushed left */
+.seervis-tour-popover .seervis-tour-skip {
+  background: transparent !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  order: 2;
+  margin-right: auto;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.seervis-tour-popover .seervis-tour-skip:hover {
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--muted) / 0.6) !important;
+}
+
+/* Close (×) */
+.seervis-tour-popover .driver-popover-close-btn {
+  color: hsl(var(--muted-foreground)) !important;
+  background: transparent !important;
+  font-size: 1.125rem !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 10px !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.seervis-tour-popover .driver-popover-close-btn:hover {
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--muted)) !important;
+  transform: rotate(90deg);
+}
+
+/* ── Reduced motion ───────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .seervis-tour-popover {
+    animation: none !important;
+  }
+  .driver-active .driver-stage {
+    transition: none !important;
+  }
+  .seervis-tour-popover .driver-popover-progress-bar {
+    transition: none !important;
+  }
+  .seervis-tour-popover .driver-popover-close-btn:hover {
+    transform: none !important;
+  }
+}
+
+/* ── Mobile ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  div#driver-popover-container .seervis-tour-popover,
+  .seervis-tour-popover {
+    max-width: calc(100vw - 32px) !important;
+    margin: 0 16px !important;
+    padding: 20px 20px 16px !important;
+  }
+  
+  .seervis-tour-popover .driver-popover-title {
+    font-size: 1rem !important;
+  }
+  
+  .seervis-tour-popover .driver-popover-description {
+    font-size: 0.875rem !important;
+  }
+  
+  .seervis-tour-popover .driver-popover-footer {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  
+  .seervis-tour-popover .driver-popover-footer button {
+    padding: 8px 14px !important;
+    font-size: 0.8125rem !important;
+  }
+}
+
+/* ── Edge case: popover near viewport edges ───────────── */
+.seervis-tour-popover[data-side="top"],
+.seervis-tour-popover[data-side="bottom"] {
+  max-width: min(360px, calc(100vw - 48px)) !important;
+}
+
+.seervis-tour-popover[data-side="left"],
+.seervis-tour-popover[data-side="right"] {
+  max-width: min(320px, calc(100vw - 64px)) !important;
+}
+
+/* ── Smooth scroll behavior ───────────────────────────── */
+html.driver-active {
+  scroll-behavior: smooth;
+}
