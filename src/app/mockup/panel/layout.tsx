@@ -1,6 +1,6 @@
 import React from "react";
-import { BootProvider } from "@/components/system-loader/BootProvider";
 import { PanelLayoutClient } from "./panel-layout-client";
+import { MockupInteractionGuard } from "./mockup-interaction-guard";
 
 export default function MockPanelLayout({
   children,
@@ -8,7 +8,11 @@ export default function MockPanelLayout({
   children: React.ReactNode;
 }) {
   return (
-    <BootProvider>
+    <div
+      data-mockup-panel
+      className="dark h-dvh bg-sidebar text-sidebar-foreground"
+    >
+      <MockupInteractionGuard />
       <PanelLayoutClient
         brandSlug="mockup"
         brandId={1}
@@ -41,6 +45,6 @@ export default function MockPanelLayout({
       >
         {children}
       </PanelLayoutClient>
-    </BootProvider>
+    </div>
   );
 }

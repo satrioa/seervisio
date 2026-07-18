@@ -141,7 +141,10 @@ export function HeroSection() {
           transition={{ duration: 0.8, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
           className="relative mx-auto mt-16 max-w-5xl"
         >
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+          {/* glow — behind the mockup frame */}
+          <div className="pointer-events-none absolute -inset-x-10 top-6 -z-10 h-40 rounded-full bg-primary/10 blur-3xl" />
+
+          <div className="dark relative z-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
             {/* window chrome */}
             <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2.5">
               <span className="size-2.5 rounded-full bg-red-500/80" />
@@ -190,9 +193,6 @@ export function HeroSection() {
               ))}
             </div>
           </div>
-
-          {/* glow */}
-          <div className="absolute -inset-x-10 -top-10 -z-10 h-40 rounded-full bg-primary/20 blur-3xl" />
         </motion.div>
       </div>
     </section>

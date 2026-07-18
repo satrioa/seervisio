@@ -165,6 +165,7 @@ function KanbanColumn({
 /* ── Main Preview ── */
 
 export function KanbanPreview() {
+  const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<Record<ColumnId, CardData[]>>(deterministicInitialCards);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -231,6 +232,22 @@ export function KanbanPreview() {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
   }, [scheduleNextDemo]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="-mx-6 -mb-6 mt-3 overflow-x-auto overscroll-x-contain hide-scrollbar" style={{ maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)", WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)" }}>
+        <div className="flex gap-3 px-6 pb-4" style={{ width: "max-content", minWidth: "100%" }}>
+          {COLUMNS.map((col) => (
+            <KanbanColumn key={col.id} column={col} cards={columns[col.id]} draggedId={null} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   /* ── DnD handlers ── */
 

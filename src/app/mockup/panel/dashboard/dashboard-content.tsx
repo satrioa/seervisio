@@ -79,7 +79,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
   );
 
   return (
-    <div className="space-y-3" data-tour="dashboard-overview">
+    <div className="flex flex-col gap-4" data-tour="dashboard-overview">
       {/* ── Page Header ── */}
       <PageHeader
         title="Dashboard"
@@ -102,36 +102,26 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
       />
 
       {/* ── Tabs ── */}
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto border-b bg-transparent p-0">
-          <TabsTrigger
-            value="general"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Store className="mr-1.5 size-3.5" /> General
+      <Tabs defaultValue="general" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList className="gap-1">
+          <TabsTrigger value="general">
+            <Store /> General
           </TabsTrigger>
-          <TabsTrigger
-            value="servis"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Wrench className="mr-1.5 size-3.5" /> Servis
+          <TabsTrigger value="servis">
+            <Wrench /> Servis
           </TabsTrigger>
-          <TabsTrigger
-            value="finance"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <DollarSign className="mr-1.5 size-3.5" /> Finance
+          <TabsTrigger value="finance">
+            <DollarSign /> Finance
           </TabsTrigger>
-          <TabsTrigger
-            value="inventory"
-            className="relative rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:text-foreground"
-          >
-            <Package className="mr-1.5 size-3.5" /> Inventory
+          <TabsTrigger value="inventory">
+            <Package /> Inventory
           </TabsTrigger>
         </TabsList>
+        </div>
 
         {/* TAB 1 — GENERAL */}
-        <TabsContent value="general" className="mt-3">
+        <TabsContent value="general" className="flex flex-col gap-4">
           <GeneralOverviewTab
             brandSlug={brandSlug}
             dateRange={dateRange}
@@ -143,17 +133,17 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
         </TabsContent>
 
         {/* TAB 2 — SERVIS */}
-        <TabsContent value="servis" className="mt-3">
+        <TabsContent value="servis" className="flex flex-col gap-4">
           <ServiceOverviewTab data={dashboardData.service} />
         </TabsContent>
 
         {/* TAB 3 — FINANCE */}
-        <TabsContent value="finance" className="mt-3">
+        <TabsContent value="finance" className="flex flex-col gap-4">
           <FinanceOverviewTab data={dashboardData.finance} />
         </TabsContent>
 
         {/* TAB 4 — INVENTORY */}
-        <TabsContent value="inventory" className="mt-3">
+        <TabsContent value="inventory" className="flex flex-col gap-4">
           <InventoryOverviewTab data={dashboardData.inventory} />
         </TabsContent>
       </Tabs>

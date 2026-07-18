@@ -108,8 +108,11 @@ export default function Hero({
       </div>
       {mockup !== false && (
         <div className="relative mx-auto mt-12 w-full max-w-container px-4 sm:px-6 lg:px-8">
-          <div className="animate-appear w-full opacity-0 delay-700">{mockup}</div>
-          <Glow variant="top" className="animate-appear-zoom opacity-0 delay-1000" />
+          <div className="animate-appear relative z-10 w-full opacity-0 delay-700">{mockup}</div>
+          <Glow
+            variant="top"
+            className="pointer-events-none z-0 animate-appear-zoom opacity-0 delay-1000"
+          />
         </div>
       )}
     </Section>

@@ -10,16 +10,17 @@ import {
   SidebarInset,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 import dynamic from "next/dynamic";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
 import { NotificationPopover } from "@/components/notifications/NotificationPopover";
-import { Moon, Sun, House } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { BrandThemeProvider } from "@/components/theme/brand-theme-provider";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { RightSidebarProvider } from "@/components/layout/right-sidebar-context";
 import { RightSidebarPanel } from "@/components/layout/right-sidebar-panel";
-import GradualBlur from "@/components/GradualBlur";
 import { ActiveBranchProvider, useActiveBranch, type ActiveBranchOption } from "@/components/layout/active-branch-context";
 import { PosCartProvider } from "@/components/pos/pos-cart-context";
 import { PosCartSidebar } from "@/components/pos/pos-cart-sidebar";
@@ -351,116 +352,98 @@ function PanelLayoutShell({
       {isImpersonating && (
         <ImpersonationBanner brandSlug={brandSlug} brandName={brandName} />
       )}
-      <div className={`flex overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100dvh-40px)]" : "h-dvh"}`}>
-        <SidebarProvider>
+      <div className={`flex max-w-full overflow-hidden bg-sidebar text-sidebar-foreground ${isImpersonating ? "h-[calc(100dvh-40px)]" : "h-dvh"}`}>
+          <SidebarProvider
+            style={{ "--sidebar-width": "calc(var(--spacing) * 68)" } as React.CSSProperties}
+          >
           <AppSidebar brandSlug={brandSlug} brandName={brandName} brandLogoUrl={brandLogoUrl} role={role} canAccessAllBranches={canAccessAllBranches} authUserId={authUserId} activeOperatorId={activeOperatorId} activeOperatorName={activeOperatorName} userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} aiCommandCenterEnabled={aiCommandCenterEnabled ?? false} baseHref={baseHref} />
 
-          <SidebarInset className={`h-dvh min-w-0 overflow-hidden border-none !bg-sidebar text-sidebar-foreground shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none md:shadow-none md:peer-data-[variant=inset]:!m-0 md:peer-data-[variant=inset]:!rounded-none md:peer-data-[variant=inset]:!shadow-none ${hasFlushRightEdge ? "pr-0" : "pr-2"}`}>
-            {/* ── Desktop header ── */}
-            <header className="relative z-40 flex h-14 items-center overflow-visible !bg-sidebar px-3 text-sidebar-foreground md:h-16 md:px-6">
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  onClick={() => window.location.href = "/"}
-                  aria-label="Back to landing page"
-                >
-                  <House className="size-4" />
-                </Button>
-                <SidebarTrigger />
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                  {pageTitle}
-                </h1>
-              </div>
-
-              {/* Dynamic Island — desktop only, sticky viewport top anchor */}
-              <motion.div
-                className="pointer-events-none absolute left-1/2 top-3 z-50 hidden md:block"
-                initial={false}
-                animate={{
-                  x: "-50%",
-                  scale: isIslandDetached ? 0.95 : 1,
-                  y: isIslandDetached ? -1 : 0,
-                }}
-                transition={{
-                  type: "spring",
-                  stiffness: 360,
-                  damping: 32,
-                  mass: 0.7,
-                }}
-              >
-                <div className="pointer-events-auto">
-                  <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
+          <SidebarInset className={cn(
+            "h-dvh min-w-0 max-w-full overflow-x-clip",
+            "[html[data-content-layout=centered]_&>*]:mx-auto",
+            "[html[data-content-layout=centered]_&>*]:w-full",
+            "[html[data-content-layout=centered]_&>*]:max-w-screen-2xl",
+            "peer-data-[variant=inset]:border",
+            "[--dashboard-header-height:--spacing(12)]",
+          )}>
+            {/* ── Header ── */}
+            <header className={cn(
+              "relative flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
+              "[html[data-navbar-style=sticky]_&]:sticky [html[data-navbar-style=sticky]_&]:top-0 [html[data-navbar-style=sticky]_&]:z-50 [html[data-navbar-style=sticky]_&]:overflow-hidden [html[data-navbar-style=sticky]_&]:rounded-t-[inherit] [html[data-navbar-style=sticky]_&]:bg-background/50 [html[data-navbar-style=sticky]_&]:backdrop-blur-md",
+            )}>
+              <div className="flex w-full min-w-0 items-center justify-between px-2 sm:px-4 lg:px-6">
+                <div className="flex min-w-0 items-center gap-1 lg:gap-2">
+                  <SidebarTrigger className="-ml-1" />
+                  <Separator orientation="vertical" className="mx-2 hidden data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center sm:block" />
+                  <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                    {pageTitle}
+                  </h1>
                 </div>
-              </motion.div>
 
-              <div className="ml-auto flex items-center gap-1">
-                <CommandMenu brandSlug={brandSlug} />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  onClick={toggleTheme}
-                  aria-label={
-                    theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-                  }
+                {/* Dynamic Island — centered */}
+                <motion.div
+                  className="pointer-events-none absolute left-1/2 top-2 z-50 hidden md:block"
+                  initial={false}
+                  animate={{
+                    x: "-50%",
+                    scale: isIslandDetached ? 0.95 : 1,
+                    y: isIslandDetached ? -1 : 0,
+                  }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 360,
+                    damping: 32,
+                    mass: 0.7,
+                  }}
                 >
-                  {theme === "dark" ? (
-                    <Sun className="size-4" />
-                  ) : (
-                    <Moon className="size-4" />
-                  )}
-                </Button>
-                <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
+                  <div className="pointer-events-auto">
+                    <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
+                  </div>
+                </motion.div>
+
+                <div className="flex min-w-0 items-center gap-1 lg:gap-2">
+                  <CommandMenu brandSlug={brandSlug} />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="hidden size-8 shrink-0 rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-foreground sm:inline-flex"
+                    onClick={toggleTheme}
+                    aria-label={
+                      theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+                    }
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="size-4" />
+                    ) : (
+                      <Moon className="size-4" />
+                    )}
+                  </Button>
+                  <div className="shrink-0 max-[420px]:hidden">
+                    <NotificationPopover brandSlug={brandSlug} brandId={brandId} />
+                  </div>
+                </div>
               </div>
             </header>
 
             {/* ── Mobile Dynamic Island row ── */}
-            <div className="relative z-50 flex justify-center px-3 pb-2 pt-0 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
+            <div className="relative z-50 flex justify-center overflow-hidden px-3 pb-2 pt-0 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
               <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
             </div>
 
             {/* Page content */}
-            <div className={`relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden outline-none ring-0 md:mx-3 md:mb-3 ${isInventoryV4Page ? "rounded-[14px] border-none bg-sidebar shadow-none" : isPosV4Page ? "bg-transparent border-none shadow-none" : `border border-border/60 bg-card shadow-sm ${isPaymentAccountsPage ? "rounded-xl" : "rounded-2xl"}`}`}>
-              <main
-                ref={mainScrollRef}
-                className={`relative z-0 h-full min-h-0 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0 [&>*]:space-y-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1 [&>*]:space-y-3" : "p-3 sm:p-4 md:p-6 [&>*]:space-y-3"} ${isMobile ? "pb-14" : ""}`}
+            <main
+              ref={mainScrollRef}
+              className={`relative z-0 h-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${isMobile ? "" : "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"} ${isPosV4Page ? "p-0" : isInventoryV4Page ? "rounded-[14px] bg-sidebar p-1" : "p-3 sm:p-4 md:p-6"} ${isMobile ? "pb-14" : ""}`}
+            >
+              <LicenseGuard
+                brandSlug={brandSlug}
+                licenseStatus={activeLicense?.status ?? null}
+                expiresAt={activeLicense?.expires_at ?? null}
               >
-                <LicenseGuard
-                  brandSlug={brandSlug}
-                  licenseStatus={activeLicense?.status ?? null}
-                  expiresAt={activeLicense?.expires_at ?? null}
-                >
-                  {children}
-                </LicenseGuard>
-              </main>
-            <GradualBlur
-              target="parent"
-              position="bottom"
-              height="3.5rem"
-              strength={2}
-              divCount={5}
-              curve="bezier"
-              exponential
-              opacity={1}
-              zIndex={10}
-              animated
-              duration="0.42s"
-              easing="cubic-bezier(0.22, 1, 0.36, 1)"
-              style={{
-                background:
-                  "linear-gradient(to top, hsl(var(--card)) 0%, hsl(var(--card) / 0.82) 42%, transparent 100%)",
-                opacity: showMainBottomBlur ? 1 : 0,
-                transform: showMainBottomBlur ? "translateY(0)" : "translateY(10px)",
-                transition:
-                  "opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1)",
-                willChange: "opacity, transform",
-              }}
-            />
-          </div>
+                {children}
+              </LicenseGuard>
+            </main>
         </SidebarInset>
       </SidebarProvider>
           {pathname?.includes("/panel/services") && <RightSidebarPanel />}

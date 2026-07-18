@@ -3,6 +3,7 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { PublicHeader } from "@/components/landing/public-header";
 import { StickyFooter } from "@/components/footer";
 import { LandingLoader } from "@/components/landing/landing-loader";
+import { GsapSmoothScroll } from "@/components/landing/gsap-smooth-scroll";
 import { getLicenseForProfile } from "@/server/repositories/license.repository";
 
 export interface AuthUserData {
@@ -172,6 +173,7 @@ export default async function LandingLayout({
 
   return (
     <div className="theme-landing dark" style={{ colorScheme: "dark" }}>
+      <GsapSmoothScroll />
       <LandingLoader>
         <PublicHeader auth={authData} />
         <main className="min-h-screen">{children}</main>

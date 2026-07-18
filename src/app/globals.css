@@ -361,6 +361,23 @@
   .width-before-scroll-bar { margin-right: 0 !important; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
+  [data-mockup-panel],
+  [data-mockup-panel] * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  html:has([data-mockup-panel]),
+  body:has([data-mockup-panel]) {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    overflow-x: hidden;
+  }
+  [data-mockup-panel]::-webkit-scrollbar,
+  [data-mockup-panel] *::-webkit-scrollbar,
+  html:has([data-mockup-panel])::-webkit-scrollbar,
+  body:has([data-mockup-panel])::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @keyframes theme-reveal {

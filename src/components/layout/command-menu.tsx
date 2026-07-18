@@ -415,12 +415,12 @@ export function CommandMenu({ brandSlug }: CommandMenuProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-8 w-48 items-center gap-2 rounded-lg border border-border/50 bg-sidebar-accent/30 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground sm:w-56"
+        className="flex h-8 w-48 min-w-0 items-center gap-2 rounded-lg border border-border/50 bg-sidebar-accent/30 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground max-[420px]:w-9 max-[420px]:justify-center max-[420px]:px-0 sm:w-56"
         aria-label="Buka Command Menu"
       >
         <SearchIcon className="size-3.5 shrink-0" />
-        <span className="flex-1 truncate">Cari atau jalankan...</span>
-        <Kbd className="ml-auto">Ctrl+K</Kbd>
+        <span className="flex-1 truncate max-[420px]:hidden">Cari atau jalankan...</span>
+        <Kbd className="ml-auto max-[420px]:hidden">Ctrl+K</Kbd>
       </button>
 
       <CommandDialog

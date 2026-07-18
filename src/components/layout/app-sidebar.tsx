@@ -166,7 +166,7 @@ const submenuItemVariants: Variants = {
   },
 };
 
-/* ── Nav data ── */
+/* -- Nav data -- */
 interface SubNavItem {
   href: string;
   label: string;
@@ -370,7 +370,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
 
   return (
     <Sidebar variant={sidebarVariant} collapsible={sidebarCollapsible}>
-      {/* ── Brand / Branch Switcher ── */}
+      {/* -- Brand / Branch Switcher -- */}
       <SidebarHeader >
         <SidebarMenu>
           <SidebarMenuItem>
@@ -408,7 +408,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                 side="bottom"
                 sideOffset={4}
               >
-                {/* General (all branches) — only for all-branch roles */}
+                {/* General (all branches) - only for all-branch roles */}
                 {canAccessAllBranches && (
                   <>
                     <DropdownMenuItem
@@ -484,7 +484,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
         </SidebarMenu>
       </SidebarHeader>
 
-      {/* ── Navigation ── */}
+      {/* -- Navigation -- */}
       <div className="relative min-h-0 flex-1 bg-sidebar" data-tour="sidebar-nav">
         <SidebarContent className="h-full bg-sidebar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <SidebarGroup>
@@ -510,7 +510,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* AI Command Center — owner/master_admin only, gated by feature flag */}
+                {/* AI Command Center - owner/master_admin only, gated by feature flag */}
                 {(role === "MASTER_ADMIN" || role === "PLATFORM_OWNER") && aiCommandCenterEnabled && (
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -531,8 +531,8 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                   </SidebarMenuItem>
                 )}
 
-                {/* Operation — top-level items */}
-                <li className="px-3 pb-0.5 pt-3">
+                {/* Operation - top-level items */}
+                <li className="px-3 pb-0.5 pt-3 group-data-[collapsible=icon]:hidden">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                     Operation
                   </span>
@@ -718,7 +718,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* Blog — opens in new tab */}
+                {/* Blog - opens in new tab */}
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     tooltip="Blog"
@@ -738,7 +738,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-7 bg-gradient-to-t from-sidebar to-transparent group-data-[collapsible=icon]:hidden" />
       </div>
 
-      {/* ── Footer Actions ── */}
+      {/* -- Footer Actions -- */}
       <SidebarFooter className="bg-sidebar p-2">
         <SidebarMenu className="rounded-2xl bg-sidebar-accent/35 p-1.5 shadow-sm ring-1 ring-sidebar-border/50 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:shadow-none">
           <SidebarMenuItem>
@@ -760,7 +760,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
   );
 }
 
-/* ─── Account Switcher ─── */
+/* --- Account Switcher --- */
 
 function getInitials(name: string): string {
   return name
@@ -1024,7 +1024,7 @@ function AccountSwitcher({
                       </Badge>
                     </div>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {item.roleLabel}{item.brandName ? ` — ${item.brandName}` : ""}
+                      {item.roleLabel}{item.brandName ? ` - ${item.brandName}` : ""}
                     </p>
                     <p className="truncate text-[10px] text-muted-foreground">
                       {item.email}
@@ -1072,7 +1072,7 @@ function AccountSwitcher({
         </PopoverContent>
       </Popover>
 
-      {/* ── Login Modal ── */}
+      {/* -- Login Modal -- */}
       <Dialog open={loginModalOpen} onOpenChange={(open) => { if (!loginLoading) { setLoginModalOpen(open); if (!open) setLoginError(null); } }}>
         <DialogContent className="sm:max-w-[360px]">
           <DialogHeader>
@@ -1104,7 +1104,7 @@ function AccountSwitcher({
               <Input
                 id="login-password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="--------"
                 value={loginPassword}
                 onChange={(e) => { setLoginPassword(e.target.value); setLoginError(null); }}
                 disabled={loginLoading}
