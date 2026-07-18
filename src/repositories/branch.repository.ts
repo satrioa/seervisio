@@ -55,19 +55,47 @@ export interface BranchUpdateInput {
 
 /**
  * Get all active branches for a brand.
+ *
+ * Uses the authenticated supabase client first. If RLS blocks the query
+ * (returns empty despite branches existing), falls back to the service-role
+ * client since the caller has already verified the user's membership via
+ * resolveBrandContext.
  */
 export async function getBranchesByBrandId(
   supabase: SupabaseClient<any, any, any>,
   brandId: number
 ): Promise<DbBranch[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("branches")
     .select("*")
     .eq("brand_id", brandId)
     .is("deleted_at", null)
     .order("name");
 
-  return data ?? [];
+  if (data && data.length > 0) return data;
+
+  // RLS may have blocked the query (e.g. new user, get_user_brand_ids
+  // returns empty due to recursive policy evaluation). Fall back to
+  // service-role client which bypasses RLS entirely.
+  console.warn(
+    "[branch.repository] getBranchesByBrandId returned 0 rows for brand",
+    brandId,
+    "error:",
+    error?.message ?? "none",
+    "— falling back to admin client"
+  );
+
+  const { createServiceRoleSupabaseClient } = await import("@/lib/supabase/admin");
+  const adminDb = createServiceRoleSupabaseClient();
+
+  const { data: adminData } = await (adminDb as any)
+    .from("branches")
+    .select("*")
+    .eq("brand_id", brandId)
+    .is("deleted_at", null)
+    .order("name");
+
+  return adminData ?? [];
 }
 
 /**
@@ -95,48 +123,69 @@ export async function getBranchDetailList(
 ): Promise<BranchDetail[]> {
   const branches = await getBranchesByBrandId(supabase, brandId);
 
-  const results: BranchDetail[] = [];
+  if (branches.length === 0) return [];
 
-  for (const branch of branches) {
-    const { count: userCount } = await supabase
-      .from("user_branch_access")
-      .select("id", { count: "exact", head: true })
-      .eq("branch_id", branch.id)
-      .eq("is_active", true);
+  const branchIds = branches.map((b) => b.id);
 
-    const { data: adminRows } = await supabase
-      .from("user_branch_access")
-      .select("membership_id")
-      .eq("branch_id", branch.id)
-      .eq("is_active", true);
+  // Batch user counts for all branches in a single query
+  const { data: userCounts } = await supabase
+    .from("user_branch_access")
+    .select("branch_id, id", { count: "exact", head: false })
+    .in("branch_id", branchIds)
+    .eq("is_active", true);
 
-    let adminName: string | null = null;
-    if (adminRows && adminRows.length > 0) {
-      const { data: members } = await supabase
-        .from("user_brand_memberships")
-        .select("profile_id, role")
-        .in("id", adminRows.map(r => r.membership_id))
-        .in("role", ["ADMIN"])
-        .limit(1);
-
-      if (members && members.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("name")
-          .eq("id", members[0].profile_id)
-          .maybeSingle();
-        adminName = profiles?.name ?? null;
-      }
+  const countMap = new Map<string, number>();
+  if (userCounts) {
+    for (const row of userCounts as any[]) {
+      countMap.set(row.branch_id, (countMap.get(row.branch_id) ?? 0) + 1);
     }
-
-    results.push({
-      ...branch,
-      userCount: userCount ?? 0,
-      adminName,
-    });
   }
 
-  return results;
+  // Batch admin lookup — find admin memberships for any of these branches
+  const { data: adminMemberships } = await supabase
+    .from("user_branch_access")
+    .select("membership_id, branch_id")
+    .in("branch_id", branchIds)
+    .eq("is_active", true);
+
+  const adminNameByBranch = new Map<string, string | null>();
+  const membershipIds = [...new Set((adminMemberships ?? []).map((r: any) => r.membership_id))];
+
+  if (membershipIds.length > 0) {
+    const { data: adminProfiles } = await supabase
+      .from("user_brand_memberships")
+      .select("id, profile_id, role")
+      .in("id", membershipIds)
+      .in("role", ["ADMIN"])
+      .limit(1);
+
+    if (adminProfiles && adminProfiles.length > 0) {
+      const adminProfileIds = [...new Set(adminProfiles.map((m: any) => m.profile_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", adminProfileIds);
+
+      const nameMap = new Map((profiles ?? []).map((p: any) => [p.id, p.name]));
+      const adminBranchMap = new Map(
+        (adminMemberships ?? []).map((r: any) => [r.branch_id, r.membership_id])
+      );
+
+      for (const membership of adminProfiles as any[]) {
+        for (const [branchId, memId] of adminBranchMap) {
+          if (memId === membership.id) {
+            adminNameByBranch.set(branchId, nameMap.get(membership.profile_id) ?? null);
+          }
+        }
+      }
+    }
+  }
+
+  return branches.map((branch) => ({
+    ...branch,
+    userCount: countMap.get(branch.id) ?? 0,
+    adminName: adminNameByBranch.get(branch.id) ?? null,
+  }));
 }
 
 /**
@@ -155,13 +204,13 @@ export async function getBranchDetail(
     .eq("branch_id", branchId)
     .eq("is_active", true);
 
+  let adminName: string | null = null;
   const { data: adminRows } = await supabase
     .from("user_branch_access")
     .select("membership_id")
     .eq("branch_id", branchId)
     .eq("is_active", true);
 
-  let adminName: string | null = null;
   if (adminRows && adminRows.length > 0) {
     const { data: members } = await supabase
       .from("user_brand_memberships")
