@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Sparkles, Crown, Rocket, StarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AnimatePresence, motion } from "framer-motion";
+import NumberFlow from "@number-flow/react";
 import { cn } from "@/lib/utils";
 
 export interface PricingPackage {
@@ -23,6 +25,19 @@ interface PricingSectionProps {
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
+}
+
+function billingLabel(pkg: PricingPackage): string {
+  if (pkg.billing_duration_enabled === false) return "/seumur hidup";
+  if (pkg.billing_duration_type === "year") return "/tahun";
+  return "/bulan";
+}
+
+function tierIcon(slug: string) {
+  const s = slug.toLowerCase();
+  if (s.includes("trial") || s.includes("starter")) return Rocket;
+  if (s.includes("lifetime") || s.includes("enterprise")) return Crown;
+  return Sparkles;
 }
 
 export function PricingSection({ packages }: PricingSectionProps) {
@@ -45,134 +60,156 @@ export function PricingSection({ packages }: PricingSectionProps) {
     }
   };
 
-  // Fallback hardcoded data for the landing page (when no packages prop)
   const fallbackPackages: PricingPackage[] = packages ?? [
-    { id: "starter", name: "Starter", slug: "starter", description: "Perfect for small shops getting started.", price: 0, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
-    { id: "professional", name: "Professional", slug: "professional", description: "For growing repair businesses.", price: 299000, billing_duration_enabled: true, billing_duration_type: "month", billing_duration_value: 1 },
-    { id: "enterprise", name: "Enterprise", slug: "enterprise", description: "For multi-location chains and franchises.", price: 0, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
+    { id: "trial", name: "Trial", slug: "trial", description: "Coba semua fitur gratis 14 hari.", price: 0, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
+    { id: "pro", name: "Pro", slug: "pro", description: "Untuk toko servis yang sedang berkembang.", price: 299000, billing_duration_enabled: true, billing_duration_type: "month", billing_duration_value: 1 },
+    { id: "lifetime", name: "Lifetime", slug: "lifetime", description: "Bayar sekali, akses selamanya.", price: 4990000, billing_duration_enabled: false, billing_duration_type: null, billing_duration_value: null },
   ];
 
-  // The first (cheapest) package is "Best Value", second is "Popular"
   const sorted = [...fallbackPackages].sort((a, b) => a.price - b.price);
+  const popularIndex = sorted.length > 1 ? Math.floor(sorted.length / 2) : -1;
 
-  // Build feature lists per package
   const featureMap: Record<string, string[]> = {
-    starter: [
-      "All core features",
-      "Up to 200 services/month",
-      "1 branch",
-      "Basic reports & analytics",
-      "Email support",
-    ],
-    professional: [
-      "Unlimited services",
-      "Up to 3 branches",
-      "AI Command Center",
-      "Advanced analytics & insights",
-      "Priority support",
-    ],
-    enterprise: [
-      "Everything in Professional",
-      "Unlimited branches & users",
-      "Custom integrations & API",
-      "Dedicated account manager",
-      "SLA guarantee",
-      "On-premise option",
-    ],
+    trial: ["Akses semua fitur inti", "Hingga 50 servis", "1 cabang", "Laporan dasar", "Email support"],
+    pro: ["Servis tanpa batas", "Hingga 3 cabang", "AI Command Center", "Analitik & insight", "Priority support"],
+    lifetime: ["Semua fitur Pro", "Cabang & user tak terbatas", "Integrasi & API", "Account manager", "Update seumur hidup"],
   };
 
   return (
-    <section className="border-y border-border/40 bg-muted/30 py-24 sm:py-32">
+    <section id="pricing" className="relative overflow-hidden border-y border-white/10 bg-gradient-to-b from-transparent via-primary/[0.03] to-transparent py-24 sm:py-32">
+      <div className="pointer-events-none absolute left-1/2 top-0 size-[500px] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]" />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Simple, transparent pricing
+          <motion.span
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+          >
+            Harga
+          </motion.span>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Pilih paket yang tepat untuk toko Anda
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Choose the plan that fits your business. No hidden fees.
+            Tanpa biaya tersembunyi. Bayar sekali untuk akses selamanya, atau langganan fleksibel.
           </p>
         </div>
 
         <div className="mt-16 grid gap-6 lg:grid-cols-3 lg:gap-8">
           {sorted.map((pkg, i) => {
             const slug = pkg.slug.toLowerCase();
-            const isBestValue = i === 0;
-            const isPopular = i === 1 && sorted.length > 2;
-            const features = featureMap[slug] ?? [
-              "All core features",
-              "Email support",
-            ];
+            const isPopular = i === popularIndex;
+            const Icon = tierIcon(slug);
+            const features = featureMap[slug] ?? ["All core features", "Email support"];
+            const isFree = pkg.price === 0;
 
-            return (
-              <div
+            const card = (
+              <motion.div
                 key={pkg.id}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: i * 0.08 }}
                 className={cn(
-                  "relative flex flex-col rounded-2xl border p-6 transition-all duration-200",
+                  "relative flex flex-col overflow-hidden rounded-2xl border shadow-xs transition-all duration-300",
                   isPopular
-                    ? "border-primary/50 bg-card shadow-lg shadow-primary/5 scale-[1.02]"
-                    : "border-border/50 bg-card hover:shadow-md",
+                    ? "border-primary/40 bg-gradient-to-b from-primary/[0.08] to-card lg:-mt-4 lg:mb-4"
+                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]",
                 )}
               >
-                {/* Badges */}
-                {isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[10px] font-semibold text-primary-foreground">
-                    Most Popular
+                {/* Header section */}
+                <div className="border-b border-white/[0.06] p-6 pb-5">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn("flex size-9 items-center justify-center rounded-lg", isPopular ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")}>
+                        <Icon className="size-4.5" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">{pkg.name}</h3>
+                    </div>
+                    <AnimatePresence mode="wait">
+                      {isPopular && (
+                        <motion.div
+                          key="popular-badge"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          className="flex items-center gap-1 rounded-md border bg-background px-2 py-0.5 text-xs font-medium"
+                        >
+                          <StarIcon className="size-3 fill-current text-primary" />
+                          Paling Populer
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                )}
-                {isBestValue && !isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-semibold text-white">
-                    Best Value
-                  </div>
-                )}
 
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-foreground">{pkg.name}</h3>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-3xl font-bold text-foreground">
-                      {pkg.price === 0 ? "Free" : formatPrice(pkg.price)}
-                    </span>
-                    {pkg.price > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        /{pkg.billing_duration_type === "year" ? "year" : "month"}
-                      </span>
+                  <div className="mt-5 flex items-end gap-1.5">
+                    {isFree ? (
+                      <span className="text-4xl font-extrabold tracking-tight text-foreground">Gratis</span>
+                    ) : (
+                      <NumberFlow
+                        value={pkg.price}
+                        format={{ style: "currency", currency: "IDR", notation: "compact", minimumFractionDigits: 0 }}
+                        className="text-4xl font-extrabold tracking-tight text-foreground [&::part(suffix)]:font-normal [&::part(suffix)]:text-base [&::part(suffix)]:text-muted-foreground"
+                      />
+                    )}
+                    {!isFree && (
+                      <span className="mb-1 text-sm text-muted-foreground">{billingLabel(pkg)}</span>
                     )}
                   </div>
+
                   {pkg.description && (
                     <p className="mt-2 text-sm text-muted-foreground">{pkg.description}</p>
                   )}
                 </div>
 
-                <ul className="mb-8 flex-1 space-y-3">
+                {/* Features */}
+                <div className="flex-1 space-y-3 px-6 pt-6 pb-8">
                   {features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div key={f} className="flex items-center gap-2.5 text-sm text-muted-foreground">
                       <Check className="size-4 shrink-0 text-primary" />
-                      {f}
-                    </li>
+                      <span>{f}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
 
-                <Button
-                  variant={isPopular ? "default" : "outline"}
-                  className="w-full"
-                  onClick={() => handleChoosePlan(pkg)}
-                  disabled={loadingId === pkg.id}
-                >
-                  {loadingId === pkg.id ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : isPopular ? (
-                    "Get Started"
-                  ) : (
-                    "Choose Plan"
-                  )}
-                </Button>
-              </div>
+                {/* CTA */}
+                <div className="border-t border-white/[0.06] p-4">
+                  <Button
+                    variant={isPopular ? "default" : "outline"}
+                    className={cn("w-full", isPopular && "shadow-lg shadow-primary/20")}
+                    onClick={() => handleChoosePlan(pkg)}
+                    disabled={loadingId === pkg.id}
+                  >
+                    {loadingId === pkg.id ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Memproses...
+                      </>
+                    ) : isFree ? (
+                      "Mulai Trial Gratis"
+                    ) : (
+                      "Pilih Paket"
+                    )}
+                  </Button>
+                </div>
+              </motion.div>
             );
+
+            return card;
           })}
         </div>
+
+        <p className="mt-10 text-center text-sm text-muted-foreground">
+          Butuh banyak cabang?{" "}
+          <a href="mailto:support@seervisio.com?subject=Custom%20Plan" className="font-medium text-primary hover:underline">
+            Hubungi tim kami
+          </a>{" "}
+          untuk penawaran custom.
+        </p>
       </div>
     </section>
   );
 }
+
+export default PricingSection;

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
+import { fontVars } from "@/lib/fonts/registry";
+import { PREFERENCE_DEFAULTS } from "@/lib/preferences/preferences-config";
+import { ThemeBootScript } from "@/scripts/theme-boot";
+import { PreferencesStoreProvider } from "@/stores/preferences/preferences-provider";
 import { Providers } from "./providers";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Seervisio — Repair Shop Management",
@@ -19,10 +20,32 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { theme_mode, theme_preset, content_layout, navbar_style, sidebar_variant, sidebar_collapsible, font } =
+    PREFERENCE_DEFAULTS;
   return (
-    <html lang="id" suppressHydrationWarning>
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
+    <html
+      lang="id"
+      data-theme-mode={theme_mode}
+      data-theme-preset={theme_preset}
+      data-content-layout={content_layout}
+      data-navbar-style={navbar_style}
+      data-sidebar-variant={sidebar_variant}
+      data-sidebar-collapsible={sidebar_collapsible}
+      data-font={font}
+      suppressHydrationWarning
+    >
+      <head>
+        <ThemeBootScript />
+      </head>
+      <body className={fontVars}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var p=window.location.pathname;if(p.includes('/mockup')){try{localStorage.setItem('theme','dark')}catch(e){}document.documentElement.classList.add('dark')}})()`,
+          }}
+        />
+        <PreferencesStoreProvider initialValues={PREFERENCE_DEFAULTS}>
+          <Providers>{children}</Providers>
+        </PreferencesStoreProvider>
       </body>
     </html>
   );

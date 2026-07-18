@@ -7,17 +7,19 @@ import {
   Menu,
   X,
   ArrowRight,
-  Sun,
-  Moon,
-  Monitor,
   LogOut,
   Check,
-  Settings,
   User,
   Building2,
   Languages,
+  ShieldCheck,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MagneticButton } from "@/components/ui/magnetic-button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -41,22 +43,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { SeervisioLogo } from "@/components/brand/logo";
 import { landingLogoutAction } from "@/server/actions/auth.actions";
 import type { AuthUserData } from "@/app/(landing)/layout";
 
 const UNAUTH_NAV = [
-  { label: "Solutions", href: "/#features" },
+  { label: "Features", href: "/#features" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Changelog", href: "/changelog" },
   { label: "Docs", href: "/docs" },
   { label: "Blog", href: "/blog" },
-];
-
-const THEME_OPTIONS = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
 ];
 
 const LANGUAGES = [
@@ -71,18 +68,23 @@ interface PublicHeaderProps {
 export function PublicHeader({ auth }: PublicHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
   const [currentLang, setCurrentLang] = React.useState("id");
 
-  React.useEffect(() => { setMounted(true); }, []);
-
   React.useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          setScrolled(window.scrollY > 20);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -99,8 +101,6 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
       setLogoutOpen(false);
     }
   };
-
-  const canAccessBrandSettings = auth.brand && (auth.brand.role === "MASTER_ADMIN" || auth.brand.role === "ADMIN");
 
   const initials = auth.profile
     ? auth.profile.name
@@ -139,10 +139,10 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
     <>
       <header
         className={cn(
-          "fixed inset-x-0 top-0 z-50 transition-all duration-300",
+          "fixed inset-x-0 top-0 z-50 bg-background/80 backdrop-blur-xl border-b transition-all duration-300",
           scrolled
-            ? "border-b border-border/40 bg-background/80 backdrop-blur-xl"
-            : "bg-transparent",
+            ? "border-border/40 shadow-xs"
+            : "border-transparent",
         )}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -173,23 +173,6 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            {/* Theme toggle */}
-            <button
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              aria-label="Toggle theme"
-            >
-              {mounted ? (
-                resolvedTheme === "dark" ? (
-                  <Sun className="size-4" />
-                ) : (
-                  <Moon className="size-4" />
-                )
-              ) : (
-                <div className="size-4" />
-              )}
-            </button>
-
             {/* Auth-aware CTA */}
             {isAuth ? (
               <>
@@ -267,14 +250,38 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
 
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      {auth.accountType !== 'platform' && canAccessBrandSettings && (
+                      {/* License status — customer only */}
+                      {auth.accountType !== 'platform' && (
                         <DropdownMenuItem asChild>
                           <Link
-                            href={`/${auth.brand!.slug}/panel/system/brand-profile`}
+                            href="/license"
                             className="cursor-pointer"
                           >
-                            <Building2 className="size-4" />
-                            Brand Settings
+                            <ShieldCheck className="size-4" />
+                            <div className="flex flex-1 items-center justify-between">
+                              <span>License</span>
+                              <span className="flex items-center gap-1">
+                                {auth.license.isActive ? (
+                                  <>
+                                    <CheckCircle2 className="size-3 text-green-500" />
+                                    <span className="text-[11px] text-green-600 dark:text-green-400">Active</span>
+                                  </>
+                                ) : auth.license.hasPendingPayment ? (
+                                  <>
+                                    <Clock className="size-3 text-amber-500" />
+                                    <span className="text-[11px] text-amber-600 dark:text-amber-400">Pending</span>
+                                  </>
+                                ) : auth.license.exists ? (
+                                  <>
+                                    <AlertCircle className="size-3 text-red-500" />
+                                    <span className="text-[11px] text-red-600 dark:text-red-400">Inactive</span>
+                                  </>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">—</span>
+                                )}
+                              </span>
+                            </div>
+                            <ExternalLink className="size-3 text-muted-foreground" />
                           </Link>
                         </DropdownMenuItem>
                       )}
@@ -284,7 +291,7 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                             auth.accountType === 'platform'
                               ? "/platform/settings"
                               : auth.brand
-                                ? `/${auth.brand.slug}/panel/system/account/profile`
+                                ? `/${auth.brand.slug}/panel/account`
                                 : "/login"
                           }
                           className="cursor-pointer"
@@ -320,44 +327,6 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                           </DropdownMenuSubContent>
                         </DropdownMenuPortal>
                       </DropdownMenuSub>
-
-                      {/* Theme submenu */}
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          {mounted ? (
-                            resolvedTheme === "dark" ? (
-                              <Moon className="size-4" />
-                            ) : resolvedTheme === "light" ? (
-                              <Sun className="size-4" />
-                            ) : (
-                              <Monitor className="size-4" />
-                            )
-                          ) : (
-                            <Sun className="size-4" />
-                          )}
-                          Theme
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuPortal>
-                          <DropdownMenuSubContent sideOffset={8}>
-                            {THEME_OPTIONS.map((opt) => {
-                              const Icon = opt.icon;
-                              return (
-                                <DropdownMenuItem
-                                  key={opt.value}
-                                  onClick={() => setTheme(opt.value)}
-                                  className="cursor-pointer"
-                                >
-                                  <Icon className="size-4" />
-                                  <span className="flex-1">{opt.label}</span>
-                                  {theme === opt.value && (
-                                    <Check className="size-3.5" />
-                                  )}
-                                </DropdownMenuItem>
-                              );
-                            })}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuPortal>
-                      </DropdownMenuSub>
                     </DropdownMenuGroup>
 
                     <DropdownMenuSeparator />
@@ -376,12 +345,13 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                 <Button asChild variant="ghost" size="sm">
                   <Link href="/login">Login</Link>
                 </Button>
-                <Button asChild size="sm" className="gap-1.5">
-                  <Link href="/signup">
-                    Start Free
-                    <ArrowRight className="size-3.5" />
-                  </Link>
-                </Button>
+                <MagneticButton
+                  size="sm"
+                  onClick={() => router.push("/signup")}
+                >
+                  Start Free
+                  <ArrowRight className="size-3.5" />
+                </MagneticButton>
               </div>
             )}
 
@@ -484,12 +454,15 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                         Login
                       </Link>
                     </Button>
-                    <Button asChild className="gap-1.5">
-                      <Link href="/signup" onClick={() => setMobileOpen(false)}>
-                        Start Free
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
+                    <MagneticButton
+                      onClick={() => {
+                        router.push("/signup");
+                        setMobileOpen(false);
+                      }}
+                    >
+                      Start Free
+                      <ArrowRight className="size-4" />
+                    </MagneticButton>
                   </>
                 )}
               </div>

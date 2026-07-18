@@ -1,7 +1,8 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import { PublicHeader } from "@/components/landing/public-header";
-import { PublicFooter } from "@/components/landing/public-footer";
+import { StickyFooter } from "@/components/footer";
+import { LandingLoader } from "@/components/landing/landing-loader";
 import { getLicenseForProfile } from "@/server/repositories/license.repository";
 
 export interface AuthUserData {
@@ -29,8 +30,8 @@ export interface AuthUserData {
 async function getAuthState(): Promise<AuthUserData> {
   try {
     const supabase = await createServerSupabase();
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
       return {
         isAuthenticated: false,
         dashboardHref: "/login",
@@ -40,11 +41,12 @@ async function getAuthState(): Promise<AuthUserData> {
         license: { exists: false, isActive: false, hasPendingPayment: false },
       };
     }
+    const dataUser = sessionData.session.user;
 
     const { data: profile } = await (supabase as any)
       .from("profiles")
       .select("id, name, email, avatar_url, account_type, onboarding_completed")
-      .eq("auth_user_id", data.user.id)
+      .eq("auth_user_id", dataUser.id)
       .maybeSingle();
 
     if (!profile) {
@@ -53,8 +55,8 @@ async function getAuthState(): Promise<AuthUserData> {
         dashboardHref: "/onboarding",
         accountType: null,
         profile: {
-          name: data.user.user_metadata?.name || "",
-          email: data.user.email || "",
+          name: dataUser.user_metadata?.name || "",
+          email: dataUser.email || "",
           avatarUrl: null,
           onboardingCompleted: false,
         },
@@ -73,7 +75,7 @@ async function getAuthState(): Promise<AuthUserData> {
         accountType: "platform",
         profile: {
           name: profile.name || "",
-          email: profile.email || data.user.email || "",
+          email: profile.email || dataUser.email || "",
           avatarUrl: profile.avatar_url || null,
           onboardingCompleted: !!profile.onboarding_completed,
         },
@@ -136,7 +138,7 @@ async function getAuthState(): Promise<AuthUserData> {
       accountType: "customer",
       profile: {
         name: profile.name || "",
-        email: profile.email || data.user.email || "",
+        email: profile.email || dataUser.email || "",
         avatarUrl: profile.avatar_url || null,
         onboardingCompleted: !!profile.onboarding_completed,
       },
@@ -169,10 +171,12 @@ export default async function LandingLayout({
   const authData = await getAuthState();
 
   return (
-    <div className="theme-landing">
-      <PublicHeader auth={authData} />
-      <main className="min-h-screen">{children}</main>
-      <PublicFooter />
+    <div className="theme-landing dark" style={{ colorScheme: "dark" }}>
+      <LandingLoader>
+        <PublicHeader auth={authData} />
+        <main className="min-h-screen">{children}</main>
+        <StickyFooter />
+      </LandingLoader>
     </div>
   );
 }

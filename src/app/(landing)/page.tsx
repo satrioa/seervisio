@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { HeroSection } from "@/components/landing/hero-section";
-import { TrustedBy } from "@/components/landing/trusted-by";
-import { FeatureGrid } from "@/components/landing/feature-grid";
+import { SeervisioHero } from "@/components/sections/hero/seervisio-hero";
+import { BentoSection } from "@/components/landing/bento-section";
+import { OfferSection } from "@/components/landing/offer-section";
+import { FeatureSection } from "@/components/feature-section";
 import { AiSection } from "@/components/landing/ai-section";
 import { WorkflowSection } from "@/components/landing/workflow-section";
 import { PricingSection } from "@/components/landing/pricing-section";
 import { TestimonialsSection } from "@/components/landing/testimonials";
-import { CtaSection } from "@/components/landing/cta-section";
+import { SeervisioFaq } from "@/components/sections/faq/seervisio-faq";
+import { SeervisioCta } from "@/components/sections/cta/seervisio-cta";
 import { getActivePackages } from "@/server/repositories/license.repository";
 
 export const metadata: Metadata = {
@@ -32,14 +34,13 @@ export default async function LandingPage() {
 
   return (
     <>
-      <HeroSection />
-      {/* <TrustedBy /> */}
-      <FeatureGrid />
-      <AiSection />
-      <WorkflowSection />
-      <PricingSection packages={packages} />
+      <SeervisioHero />
+      <BentoSection />
+      <OfferSection />
       <TestimonialsSection />
-      <CtaSection />
+      <PricingSection packages={packages} />
+      <SeervisioFaq />
+      <SeervisioCta />
     </>
   );
 }
