@@ -11,7 +11,6 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
   Clock,
@@ -107,7 +106,6 @@ function IslandContent({ userName, onOpenShift }: { userName?: string; onOpenShi
   const [feedbackDescription, setFeedbackDescription] = useState<string | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  const isMobile = useIsMobile();
   const pageContext = useMemo(() => getPageContext(pathname, computedExpectedCash), [pathname, computedExpectedCash]);
 
   useEffect(() => { setMounted(true); }, []);
@@ -268,7 +266,7 @@ function IslandContent({ userName, onOpenShift }: { userName?: string; onOpenShi
   };
 
   /* ── Render ── */
-  const pillWidth = isMobile ? "calc(100vw - 32px)" : "fit-content";
+  const pillWidth = "fit-content";
   const collapsedH = 48;
 
   const showWelcome = mode === "welcome";
@@ -297,6 +295,8 @@ function IslandContent({ userName, onOpenShift }: { userName?: string; onOpenShi
           transform: "translateX(-50%)",
           zIndex: 9999,
           width: pillWidth,
+          maxWidth: "calc(100vw - 24px)",
+          justifyContent: "center",
           borderRadius: isOpen ? 32 : 9999,
           transition: "border-radius 0.25s ease-out",
         }}

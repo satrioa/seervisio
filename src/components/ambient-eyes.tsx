@@ -24,7 +24,7 @@ function AmbientEyes() {
           style={{
             width: 66,
             height: 40,
-            backgroundColor: "#050505",
+            backgroundColor: "#262626",
             border: "1px solid rgba(255,255,255,0.08)",
             boxShadow:
               "inset 0 0 8px rgba(0,0,0,0.9), 0 0 10px rgba(80,220,160,0.10)",

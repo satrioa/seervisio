@@ -292,9 +292,9 @@ function SeervisIslandContent({
         : mode === "feedback"
           ? getFeedbackDimensions(actionState)
           : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
-            ? { width: isMobile ? 320 : 380, height: 31 }
+            ? { width: isMobile ? 300 : 250, height: 31 }
             : mode === "idle" && hasActiveShift
-              ? { width: isMobile ? 240 : 220, height: 31 }
+              ? { width: isMobile ? 120 : 160, height: 31 }
               : mode === "idle" && !hasActiveShift
                 ? { width: isMobile ? 240 : 240, height: 31 }
                 : getPresetDimensions("compact");
