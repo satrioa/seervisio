@@ -13,7 +13,9 @@ export default async function LicensesPage() {
   ]);
 
   const waitingOrders = orders.filter((o) => o.status === "waiting_verification");
-  const activeOnes = licenses.filter((l) => l.status === "active" || l.status === "trial");
+  const activeOnes = licenses.filter(
+    (l) => l.status === "active" || l.status === "trial" || l.status === "suspended",
+  );
   const expiredOnes = licenses.filter((l) => l.status === "expired" || l.status === "cancelled");
 
   return (

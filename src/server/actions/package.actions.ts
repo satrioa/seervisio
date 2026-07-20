@@ -59,6 +59,8 @@ export async function createPackageAction(input: {
   maxUsers: number;
   maxStorageMb: number;
   maxTransactions: number;
+  packageType?: "subscription" | "lifetime" | "trial";
+  isDefaultTrial?: boolean;
 }): Promise<ActionResult<PackageRow>> {
   try {
     await requirePlatformOwner();
@@ -87,6 +89,8 @@ export async function updatePackageAction(id: string, input: {
   maxStorageMb?: number;
   maxTransactions?: number;
   isActive?: boolean;
+  packageType?: "subscription" | "lifetime" | "trial";
+  isDefaultTrial?: boolean;
 }): Promise<ActionResult<PackageRow>> {
   try {
     await requirePlatformOwner();

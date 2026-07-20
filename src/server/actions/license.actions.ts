@@ -24,6 +24,10 @@ import {
   createLicense,
   getActiveLicenseForBrand,
   getLicensesForBrand,
+  updateLicenseFields,
+  getPendingOrderForBrand,
+  getDefaultTrialPackage,
+  updateLicenseOrderFields,
 } from "@/server/repositories/license.repository";
 import type { LicenseOrder, License, LicensePackage, BankTransferInfo } from "@/types/license";
 import { calculateLicenseExpiry } from "@/lib/license/license-duration";
@@ -135,6 +139,9 @@ export async function createLicenseOrderAction(
     const pkg = await getPackageById(input.package_id);
     if (!pkg) return errorResult("Paket tidak ditemukan.");
     if (!pkg.is_active) return errorResult("Paket tidak tersedia.");
+
+    // Spec §5: block a new checkout while a pending order exists.
+    await assertNoPendingOrder(brand.id);
 
     const uniqueCode = generateUniqueCode();
     const totalAmount = pkg.price + uniqueCode;
@@ -400,6 +407,45 @@ export async function verifyLicenseOrderAction(
     });
     insertBrandNotification(order.brand_id, "Lisensi Diaktifkan", `Pesanan ${order.invoice_number} telah diverifikasi. Lisensi ${pkg.name} aktif.`, "activity", "success", { order_id: orderId, license_id: license.id });
 
+    // Non-critical: send approval email to brand owner.
+    void (async () => {
+      try {
+        const { data: brand } = await (supabase as any)
+          .from("brands")
+          .select("name, owner_email, owner_name")
+          .eq("id", order.brand_id)
+          .maybeSingle();
+        if (!brand?.owner_email) return;
+        const expDate = expiresAt
+          ? new Date(expiresAt).toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })
+          : null;
+        await Mailer.send({
+          to: brand.owner_email,
+          toName: brand.owner_name ?? brand.name,
+          subject: "Lisensi Anda Telah Aktif",
+          template: "payment-approved",
+          data: {
+            customerName: brand.owner_name ?? brand.name,
+            packageName: pkg.name,
+            licenseType: pkg.billing_duration_enabled === false ? "lifetime" : pkg.billing_duration_type,
+            activationDate: new Date().toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            }),
+            expirationDate: expDate,
+            dashboardUrl: "https://app.seervisio.com/license",
+          },
+        });
+      } catch (e) {
+        console.error("[verifyLicenseOrderAction] email error:", e);
+      }
+    })();
+
     return successResult(license);
   } catch (err: any) {
     console.error("[verifyLicenseOrderAction]", err);
@@ -455,11 +501,628 @@ export async function rejectLicenseOrderAction(
     });
     insertBrandNotification(order.brand_id, "Pesanan Lisensi Ditolak", `Pesanan ${order.invoice_number} ditolak. Alasan: ${reason}`, "activity", "error", { order_id: orderId });
 
+    void (async () => {
+      try {
+        const { data: brand } = await (createServiceRoleSupabaseClient() as any)
+          .from("brands")
+          .select("name, owner_email, owner_name")
+          .eq("id", order.brand_id)
+          .maybeSingle();
+        if (!brand?.owner_email) return;
+        await Mailer.send({
+          to: brand.owner_email,
+          toName: brand.owner_name ?? brand.name,
+          subject: "Pesanan Lisensi Ditolak",
+          template: "license-rejected",
+          data: {
+            customerName: brand.owner_name ?? brand.name,
+            packageName: order.package_name ?? "Lisensi",
+            rejectionReason: reason,
+            renewUrl: "https://app.seervisio.com/license",
+          },
+        });
+      } catch (e) {
+        console.error("[rejectLicenseOrderAction] email error:", e);
+      }
+    })();
+
     return successResult(updated);
   } catch (err: any) {
     console.error("[rejectLicenseOrderAction]", err);
     return errorResult(err.message || "Gagal menolak pembayaran.");
   }
+}
+
+/* ============================================================
+ * Billing & Subscription Spec — Phase 3 actions
+ *
+ * Covers trial auto-assign, downgrade scheduling, renewal preference,
+ * rejected-order replace/cancel, pending-order guard, and admin suspend.
+ * ========================================================== */
+
+/* ── Helper: block a new checkout while a pending/rejected order exists ── */
+
+async function assertNoPendingOrder(brandId: number): Promise<void> {
+  const pending = await getPendingOrderForBrand(brandId);
+  if (!pending) return;
+  if (pending.status === "waiting_verification") {
+    throw new Error("Pembayaran Anda sedang diverifikasi. Tidak dapat membuat pesanan baru.");
+  }
+  if (pending.status === "rejected") {
+    throw new Error("Pesanan Anda ditolak. Ganti bukti atau batalkan pesanan sebelum membeli paket lain.");
+  }
+  // pending_payment (proof not yet uploaded) — allow replacing it via the
+  // normal create flow, so we don't block here. The create action supersedes it.
+}
+
+/* ── Action: assign the default trial package to a brand (spec §1.1) ── */
+// Skips Checkout & Waiting Approval — license goes straight to `active`.
+// Auto-assigned 1x per tenant (no re-grant if a non-cancelled license exists).
+
+export async function assignTrialAction(
+  brandId: number,
+  profileId?: string | null,
+): Promise<ActionResult<License>> {
+  try {
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const existing = await getActiveLicenseForBrand(brandId);
+    if (existing && existing.status !== "cancelled") {
+      return successResult(existing);
+    }
+
+    const pkg = await getDefaultTrialPackage();
+    if (!pkg) return errorResult("Tidak ada paket trial yang aktif.");
+
+    const expiresAt = getExpiresAt(pkg);
+
+    const { data: license, error: licErr } = await (adminDb as any)
+      .from("licenses")
+      .insert({
+        brand_id: brandId,
+        profile_id: profileId ?? null,
+        package_id: pkg.id,
+        order_id: null,
+        status: "active",
+        started_at: new Date().toISOString(),
+        expires_at: expiresAt,
+        is_trial: true,
+      })
+      .select("*, packages:package_id(name, slug, package_type), brands:brand_id(name)")
+      .single();
+    if (licErr) throw new Error("Gagal mengassign lisensi trial.");
+
+    insertBrandNotification(
+      brandId,
+      "Masa Trial Aktif",
+      `Paket ${pkg.name} aktif sebagai trial. Berlaku hingga ${expiresAt ? new Date(expiresAt).toLocaleDateString("id-ID") : "-"}`,
+      "activity",
+      "info",
+      { package_id: pkg.id },
+    );
+
+    const created = await getActiveLicenseForBrand(brandId);
+    return successResult(created as License);
+  } catch (err: any) {
+    console.error("[assignTrialAction]", err);
+    return errorResult(err.message || "Gagal mengassign trial.");
+  }
+}
+
+/* ── Action: schedule a downgrade (spec §3.2) ── */
+// Downgrade is NOT immediate: applies at current subscription expiry.
+
+export async function scheduleDowngradeAction(
+  brandSlug: string,
+  targetPackageId: string,
+): Promise<ActionResult<License>> {
+  try {
+    const auth = await requireAuth();
+    const supabase = await createServerSupabase();
+    const brand = await getBrandBySlug(supabase as any, brandSlug);
+    if (!brand) return errorResult("Brand tidak ditemukan.");
+
+    const license = await getActiveLicenseForBrand(brand.id);
+    if (!license) return errorResult("Tidak ada lisensi aktif.");
+    if (license.package_type === "lifetime") {
+      return errorResult("Paket lifetime tidak dapat didowngrade.");
+    }
+    if (license.package_type === "trial") {
+      return errorResult("Trial tidak dapat didowngrade.");
+    }
+
+    const target = await getPackageById(targetPackageId);
+    if (!target) return errorResult("Paket tujuan tidak ditemukan.");
+    if (target.package_type === "lifetime") {
+      return errorResult("Downgrade ke lifetime tidak diizinkan. Beli lifetime sebagai pembelian terpisah.");
+    }
+
+    const effectiveAt = license.expires_at ?? new Date().toISOString();
+    const updated = await updateLicenseFields(license.id, {
+      downgrade_to_package_id: targetPackageId,
+      downgrade_effective_at: effectiveAt,
+    });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[scheduleDowngradeAction]", err);
+    return errorResult(err.message || "Gagal menjadwalkan downgrade.");
+  }
+}
+
+/* ── Action: cancel a scheduled downgrade (spec §3.2) ── */
+
+export async function cancelScheduledDowngradeAction(
+  brandSlug: string,
+): Promise<ActionResult<License>> {
+  try {
+    const auth = await requireAuth();
+    const supabase = await createServerSupabase();
+    const brand = await getBrandBySlug(supabase as any, brandSlug);
+    if (!brand) return errorResult("Brand tidak ditemukan.");
+
+    const license = await getActiveLicenseForBrand(brand.id);
+    if (!license) return errorResult("Tidak ada lisensi aktif.");
+    if (!license.downgrade_to_package_id) {
+      return errorResult("Tidak ada downgrade yang dijadwalkan.");
+    }
+
+    const updated = await updateLicenseFields(license.id, {
+      downgrade_to_package_id: null,
+      downgrade_effective_at: null,
+    });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[cancelScheduledDowngradeAction]", err);
+    return errorResult(err.message || "Gagal membatalkan downgrade.");
+  }
+}
+
+/* ── Action: set renewal preference (spec §2.1) ── */
+
+export async function setRenewalPreferenceAction(
+  brandSlug: string,
+  preference: "auto" | "manual",
+): Promise<ActionResult<License>> {
+  try {
+    const auth = await requireAuth();
+    const supabase = await createServerSupabase();
+    const brand = await getBrandBySlug(supabase as any, brandSlug);
+    if (!brand) return errorResult("Brand tidak ditemukan.");
+
+    const license = await getActiveLicenseForBrand(brand.id);
+    if (!license) return errorResult("Tidak ada lisensi aktif.");
+    if (license.package_type === "lifetime" || license.is_trial) {
+      return errorResult("Renewal preference tidak berlaku untuk lifetime/trial.");
+    }
+    if (preference !== "auto" && preference !== "manual") {
+      return errorResult("Renewal preference tidak valid.");
+    }
+
+    const updated = await updateLicenseFields(license.id, {
+      renewal_preference: preference,
+    });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[setRenewalPreferenceAction]", err);
+    return errorResult(err.message || "Gagal menyimpan preferensi renewal.");
+  }
+}
+
+/* ── Action: replace proof on a rejected order (spec §5) ── */
+// Re-uses the SAME order id; does not create a new checkout.
+
+export async function replaceProofAction(
+  orderId: string,
+  formData: FormData,
+): Promise<ActionResult<LicenseOrder>> {
+  try {
+    const auth = await requireAuth();
+    const file = formData.get("proof") as File | null;
+    if (!file) return errorResult("Bukti pembayaran tidak ditemukan.");
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) return errorResult("Ukuran file maksimal 10MB.");
+
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowedTypes.includes(file.type)) {
+      return errorResult("Tipe file harus JPG, PNG, atau PDF.");
+    }
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const { data: order, error: ordErr } = await (adminDb as any)
+      .from("license_orders")
+      .select("id, brand_id, status")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (ordErr || !order) return errorResult("Pesanan tidak ditemukan.");
+    if (order.status !== "rejected") {
+      return errorResult("Hanya pesanan yang ditolak yang dapat mengganti bukti.");
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop() || "jpg";
+    const filePath = `license-proofs/${orderId}/proof-${Date.now()}.${ext}`;
+    const { error: uploadError } = await (adminDb as any).storage
+      .from("license-proofs")
+      .upload(filePath, buffer, { contentType: file.type, upsert: false });
+    if (uploadError) throw new Error("Gagal mengunggah bukti pembayaran.");
+
+    const { data: publicUrl } = (adminDb as any).storage
+      .from("license-proofs")
+      .getPublicUrl(filePath);
+
+    // Re-open the order and reset the deadline (Q4 continues to apply).
+    const updated = await updateLicenseOrderFields(orderId, {
+      status: "pending_payment",
+      proof_url: publicUrl.publicUrl,
+      rejected_reason: null,
+      payment_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[replaceProofAction]", err);
+    return errorResult(err.message || "Gagal mengganti bukti pembayaran.");
+  }
+}
+
+/* ── Action: cancel an order (spec §5) ── */
+
+export async function cancelOrderAction(
+  orderId: string,
+): Promise<ActionResult<LicenseOrder>> {
+  try {
+    const auth = await requireAuth();
+    const adminDb = createServiceRoleSupabaseClient();
+    const { data: order, error: ordErr } = await (adminDb as any)
+      .from("license_orders")
+      .select("id, brand_id, status")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (ordErr || !order) return errorResult("Pesanan tidak ditemukan.");
+    if (!["pending_payment", "waiting_verification", "rejected"].includes(order.status)) {
+      return errorResult("Pesanan tidak dapat dibatalkan pada status ini.");
+    }
+
+    const updated = await updateLicenseOrderFields(orderId, { status: "cancelled" });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[cancelOrderAction]", err);
+    return errorResult(err.message || "Gagal membatalkan pesanan.");
+  }
+}
+
+/* ── Action: replace proof on a rejected license_payment (spec §5) ── */
+// Re-uses the SAME payment row; re-opens to pending_payment and resets the
+// 24h deadline (Q4 continues to apply). Does not create a new checkout.
+
+export async function replacePaymentProofAction(
+  paymentId: string,
+  formData: FormData,
+): Promise<ActionResult<LicensePaymentView>> {
+  try {
+    const auth = await requireAuth();
+    const file = formData.get("proof") as File | null;
+    if (!file) return errorResult("Bukti pembayaran tidak ditemukan.");
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) return errorResult("Ukuran file maksimal 10MB.");
+
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowedTypes.includes(file.type)) {
+      return errorResult("Tipe file harus JPG, PNG, atau PDF.");
+    }
+
+    const adminDb = createServiceRoleSupabaseClient();
+    const { data: payment, error: payErr } = await (adminDb as any)
+      .from("license_payments")
+      .select("id, profile_id, status")
+      .eq("id", paymentId)
+      .maybeSingle();
+    if (payErr || !payment) return errorResult("Pesanan tidak ditemukan.");
+    if (payment.profile_id !== auth.profileId && !isPlatformOwnerSession(auth)) {
+      return errorResult("Akses ditolak.");
+    }
+    if (payment.status !== "rejected") {
+      return errorResult("Hanya pesanan yang ditolak yang dapat mengganti bukti.");
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop() || "jpg";
+    const filePath = `${paymentId}/proof-${Date.now()}.${ext}`;
+    const { error: uploadError } = await (adminDb as any).storage
+      .from("license-proofs")
+      .upload(filePath, buffer, { contentType: file.type, upsert: false });
+    if (uploadError) throw new Error("Gagal mengunggah bukti pembayaran.");
+
+    const { data: publicUrl } = (adminDb as any).storage
+      .from("license-proofs")
+      .getPublicUrl(filePath);
+
+    const { data: updated, error: updErr } = await (adminDb as any)
+      .from("license_payments")
+      .update({
+        status: "pending_payment",
+        proof_url: publicUrl.publicUrl,
+        rejected_reason: null,
+        payment_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq("id", paymentId)
+      .select("*")
+      .single();
+    if (updErr) throw new Error("Gagal memperbarui pesanan.");
+
+    return successResult(mapLicensePaymentView(updated as any));
+  } catch (err: any) {
+    console.error("[replacePaymentProofAction]", err);
+    return errorResult(err.message || "Gagal mengganti bukti pembayaran.");
+  }
+}
+
+/* ── Action: read pending-order + downgrade state for the UI guard (spec §5) ── */
+
+export async function getBillingGuardsAction(
+  brandSlug: string,
+): Promise<
+  ActionResult<{
+    pendingOrder: LicenseOrder | null;
+    downgradeScheduled: { toPackageId: string; toPackageName: string; effectiveAt: string } | null;
+  }>
+> {
+  try {
+    const auth = await requireAuth();
+    const supabase = await createServerSupabase();
+    const brand = await getBrandBySlug(supabase as any, brandSlug);
+    if (!brand) return errorResult("Brand tidak ditemukan.");
+
+    const pendingOrder = await getPendingOrderForBrand(brand.id);
+    const license = await getActiveLicenseForBrand(brand.id);
+
+    let downgradeScheduled: { toPackageId: string; toPackageName: string; effectiveAt: string } | null = null;
+    if (license?.downgrade_to_package_id) {
+      const target = await getPackageById(license.downgrade_to_package_id);
+      downgradeScheduled = {
+        toPackageId: license.downgrade_to_package_id,
+        toPackageName: target?.name ?? "Paket",
+        effectiveAt: license.downgrade_effective_at ?? license.expires_at ?? new Date().toISOString(),
+      };
+    }
+
+    return successResult({ pendingOrder, downgradeScheduled });
+  } catch (err: any) {
+    console.error("[getBillingGuardsAction]", err);
+    return errorResult(err.message || "Gagal memuat status billing.");
+  }
+}
+
+/* ── Admin: suspend / unsuspend a license (spec §6.4, Q3) ── */
+
+export async function suspendLicenseAction(
+  licenseId: string,
+  reason: string,
+): Promise<ActionResult<License>> {
+  try {
+    const auth = await requirePlatformOwner();
+    if (!reason || !reason.trim()) {
+      return errorResult("Alasan suspend harus diisi.");
+    }
+    const adminProfileId = await platformProfileId(auth);
+    if (!adminProfileId) return errorResult("Profil admin tidak ditemukan.");
+
+    const updated = await updateLicenseFields(licenseId, {
+      status: "suspended",
+      suspended_reason: reason,
+      suspended_by: adminProfileId,
+      suspended_at: new Date().toISOString(),
+    });
+
+    logPlatformAction({
+      brandId: (updated.brand_id as number) ?? 0,
+      actorId: auth.authUserId,
+      actorName: auth.name ?? "",
+      actorRole: "PLATFORM_OWNER",
+      action: "license_suspended",
+      targetType: "license",
+      targetLabel: updated.id,
+      description: `Lisensi ${updated.id} ditangguhkan. Alasan: ${reason}`,
+      details: { license_id: updated.id, reason },
+    });
+
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[suspendLicenseAction]", err);
+    return errorResult(err.message || "Gagal menangguhkan lisensi.");
+  }
+}
+
+export async function unsuspendLicenseAction(
+  licenseId: string,
+): Promise<ActionResult<License>> {
+  try {
+    const auth = await requirePlatformOwner();
+    const updated = await updateLicenseFields(licenseId, {
+      status: "active",
+      suspended_reason: null,
+      suspended_by: null,
+      suspended_at: null,
+    });
+    return successResult(updated);
+  } catch (err: any) {
+    console.error("[unsuspendLicenseAction]", err);
+    return errorResult(err.message || "Gagal mencabut suspend.");
+  }
+}
+
+/* ── Wrap license mapper that already folds joined package_type ── */
+
+/* ── Cron: daily billing maintenance (spec §4.1, §5, §6.4) ── */
+// Called only by the app cron route /api/cron/billing. Runs the pure-DB
+// RPCs (timeout + downgrade apply) and the H-30 expiry reminder scan.
+// The expiry reminder sends exactly once per license via expiry_notified_at.
+
+export async function runBillingCronAction(): Promise<{
+  expiredOrders: number;
+  appliedDowngrades: number;
+  expiredLicenses: number;
+  expiryNotified: number;
+}> {
+  const adminDb = createServiceRoleSupabaseClient();
+
+  const { data: expiredOrders } = await (adminDb as any).rpc("expire_pending_orders");
+  const { data: appliedDowngrades } = await (adminDb as any).rpc("apply_scheduled_downgrades");
+  const { data: expiredLicenses } = await (adminDb as any).rpc("expire_active_licenses");
+
+  // H-30 expiry reminder: active, non-trial, non-lifetime licenses expiring
+  // between 29 and 31 days from now, not yet notified.
+  const from = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: due, error: dueErr } = await (adminDb as any)
+    .from("licenses")
+    .select("id, brand_id, package_id, expires_at, expiry_notified_at, packages:package_id(name, package_type, billing_duration_enabled)")
+    .eq("status", "active")
+    .is("expiry_notified_at", null)
+    .gte("expires_at", from)
+    .lte("expires_at", to);
+
+  if (dueErr) {
+    console.error("[runBillingCronAction] expiry scan error:", dueErr.message);
+    return {
+      expiredOrders: Number(expiredOrders ?? 0),
+      appliedDowngrades: Number(appliedDowngrades ?? 0),
+      expiredLicenses: Number(expiredLicenses ?? 0),
+      expiryNotified: 0,
+    };
+  }
+
+  let expiryNotified = 0;
+  for (const lic of due ?? []) {
+    const pkg = lic.packages as any;
+    const isLifetime = pkg?.package_type === "lifetime" || pkg?.billing_duration_enabled === false;
+    if (isLifetime || lic.is_trial) continue;
+
+    const { data: brand } = await (adminDb as any)
+      .from("brands")
+      .select("name, owner_email, owner_name")
+      .eq("id", lic.brand_id)
+      .maybeSingle();
+    if (!brand?.owner_email) {
+      // Still mark notified so we don't retry forever without an address.
+      await (adminDb as any)
+        .from("licenses")
+        .update({ expiry_notified_at: new Date().toISOString() })
+        .eq("id", lic.id);
+      continue;
+    }
+
+    const expDate = new Date(lic.expires_at).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    insertBrandNotification(
+      lic.brand_id,
+      "Lisensi Akan Berakhir",
+      `Lisensi ${pkg?.name ?? "Anda"} akan berakhir pada ${expDate}. Segera perpanjang untuk menghindari gangguan.`,
+      "billing",
+      "warning",
+      { license_id: lic.id, expires_at: lic.expires_at },
+    );
+
+    void (async () => {
+      try {
+        await Mailer.send({
+          to: brand.owner_email,
+          toName: brand.owner_name ?? brand.name,
+          subject: "Lisensi Anda Akan Berakhir",
+          template: "license-expiring",
+          data: {
+            customerName: brand.owner_name ?? brand.name,
+            packageName: pkg?.name ?? "Lisensi",
+            expirationDate: expDate,
+            renewUrl: "https://app.seervisio.com/license",
+          },
+        });
+      } catch (e) {
+        console.error("[runBillingCronAction] email error:", e);
+      }
+    })();
+
+    await (adminDb as any)
+      .from("licenses")
+      .update({ expiry_notified_at: new Date().toISOString() })
+      .eq("id", lic.id);
+
+    expiryNotified += 1;
+  }
+
+  // License-expired notification: licenses just flipped to 'expired' by the
+  // RPC above (they carry a fresh expiry_notified_at stamp). Notify once.
+  const { data: justExpired, error: expErr } = await (adminDb as any)
+    .from("licenses")
+    .select("id, brand_id, package_id, expires_at, packages:package_id(name)")
+    .eq("status", "expired")
+    .gte("expiry_notified_at", new Date(Date.now() - 60 * 1000).toISOString());
+
+  if (!expErr) {
+    for (const lic of justExpired ?? []) {
+      const pkg = lic.packages as any;
+      const expDate = lic.expires_at
+        ? new Date(lic.expires_at).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : "";
+
+      const { data: brand } = await (adminDb as any)
+        .from("brands")
+        .select("name, owner_email, owner_name")
+        .eq("id", lic.brand_id)
+        .maybeSingle();
+
+      if (brand?.owner_email) {
+        insertBrandNotification(
+          lic.brand_id,
+          "Lisensi Berakhir",
+          `Lisensi ${pkg?.name ?? "Anda"} telah berakhir. Perpanjang untuk mengaktifkan kembali.`,
+          "billing",
+          "error",
+          { license_id: lic.id, expires_at: lic.expires_at },
+        );
+        void (async () => {
+          try {
+            await Mailer.send({
+              to: brand.owner_email,
+              toName: brand.owner_name ?? brand.name,
+              subject: "Lisensi Anda Telah Berakhir",
+              template: "license-expired",
+              data: {
+                customerName: brand.owner_name ?? brand.name,
+                packageName: pkg?.name ?? "Lisensi",
+                expirationDate: expDate,
+                renewalUrl: "https://app.seervisio.com/license",
+              },
+            });
+          } catch (e) {
+            console.error("[runBillingCronAction] expired email error:", e);
+          }
+        })();
+      }
+    }
+  }
+
+  return {
+    expiredOrders: Number(expiredOrders ?? 0),
+    appliedDowngrades: Number(appliedDowngrades ?? 0),
+    expiredLicenses: Number(expiredLicenses ?? 0),
+    expiryNotified,
+  };
 }
 
 /* ============================================================
@@ -488,6 +1151,7 @@ export interface LicensePaymentView {
   estimatedVerificationHours: number;
   paymentDeadline: string | null;
   createdAt: string;
+  rejectedReason?: string | null;
 }
 
 // Create a license_payment from a (bound) checkout session.
@@ -499,6 +1163,7 @@ export async function createLicensePaymentAction(input: {
   npwp?: string;
   invoiceEmail: string;
   paymentMethodId?: string;
+  renewalPreference?: "auto" | "manual";
 }): Promise<ActionResult<LicensePaymentView>> {
   try {
     const auth = await requireAuth();
@@ -578,6 +1243,7 @@ export async function createLicensePaymentAction(input: {
         bank_name: bankName,
         account_number: accountNumber,
         account_holder: accountHolder,
+        renewal_preference: input.renewalPreference ?? null,
       })
       .select("*")
       .single();
@@ -826,6 +1492,7 @@ export async function approveLicensePaymentAction(
         started_at: new Date().toISOString(),
         expires_at: expiresAt,
         is_trial: false,
+        renewal_preference: p.renewal_preference ?? null,
       })
       .select("id")
       .single();
@@ -959,6 +1626,14 @@ export async function rejectLicensePaymentAction(
       return errorResult("Alasan penolakan harus diisi.");
     }
     const adminDb = createServiceRoleSupabaseClient();
+    const { data: payment, error: loadErr } = await (adminDb as any)
+      .from("license_payments")
+      .select("id, brand_id, profile_id, package_name, packages:package_id(name)")
+      .eq("id", paymentId)
+      .maybeSingle();
+    if (loadErr) throw new Error("Gagal memuat pesanan.");
+    if (!payment) return errorResult("Pesanan tidak ditemukan.");
+
     const { error } = await (adminDb as any)
       .from("license_payments")
       .update({
@@ -969,6 +1644,70 @@ export async function rejectLicensePaymentAction(
       .eq("id", paymentId)
       .in("status", ["pending_payment", "waiting_verification"]);
     if (error) throw new Error("Gagal menolak pesanan.");
+
+    if (payment.brand_id) {
+      insertBrandNotification(
+        payment.brand_id,
+        "Pesanan Lisensi Ditolak",
+        `Pesanan lisensi ${payment.package_name ?? ""} ditolak. Alasan: ${reason}`,
+        "activity",
+        "error",
+        { payment_id: paymentId },
+      );
+    }
+
+    void (async () => {
+      try {
+        const email =
+          payment.brand_id != null
+            ? ((
+                await (adminDb as any)
+                  .from("brands")
+                  .select("owner_email, owner_name, name")
+                  .eq("id", payment.brand_id)
+                  .maybeSingle()
+              ).data?.owner_email ?? null)
+            : ((
+                await (adminDb as any)
+                  .from("profiles")
+                  .select("email, full_name")
+                  .eq("id", payment.profile_id)
+                  .maybeSingle()
+              ).data?.email ?? null);
+        const name =
+          payment.brand_id != null
+            ? ((
+                await (adminDb as any)
+                  .from("brands")
+                  .select("owner_name, name")
+                  .eq("id", payment.brand_id)
+                  .maybeSingle()
+              ).data?.owner_name ?? null)
+            : ((
+                await (adminDb as any)
+                  .from("profiles")
+                  .select("full_name")
+                  .eq("id", payment.profile_id)
+                  .maybeSingle()
+              ).data?.full_name ?? null);
+        if (!email) return;
+        await Mailer.send({
+          to: email,
+          toName: name ?? "Pelanggan",
+          subject: "Pesanan Lisensi Ditolak",
+          template: "license-rejected",
+          data: {
+            customerName: name ?? "Pelanggan",
+            packageName: payment.package_name ?? "Lisensi",
+            rejectionReason: reason,
+            renewUrl: "https://app.seervisio.com/license",
+          },
+        });
+      } catch (e) {
+        console.error("[rejectLicensePaymentAction] email error:", e);
+      }
+    })();
+
     return successResult(undefined);
   } catch (err: any) {
     return errorResult(err.message || "Gagal menolak pembayaran.");
@@ -1093,5 +1832,6 @@ function mapLicensePaymentView(row: any): LicensePaymentView {
     estimatedVerificationHours: 24,
     paymentDeadline: deadline.toISOString(),
     createdAt,
+    rejectedReason: row.rejected_reason ?? null,
   };
 }

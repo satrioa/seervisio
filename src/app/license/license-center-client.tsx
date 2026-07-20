@@ -34,6 +34,7 @@ interface PaymentView {
   estimatedVerificationHours: number;
   paymentDeadline: string | null;
   createdAt: string;
+  rejectedReason?: string | null;
 }
 
 interface Props {
@@ -186,6 +187,34 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
     );
   }, []);
 
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const [replaceLoading, setReplaceLoading] = useState(false);
+
+  const handleReplaceProof = async () => {
+    if (!file) {
+      setReplaceError("Pilih file bukti transfer terlebih dahulu.");
+      return;
+    }
+    setReplaceError(null);
+    setReplaceLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("proof", file);
+      const { replacePaymentProofAction } = await import("@/server/actions/license.actions");
+      const res = await replacePaymentProofAction(p.id, fd);
+      setReplaceLoading(false);
+      if (!res.success) {
+        setReplaceError(res.error || "Gagal mengunggah bukti.");
+        return;
+      }
+      // Reuse the same completed-upload transition as the normal flow.
+      handleUploadComplete(res.data as PaymentView);
+    } catch {
+      setReplaceLoading(false);
+      setReplaceError("Gagal menghubungi server.");
+    }
+  };
+
   if (!status) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
@@ -265,8 +294,8 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
   if (p.status === "rejected") {
     return (
       <Shell>
-        <div className="flex flex-col items-center text-center py-8">
-          <div className="mb-6 flex size-16 items-center justify-center rounded-full bg-red-500/10">
+        <div className="flex flex-col items-center text-center py-6">
+          <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-red-500/10">
             <svg className="size-8 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="15" y1="9" x2="9" y2="15" />
@@ -274,16 +303,40 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
             </svg>
           </div>
           <h2 className="text-lg font-semibold text-foreground">Pesanan Ditolak</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Silakan hubungi kami untuk bantuan lebih lanjut.</p>
-          <div className="mt-8 w-full">
-            <a
-              href="https://wa.me/6281234567890"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {p.rejectedReason && (
+            <p className="mt-2 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
+              {p.rejectedReason}
+            </p>
+          )}
+          <p className="mt-3 text-sm text-muted-foreground">
+            Unggah ulang bukti transfer pada pesanan yang sama untuk diverifikasi kembali.
+          </p>
+
+          <div className="mt-6 w-full text-left">
+            <UploadDropzone
+              file={file}
+              error={replaceError}
+              onFileAccepted={(f) => {
+                setFile(f);
+                setReplaceError(null);
+              }}
+              onFileRemove={() => {
+                setFile(null);
+                setReplaceError(null);
+              }}
+              onError={setReplaceError}
+            />
+          </div>
+
+          <div className="mt-6 w-full">
+            <button
+              type="button"
+              onClick={handleReplaceProof}
+              disabled={replaceLoading || !file}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Hubungi Kami
-            </a>
+              {replaceLoading ? "Mengunggah..." : "Kirim Ulang Bukti"}
+            </button>
           </div>
         </div>
       </Shell>

@@ -86,6 +86,15 @@ export async function createCustomerBrandAction(profileId: string, ownerName: st
   // 6. Back-fill the license (profile-scoped) with the new brand
   await backfillLicenseBrandAction(profileId, brand.id);
 
+  // 6b. Auto-assign the default trial package (spec §1.1) — one-time per
+  // tenant. Non-blocking: onboarding must never fail on a missing trial pkg.
+  try {
+    const { assignTrialAction } = await import("@/server/actions/license.actions");
+    await assignTrialAction(brand.id, profileId);
+  } catch (e) {
+    console.warn("[onboarding] trial assign skipped:", e);
+  }
+
   return {
     brandId: brand.id,
     brandSlug: brand.slug,

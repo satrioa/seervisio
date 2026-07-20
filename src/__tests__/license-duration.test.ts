@@ -66,7 +66,7 @@ describe("calculateLicenseExpiry", () => {
   it("throws for invalid duration type", () => {
     const pkg = makePkg({
       billing_duration_enabled: true,
-      billing_duration_type: "day",
+      billing_duration_type: "day" as LicensePackageBilling["billing_duration_type"],
       billing_duration_value: 1,
     });
     const startsAt = new Date("2026-01-15T00:00:00Z");

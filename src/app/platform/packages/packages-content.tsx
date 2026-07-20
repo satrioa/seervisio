@@ -113,17 +113,32 @@ function PlanCard({
             </p>
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <Badge
-            variant={pkg.isActive ? "default" : "secondary"}
-            className="text-[10px]"
-          >
-            {pkg.isActive ? "Active" : "Inactive"}
-          </Badge>
-          <Badge variant="outline" className="text-[10px] lowercase">
-            {pkg.slug}
-          </Badge>
-        </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge
+              variant={pkg.isActive ? "default" : "secondary"}
+              className="text-[10px]"
+            >
+              {pkg.isActive ? "Active" : "Inactive"}
+            </Badge>
+            <Badge
+              variant={
+                pkg.packageType === "lifetime"
+                  ? "secondary"
+                  : pkg.packageType === "trial"
+                    ? "outline"
+                    : "outline"
+              }
+              className="text-[10px]"
+            >
+              {pkg.packageType}
+            </Badge>
+            {pkg.isDefaultTrial && (
+              <Badge variant="outline" className="text-[10px]">Default Trial</Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] lowercase">
+              {pkg.slug}
+            </Badge>
+          </div>
       </CardContent>
     </Card>
   );
@@ -138,6 +153,8 @@ const defaultForm = {
   maxUsers: 5,
   maxStorageMb: 100,
   maxTransactions: 500,
+  packageType: "subscription" as "subscription" | "lifetime" | "trial",
+  isDefaultTrial: false,
 };
 
 export function PackagesContent() {
@@ -175,6 +192,8 @@ export function PackagesContent() {
       maxUsers: pkg.maxUsers,
       maxStorageMb: pkg.maxStorageMb,
       maxTransactions: pkg.maxTransactions,
+      packageType: pkg.packageType,
+      isDefaultTrial: pkg.isDefaultTrial,
     });
     setDialogOpen(true);
   };
@@ -288,6 +307,39 @@ export function PackagesContent() {
                 className="h-9 text-xs"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="packageType" className="text-xs">Tipe Paket</Label>
+              <select
+                id="packageType"
+                value={form.packageType}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    packageType: e.target.value as "subscription" | "lifetime" | "trial",
+                    isDefaultTrial: e.target.value === "trial" ? f.isDefaultTrial : false,
+                  }))
+                }
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+              >
+                <option value="subscription">Subscription</option>
+                <option value="lifetime">Lifetime</option>
+                <option value="trial">Trial</option>
+              </select>
+            </div>
+            {form.packageType === "trial" && (
+              <div className="col-span-2 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <input
+                  id="isDefaultTrial"
+                  type="checkbox"
+                  checked={form.isDefaultTrial}
+                  onChange={(e) => setForm((f) => ({ ...f, isDefaultTrial: e.target.checked }))}
+                  className="size-4"
+                />
+                <Label htmlFor="isDefaultTrial" className="text-xs">
+                  Jadikan sebagai Trial default (otomatis di-assign ke brand baru)
+                </Label>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="maxBranches" className="text-xs">Max Branches</Label>

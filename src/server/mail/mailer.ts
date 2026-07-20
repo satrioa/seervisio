@@ -8,6 +8,7 @@ import { renderPaymentApprovedEmail } from "./templates/payment-approved";
 import { renderInvoiceEmail } from "./templates/invoice-email";
 import { renderLicenseExpiringEmail } from "./templates/license-expiring";
 import { renderLicenseExpiredEmail } from "./templates/license-expired";
+import { renderLicenseRejectedEmail } from "./templates/license-rejected";
 import { renderResetPasswordEmail } from "./templates/reset-password";
 import type { BrevoAttachment, BrevoApiResponse } from "./brevo/types";
 
@@ -18,6 +19,7 @@ export type EmailTemplate =
   | "invoice-email"
   | "license-expiring"
   | "license-expired"
+  | "license-rejected"
   | "reset-password";
 
 export interface MailSendParams {
@@ -44,6 +46,7 @@ const TEMPLATES: Record<EmailTemplate, (data: Record<string, unknown>) => React.
   "invoice-email": (d) => renderInvoiceEmail(d as any),
   "license-expiring": (d) => renderLicenseExpiringEmail(d as any),
   "license-expired": (d) => renderLicenseExpiredEmail(d as any),
+  "license-rejected": (d) => renderLicenseRejectedEmail(d as any),
   "reset-password": (d) => renderResetPasswordEmail(d as any),
 };
 

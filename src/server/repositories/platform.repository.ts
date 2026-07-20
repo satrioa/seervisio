@@ -14,6 +14,8 @@ export interface PackageRow {
   billingDurationEnabled: boolean;
   billingDurationType: "month" | "year" | null;
   billingDurationValue: number | null;
+  packageType: "subscription" | "lifetime" | "trial";
+  isDefaultTrial: boolean;
 }
 
 export interface SubscriptionRow {
@@ -420,6 +422,8 @@ export async function getPackagesList(): Promise<PackageRow[]> {
     billingDurationEnabled: r.billing_duration_enabled ?? true,
     billingDurationType: r.billing_duration_type ?? "month",
     billingDurationValue: r.billing_duration_value ?? 1,
+    packageType: r.package_type ?? "subscription",
+    isDefaultTrial: r.is_default_trial ?? false,
   }));
 }
 
@@ -448,6 +452,8 @@ export async function getPackageById(id: string): Promise<PackageRow | null> {
     billingDurationEnabled: r.billing_duration_enabled ?? true,
     billingDurationType: r.billing_duration_type ?? "month",
     billingDurationValue: r.billing_duration_value ?? 1,
+    packageType: r.package_type ?? "subscription",
+    isDefaultTrial: r.is_default_trial ?? false,
   };
 }
 
@@ -463,6 +469,8 @@ export async function createPackage(input: {
   billingDurationEnabled?: boolean;
   billingDurationType?: "month" | "year" | null;
   billingDurationValue?: number | null;
+  packageType?: "subscription" | "lifetime" | "trial";
+  isDefaultTrial?: boolean;
 }): Promise<PackageRow> {
   const supabase = createServiceRoleSupabaseClient();
 
@@ -481,6 +489,8 @@ export async function createPackage(input: {
       billing_duration_enabled: input.billingDurationEnabled ?? true,
       billing_duration_type: input.billingDurationType ?? "month",
       billing_duration_value: input.billingDurationValue ?? 1,
+      package_type: input.packageType ?? "subscription",
+      is_default_trial: input.isDefaultTrial ?? false,
     })
     .select()
     .single();
@@ -501,6 +511,8 @@ export async function createPackage(input: {
     billingDurationEnabled: r.billing_duration_enabled ?? true,
     billingDurationType: r.billing_duration_type ?? "month",
     billingDurationValue: r.billing_duration_value ?? 1,
+    packageType: r.package_type ?? "subscription",
+    isDefaultTrial: r.is_default_trial ?? false,
   };
 }
 
@@ -516,6 +528,8 @@ export async function updatePackage(id: string, input: {
   billingDurationEnabled?: boolean | null;
   billingDurationType?: "month" | "year" | null;
   billingDurationValue?: number | null;
+  packageType?: "subscription" | "lifetime" | "trial";
+  isDefaultTrial?: boolean;
 }): Promise<PackageRow> {
   const supabase = createServiceRoleSupabaseClient();
 
@@ -531,6 +545,8 @@ export async function updatePackage(id: string, input: {
   if (input.billingDurationEnabled !== undefined) payload.billing_duration_enabled = input.billingDurationEnabled;
   if (input.billingDurationType !== undefined) payload.billing_duration_type = input.billingDurationType;
   if (input.billingDurationValue !== undefined) payload.billing_duration_value = input.billingDurationValue;
+  if (input.packageType !== undefined) payload.package_type = input.packageType;
+  if (input.isDefaultTrial !== undefined) payload.is_default_trial = input.isDefaultTrial;
 
   const { data, error } = await (supabase as any)
     .from("packages")
@@ -555,6 +571,8 @@ export async function updatePackage(id: string, input: {
     billingDurationEnabled: r.billing_duration_enabled ?? true,
     billingDurationType: r.billing_duration_type ?? "month",
     billingDurationValue: r.billing_duration_value ?? 1,
+    packageType: r.package_type ?? "subscription",
+    isDefaultTrial: r.is_default_trial ?? false,
   };
 }
 

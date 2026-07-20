@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 048a: Atomic Service Payment Finance Entries
+-- Migration 134: Atomic Service Payment Finance Entries
 --
 -- Previously, record_service_payment() created the payment and
 -- payment_account_movement in one transaction, but the finance

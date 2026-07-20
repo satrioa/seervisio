@@ -11,7 +11,14 @@ export type LicenseStatus =
   | "active"
   | "expired"
   | "cancelled"
-  | "pending";
+  | "pending"
+  | "waiting_approval"
+  | "payment_rejected"
+  | "suspended";
+
+export type PackageType = "subscription" | "lifetime" | "trial";
+
+export type RenewalPreference = "auto" | "manual";
 
 export interface LicenseOrder {
   id: string;
@@ -59,15 +66,23 @@ export interface License {
   started_at: string;
   expires_at: string | null;
   is_trial: boolean;
+  renewal_preference: RenewalPreference | null;
+  suspended_reason: string | null;
+  suspended_by: string | null;
+  suspended_at: string | null;
+  downgrade_to_package_id: string | null;
+  downgrade_effective_at: string | null;
   created_at: string;
   updated_at: string;
   // Joined fields
   package_name?: string;
   package_slug?: string;
+  package_type?: PackageType;
   brand_name?: string;
   billing_duration_enabled?: boolean;
   billing_duration_type?: "month" | "year" | null;
   billing_duration_value?: number | null;
+  downgrade_to_package_name?: string;
 }
 
 export interface LicensePackage {
@@ -84,6 +99,8 @@ export interface LicensePackage {
   billing_duration_enabled: boolean;
   billing_duration_type: "month" | "year" | null;
   billing_duration_value: number | null;
+  package_type: PackageType;
+  is_default_trial: boolean;
 }
 
 export interface CreateLicenseOrderInput {

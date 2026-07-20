@@ -76,6 +76,8 @@ describe("Phase 3: license gating keeps dashboard locked pre-approval", () => {
       billing_duration_enabled: true,
       billing_duration_type: "month",
       billing_duration_value: 1,
+      package_type: "subscription",
+      is_default_trial: false,
       ...overrides,
     };
   }

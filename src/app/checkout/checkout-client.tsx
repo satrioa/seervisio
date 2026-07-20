@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { formatCurrencyIDR } from "@/lib/utils/money";
+import { showsRenewalPreference, RENEWAL_PREFERENCE_COPY } from "@/lib/billing/billing-helpers";
 
 interface PlatformPaymentMethod {
   id: string;
@@ -147,9 +148,11 @@ export function CheckoutClient({ session: initialSession, profile, email, ownerN
   const [couponInput, setCouponInput] = useState("");
   const [couponStatus, setCouponStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [couponMessage, setCouponMessage] = useState<string | null>(null);
+  const [renewalPreference, setRenewalPreference] = useState<"auto" | "manual">("auto");
 
   const slug = session.packageSlug?.toLowerCase() ?? "";
   const features = FEATURE_MAP[slug] ?? ["All features included"];
+  const showRenewal = showsRenewalPreference(session.billingCycle);
 
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedMethodId) {
@@ -220,6 +223,7 @@ export function CheckoutClient({ session: initialSession, profile, email, ownerN
         companyAddress: "",
         invoiceEmail: email ?? "",
         paymentMethodId: selectedMethodId ?? undefined,
+        renewalPreference,
       });
 
       if (!result.success) {
@@ -351,9 +355,63 @@ export function CheckoutClient({ session: initialSession, profile, email, ownerN
               <div className="mt-4 rounded-lg bg-muted/40 p-4">
                 <p className="text-sm font-medium text-foreground">{session.packageName}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {session.billingCycle === "lifetime" ? "1x Bayar, Akses Selamanya" : "1x Bayar, 1 Bulan"}
+                  {session.billingCycle === "lifetime"
+                    ? "1x Bayar, Akses Selamanya"
+                    : session.billingCycle === "yearly"
+                      ? "Pembayaran Tahunan"
+                      : "Pembayaran Bulanan"}
                 </p>
               </div>
+
+              {/* Renewal Preference (§2.1) — hidden for lifetime/trial */}
+              {showRenewal && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                    Renewal Preference
+                  </p>
+                  <div className="space-y-2">
+                    {(["auto", "manual"] as const).map((key) => {
+                      const opt = RENEWAL_PREFERENCE_COPY[key];
+                      const selected = renewalPreference === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setRenewalPreference(key)}
+                          className={cn(
+                            "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all",
+                            selected
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:bg-muted/30",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "mt-0.5 flex size-4 items-center justify-center rounded-full border",
+                              selected ? "border-primary" : "border-muted-foreground/40",
+                            )}
+                          >
+                            {selected && <span className="size-2 rounded-full bg-primary" />}
+                          </span>
+                          <span className="flex-1">
+                            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                              {opt.label}
+                              {opt.recommended && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                  Recommended
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {opt.description}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Features */}
               <div className="mt-4">

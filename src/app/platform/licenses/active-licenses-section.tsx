@@ -2,10 +2,22 @@
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { id } from "date-fns/locale";
-import { Clock, Infinity, Star } from "lucide-react";
+import { Clock, Infinity, Star, Ban } from "lucide-react";
 import type { License } from "@/types/license";
+import { suspendLicenseAction, unsuspendLicenseAction } from "@/server/actions/license.actions";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
@@ -13,6 +25,9 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
   expired: "destructive",
   pending: "secondary",
   cancelled: "destructive",
+  suspended: "destructive",
+  waiting_approval: "secondary",
+  payment_rejected: "destructive",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -21,6 +36,9 @@ const STATUS_LABELS: Record<string, string> = {
   expired: "Expired",
   pending: "Pending",
   cancelled: "Cancelled",
+  suspended: "Suspended",
+  waiting_approval: "Waiting Approval",
+  payment_rejected: "Payment Rejected",
 };
 
 function daysRemaining(expiresAt: string | null): number | null {
@@ -41,6 +59,27 @@ interface ActiveLicensesSectionProps {
 }
 
 export function ActiveLicensesSection({ licenses }: ActiveLicensesSectionProps) {
+  const [suspendTarget, setSuspendTarget] = React.useState<License | null>(null);
+  const [reason, setReason] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  async function handleSuspend() {
+    if (!suspendTarget || !reason.trim()) return;
+    setSaving(true);
+    const res = await suspendLicenseAction(suspendTarget.id, reason.trim());
+    setSaving(false);
+    if (res.success) {
+      setSuspendTarget(null);
+      setReason("");
+    }
+  }
+
+  async function handleUnsuspend(license: License) {
+    setSaving(true);
+    await unsuspendLicenseAction(license.id);
+    setSaving(false);
+  }
+
   return (
     <div>
       <div className="mb-5">
@@ -60,6 +99,7 @@ export function ActiveLicensesSection({ licenses }: ActiveLicensesSectionProps) 
             const remaining = daysRemaining(license.expires_at);
             const isUrgent = remaining !== null && remaining <= 7;
             const isLifetime = !license.billing_duration_enabled;
+            const canSuspend = license.status === "active" || license.status === "trial";
 
             return (
               <div
@@ -104,21 +144,53 @@ export function ActiveLicensesSection({ licenses }: ActiveLicensesSectionProps) 
                         : "—"}
                     </span>
                   </div>
+                  {license.status === "suspended" && license.suspended_reason && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Reason</span>
+                      <span className="text-xs text-destructive">{license.suspended_reason}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-1.5 text-sm font-medium">
-                  {isLifetime ? (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Infinity className="size-4" />
-                      No expiry
-                    </span>
-                  ) : remaining !== null ? (
-                    <span className={isUrgent ? "flex items-center gap-1 text-destructive" : "flex items-center gap-1 text-muted-foreground"}>
-                      <Clock className="size-4" />
-                      {remaining} {remaining === 1 ? "day" : "days"} remaining
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    {isLifetime ? (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <Infinity className="size-4" />
+                        No expiry
+                      </span>
+                    ) : remaining !== null ? (
+                      <span className={isUrgent ? "flex items-center gap-1 text-destructive" : "flex items-center gap-1 text-muted-foreground"}>
+                        <Clock className="size-4" />
+                        {remaining} {remaining === 1 ? "day" : "days"} remaining
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+                  {canSuspend && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setReason("");
+                        setSuspendTarget(license);
+                      }}
+                    >
+                      <Ban className="size-3.5" />
+                      Suspend
+                    </Button>
+                  )}
+                  {license.status === "suspended" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUnsuspend(license)}
+                      disabled={saving}
+                    >
+                      Unsuspend
+                    </Button>
                   )}
                 </div>
               </div>
@@ -126,6 +198,42 @@ export function ActiveLicensesSection({ licenses }: ActiveLicensesSectionProps) 
           })}
         </div>
       )}
+
+      <Dialog open={!!suspendTarget} onOpenChange={(open) => !open && setSuspendTarget(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Suspend License</DialogTitle>
+            <DialogDescription>
+              {suspendTarget?.brand_name ?? `Brand #${suspendTarget?.brand_id}`} — {suspendTarget?.package_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="suspend-reason" className="text-xs">
+              Alasan Suspend (wajib)
+            </Label>
+            <Textarea
+              id="suspend-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder="Masukkan alasan penangguhan..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSuspendTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleSuspend}
+              disabled={saving || !reason.trim()}
+            >
+              {saving ? "Menyimpan..." : "Suspend"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
