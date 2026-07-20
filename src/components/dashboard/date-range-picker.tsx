@@ -155,6 +155,27 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
     [isSmallScreen, onChange]
   );
 
+  const isQuickActive = React.useCallback(
+    (key: QuickKey): boolean => {
+      const resolved = resolveQuickRange(key);
+      if (resolved.mode !== value.mode) return false;
+      if (resolved.mode === "year") {
+        return (
+          resolved.startYear === value.startYear &&
+          resolved.endYear === value.endYear
+        );
+      }
+      const a = resolved.dateRange?.from;
+      const b = value.dateRange?.from;
+      const c = resolved.dateRange?.to;
+      const d = value.dateRange?.to;
+      const sameDay = (x?: Date, y?: Date) =>
+        x && y && format(x, "yyyy-MM-dd") === format(y, "yyyy-MM-dd");
+      return Boolean(a && b && sameDay(a, b) && ((c && d && sameDay(c, d)) || (!c && !d)));
+    },
+    [value]
+  );
+
   const handleDateSelect = React.useCallback(
     (range: DateRange | undefined) => {
       const granularity = getChartGranularity({
@@ -236,27 +257,38 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
           <span className="truncate">{triggerLabel}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="end">
+      <PopoverContent className="w-auto rounded-xl border border-border bg-popover p-0 shadow-lg" align="end">
         <div className="flex flex-col sm:flex-row">
           {/* Quick Select */}
-          <div className="grid grid-cols-2 gap-1 border-b p-3 sm:w-36 sm:grid-cols-1 sm:border-b-0 sm:border-r">
-            {QUICK_OPTIONS.map((opt) => (
-              <Button
-                key={opt.key}
-                variant="ghost"
-                size="sm"
-                className="h-8 justify-start px-2 text-xs font-normal"
-                onClick={() => handleQuickSelect(opt.key)}
-              >
-                {opt.label}
-              </Button>
-            ))}
+          <div className="border-b p-2 sm:w-40 sm:border-b-0 sm:border-r">
+            <p className="px-2 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Cepat
+            </p>
+            <div className="grid grid-cols-2 gap-1 sm:grid-cols-1">
+              {QUICK_OPTIONS.map((opt) => {
+                const active = isQuickActive(opt.key);
+                return (
+                  <Button
+                    key={opt.key}
+                    variant={active ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "h-8 justify-start px-2 text-xs font-normal",
+                      active && "bg-primary/10 font-medium text-primary hover:bg-primary/15"
+                    )}
+                    onClick={() => handleQuickSelect(opt.key)}
+                  >
+                    {opt.label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Year mode selector */}
           {value.mode === "year" ? (
-            <div className="w-[320px] space-y-3 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">
+            <div className="w-[300px] space-y-3 p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Pilih Tahun
               </p>
               <div className="flex items-center gap-2">
@@ -301,13 +333,15 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             </div>
           ) : (
             /* Date range calendar */
-            <Calendar
-              mode="range"
-              defaultMonth={value.dateRange?.from}
-              selected={value.dateRange}
-              onSelect={handleDateSelect}
-              numberOfMonths={isSmallScreen ? 1 : 2}
-            />
+            <div className="p-2">
+              <Calendar
+                mode="range"
+                defaultMonth={value.dateRange?.from}
+                selected={value.dateRange}
+                onSelect={handleDateSelect}
+                numberOfMonths={isSmallScreen ? 1 : 2}
+              />
+            </div>
           )}
         </div>
       </PopoverContent>
