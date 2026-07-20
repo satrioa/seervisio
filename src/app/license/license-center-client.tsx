@@ -17,6 +17,9 @@ import { WaitingVerification } from "./_components/waiting-verification";
 import { SuccessState } from "./_components/success-state";
 import { OrderSummary } from "./_components/order-summary";
 import { isLifetimeBilling, getBillingLabel } from "@/lib/billing/billing-helpers";
+import { SubscriptionManagement } from "@/components/billingsdk/subscription-management";
+import { type CurrentPlan, type Plan as BillingPlan } from "@/lib/billingsdk-config";
+import { scheduleDowngradeAction } from "@/server/actions/license.actions";
 
 interface PaymentView {
   id: string;
@@ -80,6 +83,62 @@ const STATUS_LABEL: Record<string, string> = {
   expired: "Kadaluarsa",
   cancelled: "Dibatalkan",
 };
+
+function toBillingPlan(pkg: LicensePackage): BillingPlan {
+  const features = [
+    ...(STATIC_FEATURES[pkg.slug.toLowerCase()] ?? []),
+    ...buildFeatureList(pkg),
+  ].map((name) => ({ name, icon: "check", iconColor: "text-primary" }));
+  return {
+    id: pkg.id,
+    title: pkg.name,
+    description: pkg.description ?? "",
+    type: pkg.billing_duration_type === "year" ? "yearly" : "monthly",
+    currency: "Rp",
+    monthlyPrice: pkg.price > 0 ? formatPrice(pkg.price) : "0",
+    yearlyPrice: pkg.price > 0 ? formatPrice(pkg.price) : "0",
+    buttonText: "Pilih Paket",
+    features,
+  };
+}
+
+function buildCurrentPlan(
+  status: NonNullable<Props["initialStatus"]>,
+  packages: LicensePackage[],
+): CurrentPlan | null {
+  if (!status.hasActiveLicense) return null;
+  const pkg =
+    packages.find((p) => p.name === status.licensePackage) ??
+    packages.find((p) => p.is_default_trial) ??
+    packages[0];
+  if (!pkg) return null;
+
+  const billingType: "monthly" | "yearly" | "custom" = pkg.billing_duration_enabled
+    ? pkg.billing_duration_type === "year"
+      ? "yearly"
+      : "monthly"
+    : "custom";
+
+  let nextBillingDate = "—";
+  if (typeof status.daysRemaining === "number" && status.daysRemaining > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + status.daysRemaining);
+    nextBillingDate = d.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  return {
+    plan: toBillingPlan(pkg),
+    type: billingType as "monthly" | "yearly" | "custom",
+    price: pkg.price > 0 ? formatPrice(pkg.price) : undefined,
+    nextBillingDate,
+    paymentMethod: "Transfer Bank",
+    status: "active",
+  };
+}
 
 const LOGO_PALETTE = [
   "bg-blue-600", "bg-emerald-600", "bg-violet-600", "bg-rose-600",
@@ -217,6 +276,27 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
     }
   };
 
+  const handleUpdatePlan = useCallback(
+    async (planId: string) => {
+      if (!status?.brandSlug) return;
+      await scheduleDowngradeAction(status.brandSlug, planId);
+    },
+    [status],
+  );
+
+  const handleCancelSubscription = useCallback(
+    async (planId: string) => {
+      // Spec model: no hard-cancel/delete — revert to the free Starter tier
+      // via a scheduled downgrade (effective at current period end).
+      if (!status?.brandSlug) return;
+      const starter = initialPackages.find(
+        (p) => p.slug.toLowerCase() === "starter" || p.price === 0,
+      );
+      await scheduleDowngradeAction(status.brandSlug, planId || starter?.id || "");
+    },
+    [status, initialPackages],
+  );
+
   if (!status) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
@@ -266,30 +346,45 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
         {/* ── Overview ── */}
         <TabsContent value="overview">
           {status.hasActiveLicense ? (
-            <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
-                  <Check className="size-7 text-emerald-600" />
-                </div>
-                <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
-                  Lisensi Aktif
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-foreground">
-                  {status.licensePackage}
-                </h2>
-                {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Berlaku {status.daysRemaining} hari lagi.
-                  </p>
-                )}
-                <div className="mt-8 w-full">
-                  <Link
-                    href="/welcome"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Lanjutkan ke Pengaturan Awal
-                  </Link>
-                </div>
+            <div className="space-y-6">
+              {(() => {
+                const currentPlan = buildCurrentPlan(status, initialPackages);
+                if (!currentPlan) return null;
+                const starter = initialPackages.find(
+                  (pkg) => pkg.slug.toLowerCase() === "starter" || pkg.price === 0,
+                );
+                return (
+                  <SubscriptionManagement
+                    className="mx-auto"
+                    currentPlan={currentPlan}
+                    updatePlan={{
+                      currentPlan: currentPlan.plan,
+                      plans: initialPackages.map(toBillingPlan),
+                      onPlanChange: handleUpdatePlan,
+                      triggerText: "Update Plan",
+                    }}
+                    cancelSubscription={{
+                      title: "Batalkan Langganan",
+                      description:
+                        "Apakah Anda yakin ingin mengembalikan langganan ke paket gratis?",
+                      plan: currentPlan.plan,
+                      warningTitle: "Akses akan turun ke paket gratis",
+                      warningText:
+                        "Jika Anda membatalkan, langganan akan dijadwalkan turun ke paket Starter (gratis) saat periode berakhir. Data Anda tetap aman.",
+                      leftPanelImageUrl: undefined,
+                      onCancel: handleCancelSubscription,
+                      onKeepSubscription: async () => {},
+                    }}
+                  />
+                );
+              })()}
+              <div className="w-full">
+                <Link
+                  href="/welcome"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Lanjutkan ke Pengaturan Awal
+                </Link>
               </div>
             </div>
           ) : (p?.status === "waiting_verification" || justUploaded) && p ? (
