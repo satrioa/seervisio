@@ -50,7 +50,6 @@ import type { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SummaryCard } from "@/components/dashboard/summary-card";
-import { SparklineCard } from "@/components/dashboard/sparkline-card";
 import { OperationalHourHeatmap } from "@/components/dashboard/operational-hour-heatmap";
 import {
   ChartContainer,
@@ -665,16 +664,6 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
 
       {/* ══ RIGHT INSIGHT COLUMN ══ */}
       <div className="flex flex-col gap-6">
-        {/* ── Revenue Trend Sparkline ── */}
-        {revenueData.length > 1 && (
-          <SparklineCard
-            title="Revenue Trend"
-            data={revenueData.map((d: any) => ({ value: d.revenue, label: d.label }))}
-            color="hsl(var(--chart-1))"
-            valueFormatter={(v) => formatRp(v)}
-          />
-        )}
-
         {/* ── Activity Log ── */}
         <Card className="overflow-hidden shadow-xs">
           <CardHeader className="flex flex-col gap-3 pb-3">

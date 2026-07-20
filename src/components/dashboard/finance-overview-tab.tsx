@@ -11,7 +11,6 @@ import { Area, ComposedChart, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { SummaryCard } from "@/components/dashboard/summary-card";
 import {
   ChartContainer,
   ChartTooltip,
@@ -161,28 +160,45 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
             </div>
           )}
         </div>
-        <Card className="min-w-0 py-4 shadow-xs xl:col-span-2">
+        <Card className="min-w-0 py-4 shadow-xs sm:col-span-1 lg:col-span-3">
         <CardHeader className="px-4">
           <CardTitle>Risk summary</CardTitle>
           <CardDescription>Core risk signals vs previous period</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 xl:grid-cols-4">
-          {RISK_ITEMS.map((item) => (
-            <div key={item.key} className="min-w-0">
-              <SummaryCard
-                label={item.label}
-                value={formatRp(data ? item.getValue(data) : 0)}
-                helper={item.helper}
-                icon={item.icon}
-              />
+        <CardContent className="grid grid-cols-1 px-4 sm:grid-cols-3">
+          {RISK_ITEMS.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.key}
+                className="min-w-0 border-border/70 py-3 first:pt-0 last:pb-0 sm:border-l sm:px-5 sm:py-0 sm:first:border-l-0 sm:first:pl-0 sm:last:pr-0"
+              >
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Icon className="size-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">{item.label}</p>
+                    <p className="text-2xl font-medium leading-none tracking-tight tabular-nums sm:text-3xl">
+                      {formatRp(data ? item.getValue(data) : 0)}
+                    </p>
+                    <p className="max-w-[18rem] text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                      {item.helper}
+                    </p>
+                  </div>
+                </div>
+                {index < RISK_ITEMS.length - 1 && (
+                  <Separator className="mt-3 sm:hidden" />
+                )}
             </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
       </div>
 
       {/* ── Main Grid ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <div className="grid grid-cols-1 gap-4">
         {/* ── Left Column ── */}
         <div className="flex flex-col gap-4">
           {/* Cash In vs Cash Out — restored to previous style */}
@@ -318,84 +334,6 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
             </Card>
           </div>
         </div>
-
-        {/* ── Right Column: Pendapatan — SummaryRow (template Analytics Overview) ── */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Pendapatan</CardTitle>
-            <CardDescription className="text-xs">Ringkasan pendapatan dengan breakdown per sumber</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Revenue — large number + badges + sparkline */}
-            <div className="min-w-0 space-y-2">
-              <div>
-                <div className="font-medium text-muted-foreground text-sm">Revenue</div>
-                <div className="font-semibold text-3xl tabular-nums tracking-tight sm:text-4xl">
-                  {formatRp(totalRevenue)}
-                </div>
-              </div>
-
-              {revenueSeries.length > 1 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="tabular-nums">
-                    {growthPct >= 0 ? "+" : ""}{growthPct.toFixed(1)}%
-                  </Badge>
-                  <Badge variant="secondary" className="tabular-nums">
-                    {growthAmount >= 0 ? "+" : ""}{formatRp(growthAmount)}
-                  </Badge>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-                <span>Previous {formatRp(prevRevenue)}</span>
-              </div>
-
-              {revenueSeries.length > 0 && (
-                <div>
-                  <ChartContainer config={revenueChartConfig} className="h-10 w-full rounded-md border">
-                    <ComposedChart data={revenueSeries} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
-                      <XAxis dataKey="day" hide />
-                      <YAxis hide domain={[revMidpoint - revHalfRange, revMidpoint + revHalfRange]} />
-                      <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                      <Area
-                        dataKey="revenue"
-                        type="natural"
-                        fill="var(--color-revenue)"
-                        fillOpacity={0.14}
-                        stroke="var(--color-revenue)"
-                      />
-                    </ComposedChart>
-                  </ChartContainer>
-                  <span className="text-muted-foreground text-xs">Periode terpilih</span>
-                </div>
-              )}
-            </div>
-
-            {/* Revenue source breakdown — styled like Risk Summary metrics */}
-            <div className="mt-4 space-y-3">
-              <Separator />
-              <p className="text-muted-foreground text-xs uppercase">Sumber Pendapatan</p>
-              <div className="space-y-3">
-                {revenueSources.map((src, i) => {
-                  const pct = totalRevenue > 0 ? Math.round((src.value / totalRevenue) * 100) : 0;
-                  const hue = 150 - i * 45;
-                  return (
-                    <div key={src.label} className="min-w-0 space-y-0.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="size-2.5 rounded-sm shrink-0" style={{ background: `oklch(55% 0.15 ${hue})` }} />
-                          <span className="text-muted-foreground text-sm">{src.label}</span>
-                        </div>
-                        <span className="font-semibold text-lg tabular-nums leading-tight">{pct}%</span>
-                      </div>
-                      <p className="text-muted-foreground text-xs">{formatRp(src.value)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
