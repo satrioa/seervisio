@@ -7,6 +7,7 @@ import { PREFERENCE_DEFAULTS } from "@/lib/preferences/preferences-config";
 import { ThemeBootScript } from "@/scripts/theme-boot";
 import { PreferencesStoreProvider } from "@/stores/preferences/preferences-provider";
 import { Providers } from "./providers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Seervisio — Repair Shop Management",
@@ -52,6 +53,7 @@ export default function RootLayout({
             <Toaster />
           </PreferencesStoreProvider>
         </TooltipProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
