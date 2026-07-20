@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useState, useCallback } from "react";
-import Link from "next/link";
 import { Check, Loader2, Building2, ChevronDown, Copy, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LicensePackage } from "@/types/license";
@@ -15,7 +14,7 @@ import { SecondaryActions } from "./_components/secondary-actions";
 import { WaitingVerification } from "./_components/waiting-verification";
 import { SuccessState } from "./_components/success-state";
 import { OrderSummary } from "./_components/order-summary";
-import { isLifetimeBilling, getBillingLabel } from "@/lib/billing/billing-helpers";
+import { isLifetimeBilling } from "@/lib/billing/billing-helpers";
 import { SubscriptionManagement } from "@/components/billingsdk/subscription-management";
 import { type CurrentPlan, type Plan as BillingPlan } from "@/lib/billingsdk-config";
 import { scheduleDowngradeAction } from "@/server/actions/license.actions";
@@ -451,54 +450,6 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
             </div>
           </div>
         )}
-
-        {/* ── Renewal / plan info ── */}
-        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Paket Saat Ini
-              </h3>
-              <p className="mt-2 text-lg font-semibold text-foreground">
-                {status.licensePackage ?? p?.packageName ?? "—"}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isLifetime
-                  ? "1x Bayar, Aktif Selamanya (Lifetime)"
-                  : p
-                    ? `Siklus tagihan: ${getBillingLabel(p.billingCycle)}`
-                    : "Siklus tagihan belum tersedia"}
-              </p>
-            </div>
-
-            {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
-              <div className="rounded-xl border border-border/60 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Sisa Waktu
-                </p>
-                <p className="mt-1 text-2xl font-bold text-foreground">{status.daysRemaining} hari</p>
-              </div>
-            )}
-
-            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
-              <p className="text-sm text-foreground">
-                Untuk mengatur perpanjangan, upgrade, atau downgrade paket, buka halaman
-                pengaturan lisensi workspace Anda.
-              </p>
-              {status.brandSlug ? (
-                <Button asChild className="mt-4 w-full">
-                  <Link href={`/${status.brandSlug}/panel/licenses`}>
-                    Kelola Langganan
-                  </Link>
-                </Button>
-              ) : (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Buka menu workspace untuk mengelola langganan.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* ── History (expandable rows) ── */}
         <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
