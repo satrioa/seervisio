@@ -3,7 +3,6 @@
 import {
   useState,
   useEffect,
-  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -43,6 +42,28 @@ type ActionState = "idle" | "loading" | "success" | "error" | "info";
 /* ÔöÇÔöÇ Spring config ÔöÇÔöÇ */
 const spring = { type: "spring" as const, stiffness: 400, damping: 30 };
 const feedbackTextTransition = { duration: 0.22, ease: "easeOut" as const };
+
+/* Apple-style content reveal: subtle opacity/translate/scale, easeOut.
+   Fast enough to feel attached to the morphing capsule, never a "pop". */
+const contentRevealEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const contentReveal = { duration: 0.22, ease: contentRevealEase };
+const expandedContentVariants = {
+  initial: { opacity: 0, y: 6, scale: 0.98 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.22, ease: contentRevealEase, delay: 0.05 },
+  },
+  exit: {
+    opacity: 0,
+    y: 6,
+    scale: 0.98,
+    transition: { duration: 0.16, ease: "easeOut" as const },
+  },
+};
+/* Time each feedback line is shown before the ticker advances. */
+const FEEDBACK_LINE_INTERVAL = 1600;
 
 /* ÔöÇÔöÇ Helpers ÔöÇÔöÇ */
 function getPresetDimensions(size: keyof typeof DynamicIslandSizePresets) {
@@ -112,8 +133,30 @@ function SeervisIslandContent({
 
   const ambient = useAmbientIntelligence(activeLicense ?? undefined, pauseAmbient);
   const islandRef = useRef<HTMLDivElement | null>(null);
-  const expandedContentRef = useRef<HTMLDivElement | null>(null);
-  const [measuredExpandedHeight, setMeasuredExpandedHeight] = useState(120);
+  const expandedObserverRef = useRef<ResizeObserver | null>(null);
+  const [measuredExpandedHeight, setMeasuredExpandedHeight] = useState(250);
+
+  /* Measure the expanded content so its numeric height can drive the island
+     size. Uses a callback ref so measurement happens the instant the expanded
+     node mounts (before paint) — avoiding the stale-value / "auto" snap that
+     caused the Idle -> Expanded glitch. The ResizeObserver then keeps the
+     number in sync with real content changes (e.g. Expected Cash row). */
+    const handleExpandedContentRef = useCallback((node: HTMLDivElement | null) => {
+    if (expandedObserverRef.current) {
+      expandedObserverRef.current.disconnect();
+      expandedObserverRef.current = null;
+    }
+    if (node) {
+      setMeasuredExpandedHeight(node.offsetHeight);
+      if (typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(() =>
+          setMeasuredExpandedHeight(node.offsetHeight)
+        );
+        observer.observe(node);
+        expandedObserverRef.current = observer;
+      }
+    }
+  }, []);
   const [errorShake, setErrorShake] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
 
@@ -159,7 +202,7 @@ function SeervisIslandContent({
 
     const interval = setInterval(() => {
       setActiveLineIndex((prev) => (prev + 1) % feedbackLines.length);
-    }, 1600);
+    }, FEEDBACK_LINE_INTERVAL);
 
     return () => clearInterval(interval);
   }, [feedbackLines]);
@@ -234,14 +277,23 @@ function SeervisIslandContent({
       setMode("feedback");
       setSize("compact" as any);
 
-      if (type === "loading") return;
-
       if (type === "error") {
         setErrorShake(true);
         setTimeout(() => setErrorShake(false), 500);
       }
 
-      const dismissAfter = duration ?? 1800;
+      // Auto-dismiss. Loading has no explicit follow-up in some flows, so it
+      // gets a generous safety timeout instead of spinning forever (and
+      // never returning to idle).
+      // For multi-line feedback (title + description), make sure every line
+      // gets shown by the ticker before we dismiss back to idle.
+      const lineCount =
+        (title?.trim() ? 1 : 0) + (description?.trim() ? 1 : 0);
+      const minShowTime = lineCount * FEEDBACK_LINE_INTERVAL + 400;
+      const dismissAfter =
+        type === "loading"
+          ? (duration ?? 8000)
+          : Math.max(duration ?? 1800, minShowTime);
       feedbackTimerRef.current = setTimeout(() => {
         setActionState("idle");
         setMode("idle");
@@ -286,12 +338,28 @@ function SeervisIslandContent({
     return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Current dimensions based on mode ÔÇö width auto hugs content, heights fixed */
-  const dims: { width: number | "auto"; height: number } =
+  /* Island dimensions per visual state. `dims` feeds initialDims (first paint)
+     and the root motion.div `animate={{ width: dims.width, height: dims.height }}`.
+     Sizes are explicit NUMBERS (never animating to "auto") so framer-motion can
+     interpolate smoothly. The expanded height comes from `measuredExpandedHeight`,
+     measured via a callback ref the moment the expanded content mounts — so the
+     first painted frame already has the correct numeric target (no auto-snap jump).
+     Only the branch matching the CURRENT mode/condition is active:
+        expanded                                        -> tapped open:  width 420, height = measuredExpandedHeight
+        welcome                                         -> 2.2s greeting:  width auto, height auto
+        feedback                                        -> toast event:    width auto, height 31
+        idle + isLoading                                -> loading shift:   width auto, height 31
+        idle + hasActiveShift + ambient.mode !== "idle" -> KPI text loop:   width 280, height 31
+        idle + hasActiveShift + showEyes                -> idle eyes:       width auto, height 31
+        idle + hasActiveShift                           -> shift plain:     width auto, height 31
+        idle + !hasActiveShift                          -> no shift prompt: width 250, height 31
+        (fallback)                                      -> getPresetDimensions("compact")  [unused normally]
+  */
+  const dims: { width: number | "auto"; height: number | "auto" } =
     mode === "expanded"
-      ? { width: 330, height: measuredExpandedHeight }
+      ? { width: 420, height: measuredExpandedHeight }
       : mode === "welcome"
-        ? { width: "auto", height: measuredExpandedHeight }
+        ? { width: "auto", height: "auto" }
         : mode === "feedback"
           ? { width: "auto", height: 31 }
           : mode === "idle" && isLoading
@@ -300,19 +368,10 @@ function SeervisIslandContent({
               ? { width: "auto", height: 31 }
               : mode === "idle" && hasActiveShift && showEyes
                 ? { width: "auto", height: 31 }
-                : mode === "idle" && hasActiveShift
-                  ? { width: "auto", height: 31 }
                   : mode === "idle" && !hasActiveShift
-                    ? { width: "auto", height: 31 }
+                    ? { width: 250, height: 31 }
                     : getPresetDimensions("compact");
   const initialDims = dims;
-
-  /* Measure expanded/welcome content so the island height fits its content */
-  useLayoutEffect(() => {
-    if ((mode === "expanded" || mode === "welcome") && expandedContentRef.current) {
-      setMeasuredExpandedHeight(expandedContentRef.current.offsetHeight);
-    }
-  }, [mode, feedbackTitle, feedbackDescription, isExpanded]);
 
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
   const islandShadow =
@@ -320,29 +379,26 @@ function SeervisIslandContent({
 
   return (
     <>
-    <motion.div
-      ref={islandRef}
-      data-island-root
-      data-tour="dynamic-island"
-      className="relative flex origin-center cursor-pointer items-stretch overflow-hidden rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
-      initial={{
-        width: initialDims.width,
-        height: initialDims.height,
-        borderRadius: 36,
-      }}
-      animate={{
-        width: dims.width,
-        height: dims.height,
-        borderRadius: islandBorderRadius,
-        boxShadow: islandShadow,
-        x: errorShake ? [0, -4, 4, -4, 4, -2, 2, 0] : 0,
-        scale: themePulse ? [1, 1.06, 1] : 1,
-        borderColor: themePulse
-          ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
-          : "rgba(255,255,255,0.1)",
-      }}
-      layout
-      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
+      <motion.div
+        ref={islandRef}
+        data-island-root
+        data-tour="dynamic-island"
+        className="relative flex origin-center cursor-pointer items-stretch overflow-hidden rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
+        initial={{
+          borderRadius: 36,
+        }}
+        animate={{
+          width: dims.width,
+          height: dims.height,
+          borderRadius: islandBorderRadius,
+          boxShadow: islandShadow,
+          x: errorShake ? [0, -4, 4, -4, 4, -2, 2, 0] : 0,
+          scale: themePulse ? [1, 1.06, 1] : 1,
+          borderColor: themePulse
+            ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
+            : "rgba(255,255,255,0.1)",
+        }}
+        style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
       transition={{
         layout: spring,
         ...spring,
@@ -374,7 +430,7 @@ function SeervisIslandContent({
         />
       )}
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {/* ÔöÇÔöÇ Welcome ÔöÇÔöÇ */}
         {mode === "welcome" && (
           <motion.div
@@ -382,8 +438,8 @@ function SeervisIslandContent({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            transition={spring}
-            className="flex w-full items-center gap-3 px-2 py-2"
+            transition={contentReveal}
+            className="absolute inset-0 flex w-full items-center gap-3 px-2 py-2"
           >
             <img
               src="/images/welcome-wave.gif"
@@ -409,8 +465,8 @@ function SeervisIslandContent({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            transition={spring}
-            className="flex w-full items-stretch justify-center gap-2 px-2 py-2"
+            transition={contentReveal}
+            className="absolute inset-0 flex w-full items-stretch justify-center gap-2 p-px"
           >
             <div
               className="relative flex min-w-0 flex-1 items-center overflow-hidden"
@@ -432,10 +488,10 @@ function SeervisIslandContent({
                 }}
               >
                 <span className="pr-6 text-xs text-white/60 dark:text-white/60">
-                  {displayBranchName} ┬À Buka toko untuk memulai session
+                  {displayBranchName} ⁕ Buka toko untuk memulai session
                 </span>
                 <span className="pr-6 text-xs text-white/60 dark:text-white/60" aria-hidden="true">
-                  {displayBranchName} ┬À Buka toko untuk memulai session
+                  {displayBranchName} ⁕ Buka toko untuk memulai session
                 </span>
               </motion.div>
             </div>
@@ -460,7 +516,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="flex w-full items-center gap-2.5 px-2 py-2 "
+            className="absolute inset-0 flex w-full items-center gap-2.5 px-2 py-2 "
           >
             {ambient.mode === "idle" && showEyes ? (
               <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">
@@ -469,7 +525,7 @@ function SeervisIslandContent({
             ) : ambient.mode === "idle" ? (
               <>
                 <span className="size-1.5 shrink-0 rounded-full bg-green-400/80" />
-                <span className="whitespace-nowrap text-xs font-medium text-white/80 dark:text-white/80">
+                <span className="items-center whitespace-nowrap text-xs font-medium text-white/80 dark:text-white/80">
                   {displayBranchName}
                 </span>
                 <span className="text-[10px] text-white/40 dark:text-white/40 tabular-nums">
@@ -528,8 +584,8 @@ function SeervisIslandContent({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            transition={spring}
-            className="flex w-full items-center justify-center gap-2.5 px-2 py-2"
+            transition={contentReveal}
+            className="absolute inset-0 flex w-full items-center justify-center gap-2.5 px-2 py-2"
           >
             <Loader2 className="size-3.5 animate-spin text-white/100 dark:text-white/100" />
             <span className="text-xs text-white/50 dark:text-white/50">Memuat shift...</span>
@@ -540,12 +596,12 @@ function SeervisIslandContent({
         {mode === "expanded" && !hasActiveShift && (
           <motion.div
             key="expanded-none"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={spring}
-            className="flex w-full flex-col gap-1 p-0.5"
-            ref={expandedContentRef}
+            variants={expandedContentVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute left-0 right-0 top-0 flex w-full flex-col gap-1 self-start p-0.5"
+            ref={handleExpandedContentRef}
           >
             <div className="space-y-1 px-3 py-3"  >
               <p className="text-sm font-medium text-white dark:text-white">Session belum dimulai</p>
@@ -554,10 +610,10 @@ function SeervisIslandContent({
                 ini.
               </p>
             </div>
-            <div className="flex w-full flex gap-5" >
+            <div className="flex w-full gap-1">
               <Button
                 size="sm"
-                className="h-9 gap-1.5 rounded-2xl border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
+                className="h-9 flex-1 gap-1.5 rounded-2xl border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleBukaToko();
@@ -574,11 +630,12 @@ function SeervisIslandContent({
         {mode === "expanded" && hasActiveShift && (
           <motion.div
             key="expanded-open"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={spring}
-            className="flex w-full flex-col gap-3 px-3 py-3"
+            variants={expandedContentVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute left-0 right-0 top-0 flex w-full flex-col gap-3 self-start px-3 py-3"
+            ref={handleExpandedContentRef}
           >
             <div className="flex items-center gap-2">
               <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
@@ -619,8 +676,8 @@ function SeervisIslandContent({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            transition={spring}
-            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
+            transition={contentReveal}
+            className="absolute inset-0 flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
