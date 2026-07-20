@@ -283,21 +283,25 @@ function SeervisIslandContent({
     return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Current dimensions based on mode */
-  const dims =
+  /* Current dimensions based on mode — every state has an explicit size */
+  const dims: { width: number; height: number } =
     mode === "expanded"
       ? { width: 330, height: 120 }
       : mode === "welcome"
         ? { width: 300, height: 68 }
         : mode === "feedback"
           ? getFeedbackDimensions(actionState)
-          : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
-            ? { width: isMobile ? 300 : 250, height: 31 }
-            : mode === "idle" && hasActiveShift
-              ? { width: isMobile ? 120 : 160, height: 31 }
-              : mode === "idle" && !hasActiveShift
-                ? { width: isMobile ? 240 : 240, height: 31 }
-                : getPresetDimensions("compact");
+          : mode === "idle" && isLoading
+            ? { width: isMobile ? 180 : 200, height: 31 }
+            : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
+              ? { width: isMobile ? 300 : 250, height: 31 }
+              : mode === "idle" && hasActiveShift && showEyes
+                ? { width: isMobile ? 110 : 140, height: 31 }
+                : mode === "idle" && hasActiveShift
+                  ? { width: isMobile ? 170 : 200, height: 31 }
+                  : mode === "idle" && !hasActiveShift
+                    ? { width: isMobile ? 240 : 240, height: 31 }
+                    : getPresetDimensions("compact");
   const initialDims =
     mode === "welcome" ? getPresetDimensions("compact") : dims;
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
