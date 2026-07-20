@@ -93,10 +93,14 @@ function toBillingPlan(pkg: LicensePackage): BillingPlan {
     id: pkg.id,
     title: pkg.name,
     description: pkg.description ?? "",
-    type: pkg.billing_duration_type === "year" ? "yearly" : "monthly",
+    type: (pkg.package_type === "lifetime" || !pkg.billing_duration_enabled
+      ? "custom"
+      : pkg.billing_duration_type === "year"
+        ? "yearly"
+        : "monthly") as BillingPlan["type"],
     currency: "Rp",
-    monthlyPrice: pkg.price > 0 ? formatPrice(pkg.price) : "0",
-    yearlyPrice: pkg.price > 0 ? formatPrice(pkg.price) : "0",
+    monthlyPrice: pkg.price > 0 ? pkg.price.toLocaleString("id-ID") : "0",
+    yearlyPrice: pkg.price > 0 ? pkg.price.toLocaleString("id-ID") : "0",
     buttonText: "Pilih Paket",
     features,
   };
@@ -113,11 +117,11 @@ function buildCurrentPlan(
     packages[0];
   if (!pkg) return null;
 
-  const billingType: "monthly" | "yearly" | "custom" = pkg.billing_duration_enabled
-    ? pkg.billing_duration_type === "year"
+  const billingType: "monthly" | "yearly" | "custom" = pkg.package_type === "lifetime" || !pkg.billing_duration_enabled
+    ? "custom"
+    : pkg.billing_duration_type === "year"
       ? "yearly"
-      : "monthly"
-    : "custom";
+      : "monthly";
 
   let nextBillingDate = "—";
   if (typeof status.daysRemaining === "number" && status.daysRemaining > 0) {
@@ -489,7 +493,7 @@ function LicenseNav() {
         href="/"
         className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
       >
-        Billing &amp; License
+        Kembali
       </Link>
     </header>
   );
