@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -111,6 +112,8 @@ function SeervisIslandContent({
 
   const ambient = useAmbientIntelligence(activeLicense ?? undefined, pauseAmbient);
   const islandRef = useRef<HTMLDivElement | null>(null);
+  const expandedContentRef = useRef<HTMLDivElement | null>(null);
+  const [measuredExpandedHeight, setMeasuredExpandedHeight] = useState(120);
   const [errorShake, setErrorShake] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
 
@@ -283,27 +286,33 @@ function SeervisIslandContent({
     return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Current dimensions based on mode — every state has an explicit size */
-  const dims: { width: number; height: number } =
+  /* Current dimensions based on mode — width auto hugs content, heights fixed */
+  const dims: { width: number | "auto"; height: number } =
     mode === "expanded"
-      ? { width: 330, height: 120 }
+      ? { width: 330, height: measuredExpandedHeight }
       : mode === "welcome"
-        ? { width: 300, height: 68 }
+        ? { width: "auto", height: measuredExpandedHeight }
         : mode === "feedback"
-          ? getFeedbackDimensions(actionState)
+          ? { width: "auto", height: 31 }
           : mode === "idle" && isLoading
-            ? { width: isMobile ? 180 : 200, height: 31 }
+            ? { width: "auto", height: 31 }
             : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
-              ? { width: isMobile ? 300 : 250, height: 31 }
+              ? { width: "auto", height: 31 }
               : mode === "idle" && hasActiveShift && showEyes
-                ? { width: isMobile ? 110 : 140, height: 31 }
+                ? { width: "auto", height: 31 }
                 : mode === "idle" && hasActiveShift
-                  ? { width: isMobile ? 170 : 200, height: 31 }
+                  ? { width: "auto", height: 31 }
                   : mode === "idle" && !hasActiveShift
-                    ? { width: isMobile ? 240 : 240, height: 31 }
+                    ? { width: "auto", height: 31 }
                     : getPresetDimensions("compact");
-  const initialDims =
-    mode === "welcome" ? getPresetDimensions("compact") : dims;
+  const initialDims = dims;
+
+  /* Measure expanded/welcome content so the island height fits its content */
+  useLayoutEffect(() => {
+    if ((mode === "expanded" || mode === "welcome") && expandedContentRef.current) {
+      setMeasuredExpandedHeight(expandedContentRef.current.offsetHeight);
+    }
+  }, [mode, feedbackTitle, feedbackDescription, isExpanded]);
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
   const islandShadow =
     mode === "expanded" ? "0 18px 40px rgba(15, 23, 42, 0.22)" : "none";
@@ -314,15 +323,14 @@ function SeervisIslandContent({
       ref={islandRef}
       data-island-root
       data-tour="dynamic-island"
-      className="relative flex origin-center cursor-pointer items-stretch overflow-hidden rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
+      className="relative flex origin-center cursor-pointer items-stretch overflow-hidden rounded-[46px] border border-white/10 bg-black text-white dark:border-white/10 dark:bg-[#262626] dark:text-white"
+      layout
       initial={{
         width: initialDims.width,
         height: initialDims.height,
         borderRadius: 36,
       }}
       animate={{
-        width: dims.width,
-        height: dims.height,
         borderRadius: islandBorderRadius,
         boxShadow: islandShadow,
         x: errorShake ? [0, -4, 4, -4, 4, -2, 2, 0] : 0,
@@ -331,8 +339,9 @@ function SeervisIslandContent({
           ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
           : "rgba(255,255,255,0.1)",
       }}
-      style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
+      style={{ width: dims.width, height: dims.height, borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
       transition={{
+        layout: spring,
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,
         scale: themePulse
@@ -371,7 +380,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-center gap-3 px-0.5 py-0.5"
+            className="flex w-full items-center gap-3 px-2 py-2"
           >
             <img
               src="/images/welcome-wave.gif"
@@ -398,7 +407,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-stretch justify-center gap-2 px-0.5 py-0.5"
+            className="flex w-full items-stretch justify-center gap-2 px-2 py-2"
           >
             <div
               className="relative flex min-w-0 flex-1 items-center overflow-hidden"
@@ -448,7 +457,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="flex w-full items-center gap-2.5 px-0.5 py-0.5 "
+            className="flex w-full items-center gap-2.5 px-2 py-2 "
           >
             {ambient.mode === "idle" && showEyes ? (
               <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">
@@ -517,7 +526,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-center justify-center gap-2.5 px-0.5 py-0.5"
+            className="flex w-full items-center justify-center gap-2.5 px-2 py-2"
           >
             <Loader2 className="size-3.5 animate-spin text-white/100 dark:text-white/100" />
             <span className="text-xs text-white/50 dark:text-white/50">Memuat shift...</span>
@@ -533,8 +542,9 @@ function SeervisIslandContent({
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
             className="flex w-full flex-col gap-1 p-0.5"
+            ref={expandedContentRef}
           >
-            <div className="space-y-1 px-2 py-1"  >
+            <div className="space-y-1 px-3 py-3"  >
               <p className="text-sm font-medium text-white dark:text-white">Session belum dimulai</p>
               <p className="text-xs leading-relaxed text-white/50 dark:text-white/50">
                 Buka toko untuk mulai mencatat transaksi, servis, dan kas hari
@@ -565,7 +575,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
-            className="flex w-full flex-col gap-3 p-0.5"
+            className="flex w-full flex-col gap-3 px-3 py-3"
           >
             <div className="flex items-center gap-2">
               <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
@@ -607,7 +617,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-0.5 py-0.5"
+            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
