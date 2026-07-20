@@ -313,6 +313,7 @@ function SeervisIslandContent({
       setMeasuredExpandedHeight(expandedContentRef.current.offsetHeight);
     }
   }, [mode, feedbackTitle, feedbackDescription, isExpanded]);
+
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
   const islandShadow =
     mode === "expanded" ? "0 18px 40px rgba(15, 23, 42, 0.22)" : "none";
@@ -340,8 +341,10 @@ function SeervisIslandContent({
           ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
           : "rgba(255,255,255,0.1)",
       }}
+      layout
       style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
       transition={{
+        layout: spring,
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,
         scale: themePulse
