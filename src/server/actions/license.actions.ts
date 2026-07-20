@@ -1759,6 +1759,26 @@ export async function getLicenseCenterStatusAction(): Promise<
   }
 }
 
+export async function getLicensePaymentHistoryAction(): Promise<
+  ActionResult<LicensePaymentView[]>
+> {
+  try {
+    const auth = await requireAuth();
+    const adminDb = createServiceRoleSupabaseClient();
+
+    const { data, error } = await (adminDb as any)
+      .from("license_payments")
+      .select("*, packages:package_id(name, slug, billing_duration_enabled)")
+      .eq("profile_id", auth.profileId)
+      .order("created_at", { ascending: false });
+    if (error) return errorResult("Gagal memuat riwayat pesanan.");
+
+    return successResult((data ?? []).map((row: any) => mapLicensePaymentView(row)));
+  } catch (err: any) {
+    return errorResult(err.message || "Gagal memuat riwayat pesanan.");
+  }
+}
+
 /* ── internals ── */
 
 async function getCheckoutSessionRaw(token: string): Promise<any | null> {

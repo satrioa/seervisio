@@ -25,6 +25,7 @@
     "@loading-ui": "https://loading-ui.com/r/{name}.json",
     "@launchui": "https://www.launchuicomponents.com/r/{name}.json",
     "@efferd": "https://efferd.com/r/{style}/{name}.json",
-    "@magicui": "https://magicui.design/r/{name}"
+    "@magicui": "https://magicui.design/r/{name}",
+    "@billingsdk": "https://billingsdk.com/r/{name}.json"
   }
 }

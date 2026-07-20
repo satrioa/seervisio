@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Check, Loader2, Building2, ChevronDown, Copy, CreditCard, RefreshCw, FileText, LayoutDashboard } from "lucide-react";
+import { Check, Loader2, Building2, ChevronDown, Copy, RefreshCw, FileText, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { LicensePackage } from "@/types/license";
@@ -50,6 +50,7 @@ interface Props {
   } | null;
   bankInfo: { bank_name: string; account_number: string; account_holder: string } | null;
   initialPackages: LicensePackage[];
+  initialPayments: PaymentView[];
 }
 
 function buildFeatureList(pkg: LicensePackage): string[] {
@@ -156,7 +157,7 @@ function BankLogo({ name }: { name: string }) {
   );
 }
 
-export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }: Props) {
+export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, initialPayments }: Props) {
   const [status, setStatus] = useState(initialStatus);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +248,7 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-4">
+        <TabsList className="mb-6 grid w-full grid-cols-3">
           <TabsTrigger value="overview">
             <LayoutDashboard className="mr-1.5 size-4" />
             Overview
@@ -259,10 +260,6 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
           <TabsTrigger value="history">
             <FileText className="mr-1.5 size-4" />
             History
-          </TabsTrigger>
-          <TabsTrigger value="invoice">
-            <CreditCard className="mr-1.5 size-4" />
-            Invoice
           </TabsTrigger>
         </TabsList>
 
@@ -441,59 +438,100 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
           </div>
         </TabsContent>
 
-        {/* ── History ── */}
+        {/* ── History (expandable rows) ── */}
         <TabsContent value="history">
           <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Riwayat Pesanan
             </h3>
-            {p ? (
-              <div className="flex items-center justify-between rounded-xl border border-border/60 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{p.packageName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {p.invoiceNumber ?? "—"} · {formatPrice(p.totalAmount)}
-                  </p>
-                </div>
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-                  <span className="size-1.5 rounded-full bg-amber-500" />
-                  {STATUS_LABEL[p.status] ?? p.status}
-                </span>
+            {initialPayments.length > 0 ? (
+              <div className="divide-y divide-border/60">
+                {initialPayments.map((item) => (
+                  <HistoryRow key={item.id} item={item} />
+                ))}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Belum ada riwayat pesanan.</p>
             )}
           </div>
         </TabsContent>
-
-        {/* ── Invoice ── */}
-        <TabsContent value="invoice">
-          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Invoice
-            </h3>
-            {p ? (
-              <div className="space-y-4">
-                <OrderSummary
-                  packageName={p.packageName}
-                  price={p.price}
-                  billingCycle={p.billingCycle}
-                  status={p.status}
-                  invoiceNumber={p.invoiceNumber}
-                />
-                {p.invoiceNumber && (
-                  <Button variant="outline" className="w-full" onClick={() => window.print()}>
-                    <FileText className="mr-1.5 size-4" />
-                    Cetak Invoice
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Belum ada invoice.</p>
-            )}
-          </div>
-        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function HistoryRow({ item }: { item: PaymentView }) {
+  const [open, setOpen] = useState(false);
+  const bank = item.bankInfo;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-1 py-4 text-left transition-colors hover:bg-muted/40"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">{item.packageName}</p>
+          <p className="text-xs text-muted-foreground">
+            {item.invoiceNumber ?? "—"} · {formatPrice(item.totalAmount)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <span className="size-1.5 rounded-full bg-amber-500" />
+            {STATUS_LABEL[item.status] ?? item.status}
+          </span>
+          <ChevronDown
+            className={"size-4 text-muted-foreground transition-transform " + (open ? "rotate-180" : "")}
+          />
+        </div>
+      </button>
+
+      {open && (
+        <div className="space-y-4 px-1 pb-5">
+          <OrderSummary
+            packageName={item.packageName}
+            price={item.price}
+            billingCycle={item.billingCycle}
+            status={item.status}
+            invoiceNumber={item.invoiceNumber}
+          />
+          {bank && (
+            <div className="rounded-xl border border-border/60 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Transfer ke
+              </p>
+              <div className="flex items-center gap-4">
+                <BankLogo name={bank.bank_name} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
+                  <p className="font-mono text-lg font-bold tracking-wider text-foreground">
+                    {bank.account_number}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {item.proofUrl && (
+            <a
+              href={item.proofUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              Lihat Bukti Transfer
+            </a>
+          )}
+          {item.invoiceNumber && (
+            <Button variant="outline" className="w-full" onClick={() => window.print()}>
+              <FileText className="mr-1.5 size-4" />
+              Cetak Invoice
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
