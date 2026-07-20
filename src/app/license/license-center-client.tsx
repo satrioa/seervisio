@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Check, Loader2, Building2, ChevronDown, Copy } from "lucide-react";
+import { Check, Loader2, Building2, ChevronDown, Copy, CreditCard, RefreshCw, FileText, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { LicensePackage } from "@/types/license";
 import { PaymentHeader } from "./_components/payment-header";
 import { PaymentCountdown } from "./_components/payment-countdown";
@@ -14,6 +15,7 @@ import { PrimaryCta } from "./_components/primary-cta";
 import { SecondaryActions } from "./_components/secondary-actions";
 import { WaitingVerification } from "./_components/waiting-verification";
 import { SuccessState } from "./_components/success-state";
+import { OrderSummary } from "./_components/order-summary";
 import { isLifetimeBilling, getBillingLabel } from "@/lib/billing/billing-helpers";
 
 interface PaymentView {
@@ -44,6 +46,7 @@ interface Props {
     hasActiveLicense: boolean;
     licensePackage: string | null;
     daysRemaining: number | null;
+    brandSlug?: string | null;
   } | null;
   bankInfo: { bank_name: string; account_number: string; account_holder: string } | null;
   initialPackages: LicensePackage[];
@@ -76,8 +79,6 @@ const STATUS_LABEL: Record<string, string> = {
   expired: "Kadaluarsa",
   cancelled: "Dibatalkan",
 };
-
-/* ── Bank Logo ── */
 
 const LOGO_PALETTE = [
   "bg-blue-600", "bg-emerald-600", "bg-violet-600", "bg-rose-600",
@@ -195,6 +196,7 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
       setReplaceError("Pilih file bukti transfer terlebih dahulu.");
       return;
     }
+    if (!p) return;
     setReplaceError(null);
     setReplaceLoading(true);
     try {
@@ -207,7 +209,6 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
         setReplaceError(res.error || "Gagal mengunggah bukti.");
         return;
       }
-      // Reuse the same completed-upload transition as the normal flow.
       handleUploadComplete(res.data as PaymentView);
     } catch {
       setReplaceLoading(false);
@@ -225,273 +226,345 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages }
     );
   }
 
-  if (status.hasActiveLicense) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-16">
-        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
-          <div className="flex flex-col items-center text-center">
-            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
-              <Check className="size-7 text-emerald-600" />
-            </div>
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
-              Lisensi Aktif
-            </p>
-            <h1 className="mt-2 text-xl font-semibold text-foreground">
-              {status.licensePackage}
-            </h1>
-            {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Berlaku {status.daysRemaining} hari lagi.
-              </p>
-            )}
-            <div className="mt-8 w-full">
-              <Link
-                href="/welcome"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Lanjutkan ke Pengaturan Awal
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!status.hasPayment || !status.payment) {
+  // No license & no payment → pricing grid (no tabs needed).
+  if (!status.hasActiveLicense && (!status.hasPayment || !status.payment)) {
     return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
   }
 
   const p = status.payment;
-  const bank = p.bankInfo ?? (bankInfo as typeof p.bankInfo | null);
-  const showPaymentForm = p.status === "pending_payment" && !justUploaded;
-  const isLifetime = !p.billingDurationEnabled || isLifetimeBilling(p.billingCycle);
-
-  if (p.status === "waiting_verification" || justUploaded) {
-    return (
-      <Shell>
-        <WaitingVerification
-          proofUrl={p.proofUrl}
-          estimatedVerificationHours={p.estimatedVerificationHours}
-        />
-      </Shell>
-    );
-  }
-
-  if (p.status === "paid") {
-    return (
-      <Shell>
-        <SuccessState />
-      </Shell>
-    );
-  }
-
-  // expired (natural or replaced) / cancelled (from replacePaymentAction) → no active payment → show pricing grid
-  if (p.status === "expired" || p.status === "cancelled") {
-    return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
-  }
-
-  if (p.status === "rejected") {
-    return (
-      <Shell>
-        <div className="flex flex-col items-center text-center py-6">
-          <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-red-500/10">
-            <svg className="size-8 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="15" y1="9" x2="9" y2="15" />
-              <line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-          </div>
-          <h2 className="text-lg font-semibold text-foreground">Pesanan Ditolak</h2>
-          {p.rejectedReason && (
-            <p className="mt-2 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
-              {p.rejectedReason}
-            </p>
-          )}
-          <p className="mt-3 text-sm text-muted-foreground">
-            Unggah ulang bukti transfer pada pesanan yang sama untuk diverifikasi kembali.
-          </p>
-
-          <div className="mt-6 w-full text-left">
-            <UploadDropzone
-              file={file}
-              error={replaceError}
-              onFileAccepted={(f) => {
-                setFile(f);
-                setReplaceError(null);
-              }}
-              onFileRemove={() => {
-                setFile(null);
-                setReplaceError(null);
-              }}
-              onError={setReplaceError}
-            />
-          </div>
-
-          <div className="mt-6 w-full">
-            <button
-              type="button"
-              onClick={handleReplaceProof}
-              disabled={replaceLoading || !file}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {replaceLoading ? "Mengunggah..." : "Kirim Ulang Bukti"}
-            </button>
-          </div>
-        </div>
-      </Shell>
-    );
-  }
-
-  // cancelled payments (from replacePaymentAction) → no active payment → show pricing grid
-  if (p.status === "cancelled") {
-    return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
-  }
+  const bank = (p?.bankInfo ?? bankInfo) as { bank_name: string; account_number: string; account_holder: string } | null;
+  const showPaymentForm = p?.status === "pending_payment" && !justUploaded;
+  const isLifetime = p ? !p.billingDurationEnabled || isLifetimeBilling(p.billingCycle) : false;
 
   return (
-    <div className="mx-auto max-w-[520px] px-4 py-8 sm:py-12">
-      <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
-        <div className="space-y-6">
-          <PaymentHeader
-            packageName={p.packageName}
-            billingCycle={p.billingCycle}
-          />
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+      {/* Page heading */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing &amp; License</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Kelola paket, perpanjangan, dan riwayat pembayaran langganan Anda.
+        </p>
+      </div>
 
-          {p.paymentDeadline && !isLifetime && (
-            <PaymentCountdown
-              deadline={p.paymentDeadline}
-              createdAt={p.createdAt}
-            />
-          )}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="mb-6 grid w-full grid-cols-4">
+          <TabsTrigger value="overview">
+            <LayoutDashboard className="mr-1.5 size-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="renewal">
+            <RefreshCw className="mr-1.5 size-4" />
+            Renewal
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <FileText className="mr-1.5 size-4" />
+            History
+          </TabsTrigger>
+          <TabsTrigger value="invoice">
+            <CreditCard className="mr-1.5 size-4" />
+            Invoice
+          </TabsTrigger>
+        </TabsList>
 
-          {/* ── Combined: Total Pembayaran + Transfer ke + Ringkasan Pesanan ── */}
-          <div className="overflow-hidden rounded-xl border-2 border-primary/20 bg-primary/[0.03]">
-            {/* Total */}
-            <div className="border-b border-primary/10 p-5 text-center">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Total Pembayaran
-              </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-                {formatPrice(p.totalAmount)}
-              </p>
-            </div>
-
-            {/* Transfer ke */}
-            {bank && (
-              <div className="border-b border-primary/10 p-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Transfer ke
+        {/* ── Overview ── */}
+        <TabsContent value="overview">
+          {status.hasActiveLicense ? (
+            <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
+                  <Check className="size-7 text-emerald-600" />
+                </div>
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
+                  Lisensi Aktif
                 </p>
-                <div className="flex items-center gap-4">
-                  <BankLogo name={bank.bank_name} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <p className="font-mono text-lg font-bold tracking-wider text-foreground">
-                        {bank.account_number}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => navigator.clipboard.writeText(bank.account_number)}
-                        className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      >
-                        <Copy className="size-4" />
-                      </button>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
-                  </div>
+                <h2 className="mt-2 text-xl font-semibold text-foreground">
+                  {status.licensePackage}
+                </h2>
+                {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Berlaku {status.daysRemaining} hari lagi.
+                  </p>
+                )}
+                <div className="mt-8 w-full">
+                  <Link
+                    href="/welcome"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Lanjutkan ke Pengaturan Awal
+                  </Link>
                 </div>
               </div>
-            )}
-
-            {/* Ringkasan Pesanan (accordion) */}
-            <details className="group" open>
-              <summary className="flex cursor-pointer items-center gap-2 bg-muted/20 px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/30 list-none [&::-webkit-details-marker]:hidden">
-                Ringkasan Pesanan
-                <ChevronDown className="ml-auto size-4 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="divide-y divide-border/60 text-sm">
-                <div className="flex items-center justify-between px-5 py-3">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-foreground">{p.packageName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {isLifetime ? "1x Bayar, Aktif Selamanya" : "1x Bayar, 1 Bulan"}
-                    </span>
+            </div>
+          ) : (p?.status === "waiting_verification" || justUploaded) && p ? (
+            <Shell><WaitingVerification proofUrl={p.proofUrl} estimatedVerificationHours={p.estimatedVerificationHours} /></Shell>
+          ) : p?.status === "paid" ? (
+            <Shell><SuccessState /></Shell>
+          ) : p?.status === "rejected" ? (
+            <RejectedCard
+              reason={p.rejectedReason ?? null}
+              file={file}
+              error={replaceError}
+              loading={replaceLoading}
+              onFileAccepted={(f) => { setFile(f); setReplaceError(null); }}
+              onFileRemove={() => { setFile(null); setReplaceError(null); }}
+              onError={setReplaceError}
+              onSubmit={handleReplaceProof}
+            />
+          ) : (
+            <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
+              <div className="space-y-6">
+                {p && <PaymentHeader packageName={p.packageName} billingCycle={p.billingCycle} />}
+                {p?.paymentDeadline && !isLifetime && (
+                  <PaymentCountdown deadline={p.paymentDeadline} createdAt={p.createdAt} />
+                )}
+                <div className="overflow-hidden rounded-xl border-2 border-primary/20 bg-primary/[0.03]">
+                  <div className="border-b border-primary/10 p-5 text-center">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total Pembayaran
+                    </p>
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                      {formatPrice(p?.totalAmount ?? 0)}
+                    </p>
                   </div>
-                  <span className="font-semibold text-foreground">{formatPrice(p.price)}</span>
+                  {bank && (
+                    <div className="border-b border-primary/10 p-5">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Transfer ke
+                      </p>
+                      <div className="flex items-center gap-4">
+                        <BankLogo name={bank.bank_name} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            <p className="font-mono text-lg font-bold tracking-wider text-foreground">
+                              {bank.account_number}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(bank.account_number)}
+                              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <Copy className="size-4" />
+                            </button>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {p && (
+                    <div className="p-5">
+                      <OrderSummary
+                        packageName={p.packageName}
+                        price={p.price}
+                        billingCycle={p.billingCycle}
+                        status={p.status}
+                        invoiceNumber={p.invoiceNumber}
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-between px-5 py-2.5">
-                  <span className="text-muted-foreground">Tipe Tagihan</span>
-                  <span className="font-medium text-foreground">
-                    {getBillingLabel(p.billingCycle)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-5 py-2.5">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full bg-amber-500" />
-                    <span className="font-medium text-foreground">
-                      {STATUS_LABEL[p.status] ?? p.status}
-                    </span>
-                  </span>
-                </div>
-                {p.invoiceNumber && (
-                  <div className="flex items-center justify-between px-5 py-2.5 text-sm">
-                    <span className="text-muted-foreground">Nomor Pesanan</span>
-                    <span className="font-mono text-xs font-medium text-foreground">
-                      {p.invoiceNumber}
-                    </span>
-                  </div>
+                {bank && <PaymentInstructions bankName={bank.bank_name} />}
+                {showPaymentForm && (
+                  <>
+                    <UploadDropzone
+                      file={file}
+                      error={error}
+                      onFileAccepted={(f) => { setFile(f); setError(null); }}
+                      onFileRemove={() => { setFile(null); setError(null); }}
+                      onError={setError}
+                    />
+                    <ImportantNotice />
+                    <PrimaryCta
+                      paymentId={p.id}
+                      packageName={p.packageName}
+                      invoiceNumber={p.invoiceNumber}
+                      file={file}
+                      disabled={!showPaymentForm}
+                      onUploadComplete={handleUploadComplete}
+                    />
+                    <SecondaryActions paymentId={p.id} invoiceNumber={p.invoiceNumber} />
+                  </>
                 )}
               </div>
-            </details>
-          </div>
-
-          {bank && <PaymentInstructions bankName={bank.bank_name} />}
-
-          {showPaymentForm && (
-            <>
-              <UploadDropzone
-                file={file}
-                error={error}
-                onFileAccepted={(f) => {
-                  setFile(f);
-                  setError(null);
-                }}
-                onFileRemove={() => {
-                  setFile(null);
-                  setError(null);
-                }}
-                onError={setError}
-              />
-
-              <ImportantNotice />
-
-              <PrimaryCta
-                paymentId={p.id}
-                packageName={p.packageName}
-                invoiceNumber={p.invoiceNumber}
-                file={file}
-                disabled={!showPaymentForm}
-                onUploadComplete={handleUploadComplete}
-              />
-
-              <SecondaryActions paymentId={p.id} invoiceNumber={p.invoiceNumber} />
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </TabsContent>
+
+        {/* ── Renewal ── */}
+        <TabsContent value="renewal">
+          <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Paket Saat Ini
+                </h3>
+                <p className="mt-2 text-lg font-semibold text-foreground">
+                  {status.licensePackage ?? p?.packageName ?? "—"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {isLifetime
+                    ? "1x Bayar, Aktif Selamanya (Lifetime)"
+                    : p
+                      ? `Siklus tagihan: ${getBillingLabel(p.billingCycle)}`
+                      : "Siklus tagihan belum tersedia"}
+                </p>
+              </div>
+
+              {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
+                <div className="rounded-xl border border-border/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Sisa Waktu
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-foreground">{status.daysRemaining} hari</p>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+                <p className="text-sm text-foreground">
+                  Untuk mengatur perpanjangan, upgrade, atau downgrade paket, buka halaman
+                  pengaturan lisensi workspace Anda.
+                </p>
+                {status.brandSlug ? (
+                  <Button asChild className="mt-4 w-full">
+                    <Link href={`/${status.brandSlug}/panel/licenses`}>
+                      Kelola Langganan
+                    </Link>
+                  </Button>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Buka menu workspace untuk mengelola langganan.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── History ── */}
+        <TabsContent value="history">
+          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Riwayat Pesanan
+            </h3>
+            {p ? (
+              <div className="flex items-center justify-between rounded-xl border border-border/60 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{p.packageName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.invoiceNumber ?? "—"} · {formatPrice(p.totalAmount)}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  {STATUS_LABEL[p.status] ?? p.status}
+                </span>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Belum ada riwayat pesanan.</p>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Invoice ── */}
+        <TabsContent value="invoice">
+          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Invoice
+            </h3>
+            {p ? (
+              <div className="space-y-4">
+                <OrderSummary
+                  packageName={p.packageName}
+                  price={p.price}
+                  billingCycle={p.billingCycle}
+                  status={p.status}
+                  invoiceNumber={p.invoiceNumber}
+                />
+                {p.invoiceNumber && (
+                  <Button variant="outline" className="w-full" onClick={() => window.print()}>
+                    <FileText className="mr-1.5 size-4" />
+                    Cetak Invoice
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Belum ada invoice.</p>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-[520px] px-4 py-8 sm:py-12">
-      <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
-        {children}
-      </div>
+    <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
+      {children}
     </div>
+  );
+}
+
+function RejectedCard({
+  reason,
+  file,
+  error,
+  loading,
+  onFileAccepted,
+  onFileRemove,
+  onError,
+  onSubmit,
+}: {
+  reason?: string | null;
+  file: File | null;
+  error: string | null;
+  loading: boolean;
+  onFileAccepted: (f: File) => void;
+  onFileRemove: () => void;
+  onError: (m: string | null) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Shell>
+      <div className="flex flex-col items-center text-center py-6">
+        <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-red-500/10">
+          <svg className="size-8 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">Pesanan Ditolak</h2>
+        {reason && (
+          <p className="mt-2 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {reason}
+          </p>
+        )}
+        <p className="mt-3 text-sm text-muted-foreground">
+          Unggah ulang bukti transfer pada pesanan yang sama untuk diverifikasi kembali.
+        </p>
+        <div className="mt-6 w-full text-left">
+          <UploadDropzone
+            file={file}
+            error={error}
+            onFileAccepted={onFileAccepted}
+            onFileRemove={onFileRemove}
+            onError={onError}
+          />
+        </div>
+        <div className="mt-6 w-full">
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={loading || !file}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Mengunggah..." : "Kirim Ulang Bukti"}
+          </button>
+        </div>
+      </div>
+    </Shell>
   );
 }
 

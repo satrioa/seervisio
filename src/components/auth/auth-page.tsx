@@ -11,10 +11,6 @@ import { createClient } from "@/lib/supabase/client";
 import { updateLastLoginAt } from "@/repositories/profile.repository";
 import { AppIcon } from "@/components/brand/app-icon";
 import { FloatingPaths } from "@/components/floating-paths";
-import { AuthDivider } from "@/components/auth-divider";
-import { GoogleIcon } from "@/components/google-icon";
-import { AppleIcon } from "@/components/apple-icon";
-import { GithubIcon } from "@/components/github-icon";
 import {
   InputGroup,
   InputGroupAddon,
@@ -146,23 +142,6 @@ export function AuthPage() {
               </p>
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Button className="w-full" variant="outline">
-              <GoogleIcon data-icon="inline-start" />
-              Lanjutkan dengan Google
-            </Button>
-            <Button className="w-full" variant="outline">
-              <AppleIcon data-icon="inline-start" />
-              Lanjutkan dengan Apple
-            </Button>
-            <Button className="w-full" variant="outline">
-              <GithubIcon data-icon="inline-start" />
-              Lanjutkan dengan GitHub
-            </Button>
-          </div>
-
-          <AuthDivider>ATAU</AuthDivider>
 
           {error && (
             <Alert variant="destructive">

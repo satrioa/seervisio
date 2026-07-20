@@ -49,6 +49,19 @@ Merged in commit `21d22de`. See `docs/PROJECT_CONTEXT.md` (Licensing section).
 - Inventory V4 is the production inventory+POS subsystem (`inventory-v4.*`).
   Product → Variants model (sku/stock/cost/price/minStock per variant).
 
+## Recent work (navigation + license page refresh)
+- Removed "License Center" (`/[brandSlug]/panel/licenses`) from the tenant
+  **sidebar** (`app-sidebar.tsx` System group). Billing/License is now reachable
+  only from the **landing profile menu** (navbar avatar popover in
+  `public-header.tsx`, item "Billing & License" → `/license`).
+- `/license` page restyled as a tabbed **Billing & License** portal: Overview /
+  Renewal / History / Invoice. Reuses `src/app/license/_components/*`. No new
+  backend calls (uses `initialStatus` + `initialPackages`). Pricing grid kept for
+  no-license/no-payment state. `tsc` + `next build` pass.
+- Platform console (`platform-sidebar.tsx` "Licenses") untouched.
+- Login page: removed OAuth buttons (Google/Apple/GitHub) + `AuthDivider`.
+- `SidebarMenu` gap set to `gap-px` (1px) in `src/components/ui/sidebar.tsx`.
+
 ## Next planned feature
 Spreadsheet Bulk Editor (Inventory → Products): Airtable-like grid with
 inline edit, Excel paste (TSV), live validation, dirty-state, preview,

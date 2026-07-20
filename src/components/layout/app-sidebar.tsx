@@ -225,7 +225,6 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     label: "System",
     icon: Settings,
     items: [
-      { href: "licenses", label: "License Center" },
       { href: "settings?section=brand-profile", label: "Brand Profile" },
       { href: "settings?section=appearance", label: "Appearance & Brand Theme" },
       { href: "settings?section=language-region", label: "Language & Region" },

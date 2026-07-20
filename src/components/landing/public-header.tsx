@@ -258,8 +258,8 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                             className="cursor-pointer"
                           >
                             <ShieldCheck className="size-4" />
-                            <div className="flex flex-1 items-center justify-between">
-                              <span>License</span>
+                              <div className="flex flex-1 items-center justify-between">
+                                <span>Billing &amp; License</span>
                               <span className="flex items-center gap-1">
                                 {auth.license.isActive ? (
                                   <>
