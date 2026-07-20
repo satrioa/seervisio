@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Check, Loader2, Building2, ChevronDown, Copy, RefreshCw, FileText, LayoutDashboard } from "lucide-react";
+import { Check, Loader2, Building2, ChevronDown, Copy, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { LicensePackage } from "@/types/license";
 import { PaymentHeader } from "./_components/payment-header";
 import { PaymentCountdown } from "./_components/payment-countdown";
@@ -327,230 +326,196 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-3">
-          <TabsTrigger value="overview">
-            <LayoutDashboard className="mr-1.5 size-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="renewal">
-            <RefreshCw className="mr-1.5 size-4" />
-            Renewal
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            <FileText className="mr-1.5 size-4" />
-            History
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ── Overview ── */}
-        <TabsContent value="overview">
-          {status.hasActiveLicense ? (
+      <div className="space-y-8">
+        {/* ── Main state content ── */}
+        {status.hasActiveLicense ? (
+          (() => {
+            const currentPlan = buildCurrentPlan(status, initialPackages);
+            if (!currentPlan) return null;
+            return (
+              <SubscriptionManagement
+                className="mx-auto"
+                currentPlan={currentPlan}
+                updatePlan={{
+                  currentPlan: currentPlan.plan,
+                  plans: initialPackages.map(toBillingPlan),
+                  onPlanChange: handleUpdatePlan,
+                  triggerText: "Update Plan",
+                }}
+                cancelSubscription={{
+                  title: "Batalkan Langganan",
+                  description:
+                    "Apakah Anda yakin ingin mengembalikan langganan ke paket gratis?",
+                  plan: currentPlan.plan,
+                  warningTitle: "Akses akan turun ke paket gratis",
+                  warningText:
+                    "Jika Anda membatalkan, langganan akan dijadwalkan turun ke paket Starter (gratis) saat periode berakhir. Data Anda tetap aman.",
+                  leftPanelImageUrl: undefined,
+                  onCancel: handleCancelSubscription,
+                  onKeepSubscription: async () => {},
+                }}
+              />
+            );
+          })()
+        ) : (p?.status === "waiting_verification" || justUploaded) && p ? (
+          <Shell><WaitingVerification proofUrl={p.proofUrl} estimatedVerificationHours={p.estimatedVerificationHours} /></Shell>
+        ) : p?.status === "paid" ? (
+          <Shell><SuccessState /></Shell>
+        ) : p?.status === "rejected" ? (
+          <RejectedCard
+            reason={p.rejectedReason ?? null}
+            file={file}
+            error={replaceError}
+            loading={replaceLoading}
+            onFileAccepted={(f) => { setFile(f); setReplaceError(null); }}
+            onFileRemove={() => { setFile(null); setReplaceError(null); }}
+            onError={setReplaceError}
+            onSubmit={handleReplaceProof}
+          />
+        ) : (
+          <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
             <div className="space-y-6">
-              {(() => {
-                const currentPlan = buildCurrentPlan(status, initialPackages);
-                if (!currentPlan) return null;
-                const starter = initialPackages.find(
-                  (pkg) => pkg.slug.toLowerCase() === "starter" || pkg.price === 0,
-                );
-                return (
-                  <SubscriptionManagement
-                    className="mx-auto"
-                    currentPlan={currentPlan}
-                    updatePlan={{
-                      currentPlan: currentPlan.plan,
-                      plans: initialPackages.map(toBillingPlan),
-                      onPlanChange: handleUpdatePlan,
-                      triggerText: "Update Plan",
-                    }}
-                    cancelSubscription={{
-                      title: "Batalkan Langganan",
-                      description:
-                        "Apakah Anda yakin ingin mengembalikan langganan ke paket gratis?",
-                      plan: currentPlan.plan,
-                      warningTitle: "Akses akan turun ke paket gratis",
-                      warningText:
-                        "Jika Anda membatalkan, langganan akan dijadwalkan turun ke paket Starter (gratis) saat periode berakhir. Data Anda tetap aman.",
-                      leftPanelImageUrl: undefined,
-                      onCancel: handleCancelSubscription,
-                      onKeepSubscription: async () => {},
-                    }}
-                  />
-                );
-              })()}
-              <div className="w-full">
-                <Link
-                  href="/welcome"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  Lanjutkan ke Pengaturan Awal
-                </Link>
-              </div>
-            </div>
-          ) : (p?.status === "waiting_verification" || justUploaded) && p ? (
-            <Shell><WaitingVerification proofUrl={p.proofUrl} estimatedVerificationHours={p.estimatedVerificationHours} /></Shell>
-          ) : p?.status === "paid" ? (
-            <Shell><SuccessState /></Shell>
-          ) : p?.status === "rejected" ? (
-            <RejectedCard
-              reason={p.rejectedReason ?? null}
-              file={file}
-              error={replaceError}
-              loading={replaceLoading}
-              onFileAccepted={(f) => { setFile(f); setReplaceError(null); }}
-              onFileRemove={() => { setFile(null); setReplaceError(null); }}
-              onError={setReplaceError}
-              onSubmit={handleReplaceProof}
-            />
-          ) : (
-            <div className="rounded-3xl border border-border/40 bg-card p-8 shadow-sm">
-              <div className="space-y-6">
-                {p && <PaymentHeader packageName={p.packageName} billingCycle={p.billingCycle} />}
-                {p?.paymentDeadline && !isLifetime && (
-                  <PaymentCountdown deadline={p.paymentDeadline} createdAt={p.createdAt} />
-                )}
-                <div className="overflow-hidden rounded-xl border-2 border-primary/20 bg-primary/[0.03]">
-                  <div className="border-b border-primary/10 p-5 text-center">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Total Pembayaran
+              {p && <PaymentHeader packageName={p.packageName} billingCycle={p.billingCycle} />}
+              {p?.paymentDeadline && !isLifetime && (
+                <PaymentCountdown deadline={p.paymentDeadline} createdAt={p.createdAt} />
+              )}
+              <div className="overflow-hidden rounded-xl border-2 border-primary/20 bg-primary/[0.03]">
+                <div className="border-b border-primary/10 p-5 text-center">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Total Pembayaran
+                  </p>
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                    {formatPrice(p?.totalAmount ?? 0)}
+                  </p>
+                </div>
+                {bank && (
+                  <div className="border-b border-primary/10 p-5">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Transfer ke
                     </p>
-                    <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-                      {formatPrice(p?.totalAmount ?? 0)}
-                    </p>
-                  </div>
-                  {bank && (
-                    <div className="border-b border-primary/10 p-5">
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Transfer ke
-                      </p>
-                      <div className="flex items-center gap-4">
-                        <BankLogo name={bank.bank_name} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
-                          <div className="mt-0.5 flex items-center gap-2">
-                            <p className="font-mono text-lg font-bold tracking-wider text-foreground">
-                              {bank.account_number}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => navigator.clipboard.writeText(bank.account_number)}
-                              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            >
-                              <Copy className="size-4" />
-                            </button>
-                          </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
+                    <div className="flex items-center gap-4">
+                      <BankLogo name={bank.bank_name} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground">{bank.bank_name}</p>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <p className="font-mono text-lg font-bold tracking-wider text-foreground">
+                            {bank.account_number}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(bank.account_number)}
+                            className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Copy className="size-4" />
+                          </button>
                         </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{bank.account_holder}</p>
                       </div>
                     </div>
-                  )}
-                  {p && (
-                    <div className="p-5">
-                      <OrderSummary
-                        packageName={p.packageName}
-                        price={p.price}
-                        billingCycle={p.billingCycle}
-                        status={p.status}
-                        invoiceNumber={p.invoiceNumber}
-                      />
-                    </div>
-                  )}
-                </div>
-                {bank && <PaymentInstructions bankName={bank.bank_name} />}
-                {showPaymentForm && (
-                  <>
-                    <UploadDropzone
-                      file={file}
-                      error={error}
-                      onFileAccepted={(f) => { setFile(f); setError(null); }}
-                      onFileRemove={() => { setFile(null); setError(null); }}
-                      onError={setError}
-                    />
-                    <ImportantNotice />
-                    <PrimaryCta
-                      paymentId={p.id}
+                  </div>
+                )}
+                {p && (
+                  <div className="p-5">
+                    <OrderSummary
                       packageName={p.packageName}
+                      price={p.price}
+                      billingCycle={p.billingCycle}
+                      status={p.status}
                       invoiceNumber={p.invoiceNumber}
-                      file={file}
-                      disabled={!showPaymentForm}
-                      onUploadComplete={handleUploadComplete}
                     />
-                    <SecondaryActions paymentId={p.id} invoiceNumber={p.invoiceNumber} />
-                  </>
+                  </div>
                 )}
               </div>
-            </div>
-          )}
-        </TabsContent>
-
-        {/* ── Renewal ── */}
-        <TabsContent value="renewal">
-          <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Paket Saat Ini
-                </h3>
-                <p className="mt-2 text-lg font-semibold text-foreground">
-                  {status.licensePackage ?? p?.packageName ?? "—"}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {isLifetime
-                    ? "1x Bayar, Aktif Selamanya (Lifetime)"
-                    : p
-                      ? `Siklus tagihan: ${getBillingLabel(p.billingCycle)}`
-                      : "Siklus tagihan belum tersedia"}
-                </p>
-              </div>
-
-              {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
-                <div className="rounded-xl border border-border/60 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Sisa Waktu
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">{status.daysRemaining} hari</p>
-                </div>
+              {bank && <PaymentInstructions bankName={bank.bank_name} />}
+              {showPaymentForm && (
+                <>
+                  <UploadDropzone
+                    file={file}
+                    error={error}
+                    onFileAccepted={(f) => { setFile(f); setError(null); }}
+                    onFileRemove={() => { setFile(null); setError(null); }}
+                    onError={setError}
+                  />
+                  <ImportantNotice />
+                  <PrimaryCta
+                    paymentId={p.id}
+                    packageName={p.packageName}
+                    invoiceNumber={p.invoiceNumber}
+                    file={file}
+                    disabled={!showPaymentForm}
+                    onUploadComplete={handleUploadComplete}
+                  />
+                  <SecondaryActions paymentId={p.id} invoiceNumber={p.invoiceNumber} />
+                </>
               )}
-
-              <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
-                <p className="text-sm text-foreground">
-                  Untuk mengatur perpanjangan, upgrade, atau downgrade paket, buka halaman
-                  pengaturan lisensi workspace Anda.
-                </p>
-                {status.brandSlug ? (
-                  <Button asChild className="mt-4 w-full">
-                    <Link href={`/${status.brandSlug}/panel/licenses`}>
-                      Kelola Langganan
-                    </Link>
-                  </Button>
-                ) : (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Buka menu workspace untuk mengelola langganan.
-                  </p>
-                )}
-              </div>
             </div>
           </div>
-        </TabsContent>
+        )}
+
+        {/* ── Renewal / plan info ── */}
+        <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-sm">
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Paket Saat Ini
+              </h3>
+              <p className="mt-2 text-lg font-semibold text-foreground">
+                {status.licensePackage ?? p?.packageName ?? "—"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {isLifetime
+                  ? "1x Bayar, Aktif Selamanya (Lifetime)"
+                  : p
+                    ? `Siklus tagihan: ${getBillingLabel(p.billingCycle)}`
+                    : "Siklus tagihan belum tersedia"}
+              </p>
+            </div>
+
+            {typeof status.daysRemaining === "number" && status.daysRemaining > 0 && (
+              <div className="rounded-xl border border-border/60 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Sisa Waktu
+                </p>
+                <p className="mt-1 text-2xl font-bold text-foreground">{status.daysRemaining} hari</p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+              <p className="text-sm text-foreground">
+                Untuk mengatur perpanjangan, upgrade, atau downgrade paket, buka halaman
+                pengaturan lisensi workspace Anda.
+              </p>
+              {status.brandSlug ? (
+                <Button asChild className="mt-4 w-full">
+                  <Link href={`/${status.brandSlug}/panel/licenses`}>
+                    Kelola Langganan
+                  </Link>
+                </Button>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Buka menu workspace untuk mengelola langganan.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* ── History (expandable rows) ── */}
-        <TabsContent value="history">
-          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Riwayat Pesanan
-            </h3>
-            {initialPayments.length > 0 ? (
-              <div className="divide-y divide-border/60">
-                {initialPayments.map((item) => (
-                  <HistoryRow key={item.id} item={item} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Belum ada riwayat pesanan.</p>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+        <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Riwayat Pesanan
+          </h3>
+          {initialPayments.length > 0 ? (
+            <div className="divide-y divide-border/60">
+              {initialPayments.map((item) => (
+                <HistoryRow key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Belum ada riwayat pesanan.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
