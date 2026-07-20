@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { Check, Loader2, Building2, ChevronDown, Copy, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LicensePackage } from "@/types/license";
@@ -16,6 +17,7 @@ import { SuccessState } from "./_components/success-state";
 import { OrderSummary } from "./_components/order-summary";
 import { isLifetimeBilling } from "@/lib/billing/billing-helpers";
 import { SubscriptionManagement } from "@/components/billingsdk/subscription-management";
+import { SeervisioLogo } from "@/components/brand/logo";
 import { type CurrentPlan, type Plan as BillingPlan } from "@/lib/billingsdk-config";
 import { scheduleDowngradeAction } from "@/server/actions/license.actions";
 
@@ -307,7 +309,12 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
 
   // No license & no payment → pricing grid (no tabs needed).
   if (!status.hasActiveLicense && (!status.hasPayment || !status.payment)) {
-    return <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />;
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-12">
+        <LicenseNav />
+        <PricingGrid packages={initialPackages} loadingId={loadingId} onChoose={handleChoosePlan} />
+      </div>
+    );
   }
 
   const p = status.payment;
@@ -317,6 +324,7 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+      <LicenseNav />
       {/* Page heading */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing &amp; License</h1>
@@ -468,6 +476,22 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
         </div>
       </div>
     </div>
+  );
+}
+
+function LicenseNav() {
+  return (
+    <header className="mb-8 flex items-center justify-between">
+      <Link href="/" aria-label="Kembali ke beranda" className="flex items-center">
+        <SeervisioLogo height={28} />
+      </Link>
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+      >
+        Billing &amp; License
+      </Link>
+    </header>
   );
 }
 
