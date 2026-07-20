@@ -579,14 +579,15 @@ export default function FinanceTransactionsPage() {
                         {sourceFilter === "MANUAL" && (
                           <TableCell>
                             {!tx.isAutomatic && !tx.isVoided && (
-                              <button
-                                type="button"
-                                className="text-muted-foreground hover:text-destructive transition-colors"
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground hover:text-destructive"
                                 title="Batalkan"
                                 onClick={() => handleVoidOpen(tx)}
                               >
                                 <Ban className="size-3.5" />
-                              </button>
+                              </Button>
                             )}
                           </TableCell>
                         )}

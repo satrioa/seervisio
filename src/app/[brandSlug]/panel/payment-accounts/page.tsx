@@ -202,10 +202,10 @@ export default function PaymentAccountsPage() {
 
         {/* View Toggle */}
         <div className="inline-flex items-center rounded-lg border bg-muted p-0.5 ml-auto">
-          <button
-            type="button"
+          <Button
+            size="sm"
             aria-pressed={viewMode === "card"}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`${
               viewMode === "card"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -214,11 +214,11 @@ export default function PaymentAccountsPage() {
           >
             <LayoutGrid className="size-3.5" />
             Card
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="sm"
             aria-pressed={viewMode === "table"}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`${
               viewMode === "table"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -227,7 +227,7 @@ export default function PaymentAccountsPage() {
           >
             <LayoutList className="size-3.5" />
             Table
-          </button>
+          </Button>
         </div>
 
         <Button onClick={() => setShowCreate(true)} className="gap-2">

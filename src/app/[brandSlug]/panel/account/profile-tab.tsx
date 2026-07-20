@@ -144,14 +144,15 @@ export function ProfileTab({ brandSlug }: Props) {
               <AvatarImage src={form.avatarUrl ?? undefined} />
               <AvatarFallback className="text-lg">{getInitials(form.name)}</AvatarFallback>
             </Avatar>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
               disabled={uploading}
-              className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full border bg-background shadow-xs transition-colors hover:bg-muted disabled:opacity-50"
+              className="absolute bottom-0 right-0 size-7 rounded-full border bg-background shadow-xs"
               onClick={() => fileInputRef.current?.click()}
             >
               <Camera className="size-3.5" />
-            </button>
+            </Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -164,15 +165,16 @@ export function ProfileTab({ brandSlug }: Props) {
             <p className="text-sm font-medium">{form.name || "User"}</p>
             <p className="text-xs text-muted-foreground">{form.email}</p>
             {form.avatarUrl && (
-              <button
-                type="button"
+              <Button
+                variant="link"
+                size="sm"
                 disabled={uploading}
-                className="flex items-center gap-1 text-xs text-red-500 hover:underline disabled:opacity-50"
+                className="h-auto p-0 text-xs text-red-500"
                 onClick={handleAvatarRemove}
               >
                 <Trash2 className="size-3" />
                 Hapus foto
-              </button>
+              </Button>
             )}
           </div>
         </div>

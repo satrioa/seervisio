@@ -119,9 +119,10 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
               <span className="truncate text-[9px] text-muted-foreground">
                 {service.deviceName}
               </span>
-              <button
-                type="button"
-                className="sm:hidden inline-flex items-center justify-center rounded-md px-2 py-1 text-[9px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="sm:hidden h-auto px-2 py-1 text-[9px] font-medium"
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -129,7 +130,7 @@ function ServiceCard({ service, asHandle, isOverlay, onClick, onCardDoubleClick 
                 }}
               >
                 Detail
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -439,6 +440,10 @@ export function ServiceKanbanView({
   const [cancelTarget, setCancelTarget] = React.useState<ServiceRecord | null>(null);
   const [dragError, setDragError] = React.useState<string | null>(null);
   const dragErrorTimer = React.useRef<ReturnType<typeof setTimeout>>(null);
+  // Guard so a single drop is only handled once even if dnd-kit fires the
+  // move callback more than once (e.g. after the columns state changes
+  // mid-drop). Prevents the error feedback from looping / never closing.
+  const handledMoveRef = React.useRef<string | null>(null);
   const [pendingTransition, setPendingTransition] = React.useState<PendingStatusTransition | null>(null);
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
   const [statusSubmitLoading, setStatusSubmitLoading] = React.useState(false);
@@ -457,34 +462,77 @@ export function ServiceKanbanView({
   };
 
   /**
+   * Revert a card back to its original (pre-drag) column.
+   * Used when a transition is rejected or the confirm dialog is cancelled,
+   * so the card returns to where it started instead of staying in the new group.
+   */
+  const revertCardToOriginal = useCallback((service: ServiceRecord) => {
+    const originalStatus = service.status;
+    setColumns((prev) => {
+      const next: Record<string, ServiceRecord[]> = {};
+      for (const key of Object.keys(prev)) {
+        next[key] = prev[key].filter((s) => s.id !== service.id);
+      }
+      next[originalStatus] = [...(next[originalStatus] ?? []), service];
+      return next;
+    });
+    // Allow this card to be re-dropped later (guard is per-drop).
+    handledMoveRef.current = null;
+  }, []);
+
+  /**
    * onMove — called on drag-end for item moves.
    * Validates using centralized workflow, sets pending transition,
    * opens note dialog. No optimistic UI mutation.
    */
   const handleMove = useCallback(async (moveEvent: {
+    event: { active: { id: string | number } };
     activeContainer: string;
     activeIndex: number;
     overContainer: string;
     overIndex: number;
   }) => {
-    const { activeContainer, activeIndex, overContainer, overIndex } = moveEvent;
+    const { overContainer, overIndex } = moveEvent;
 
-    // Same-container reorder: just accept
-    if (activeContainer === overContainer) {
-      const next = { ...columns };
-      const items = [...next[activeContainer]];
-      const [movedItem] = items.splice(activeIndex, 1);
-      items.splice(overIndex, 0, movedItem);
-      next[activeContainer] = items;
-      setColumns(next);
-      return;
-    }
+    // Get the moved service by id (it may already live in the target column
+    // due to live drag-over movement, so search across all columns)
+    const activeId = String(moveEvent.event.active.id);
 
-    // Get the moved service
-    const service = columns[activeContainer]?.[activeIndex];
+    // Re-entrancy guard: a single drop can fire the move callback more than
+    // once (the card may "bounce" between the target and original column as
+    // dnd-kit re-fires drag-over/end while the columns state changes). Ignore
+    // any repeat dispatch for the same card so the rejection feedback fires
+    // exactly once and its auto-close timer isn't endlessly reset.
+    if (handledMoveRef.current === activeId) return;
+    handledMoveRef.current = activeId;
+
+    const service = Object.values(columns)
+      .flat()
+      .find((s) => s.id === activeId);
     if (!service) return;
 
     const targetColumn = overContainer;
+
+    // Determine whether this is a true cross-column (status) move.
+    // `service.status` is the original status (drag-over only moves arrays,
+    // it does not mutate the service's status field), so comparing it to the
+    // drop target tells us if the status actually changed.
+    const isCrossColumn = service.status !== targetColumn;
+
+    // Same-column reorder: accept the new order (drag-over already moved it,
+    // so just normalize ordering to the drop index)
+    if (!isCrossColumn) {
+      const next = { ...columns };
+      const items = [...next[targetColumn]];
+      const currentIndex = items.findIndex((s) => s.id === activeId);
+      if (currentIndex !== -1 && currentIndex !== overIndex) {
+        const [movedItem] = items.splice(currentIndex, 1);
+        items.splice(overIndex, 0, movedItem);
+        next[targetColumn] = items;
+        setColumns(next);
+      }
+      return;
+    }
 
     // Special case: dropping on "cancelled" → open cancel dialog
     if (targetColumn === "cancelled") {
@@ -506,6 +554,7 @@ export function ServiceKanbanView({
     const result = workflow.preValidateTransition(service, workflowNext);
 
     if (!result.allowed) {
+      revertCardToOriginal(service);
       setDragError(result.reason ?? "Transisi tidak valid.");
       if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
       dragErrorTimer.current = setTimeout(() => setDragError(null), 4000);
@@ -563,6 +612,7 @@ export function ServiceKanbanView({
       if (response.success) {
         setStatusDialogOpen(false);
         setPendingTransition(null);
+        handledMoveRef.current = null;
 
         triggerDynamicIslandFeedback({
           type: "success",
@@ -620,6 +670,12 @@ export function ServiceKanbanView({
         open={statusDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
+            if (pendingTransition) {
+              const reverted = columns[pendingTransition.toUiStatus]?.find(
+                (s) => s.id === pendingTransition.serviceId
+              );
+              if (reverted) revertCardToOriginal(reverted);
+            }
             setStatusDialogOpen(false);
             setPendingTransition(null);
             setStatusSubmitError(null);
@@ -635,7 +691,12 @@ export function ServiceKanbanView({
       {cancelTarget && (
         <CancelServiceDialog
           open={cancelTarget !== null}
-          onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
+          onOpenChange={(open) => {
+            if (!open) {
+              revertCardToOriginal(cancelTarget);
+              setCancelTarget(null);
+            }
+          }}
           service={cancelTarget}
           onConfirm={async ({ reason, returnStock }) => {
             if (!cancelTarget) return;

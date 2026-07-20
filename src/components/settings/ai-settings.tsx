@@ -278,13 +278,14 @@ export function AiSettings() {
                 onChange={(e) => setApiKey(e.target.value)}
                 className="h-9 pr-9 font-mono text-xs"
               />
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
+              </Button>
             </div>
           </div>
 

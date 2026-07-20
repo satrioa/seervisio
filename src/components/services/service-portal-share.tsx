@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Share2, Copy, Check, Phone, ExternalLink, QrCode, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getServicePortalShareDataAction } from "@/server/actions/customer-portal.actions";
 
 interface Props {
@@ -132,10 +133,10 @@ ${brandName}`;
           </a>
         )}
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          className="flex w-full gap-2 py-3 text-sm font-medium"
           onClick={() => copyToClipboard("link")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
         >
           {copied === "link" ? (
             <>
@@ -148,12 +149,12 @@ ${brandName}`;
               Salin Tautan Tracking
             </>
           )}
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          className="flex w-full gap-2 py-3 text-sm font-medium"
           onClick={() => copyToClipboard("invoice")}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
         >
           {copied === "invoice" ? (
             <>
@@ -166,17 +167,17 @@ ${brandName}`;
               Salin Tautan Invoice
             </>
           )}
-        </button>
+        </Button>
 
         {trackingUrl && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            className="flex w-full gap-2 py-3 text-sm font-medium"
             onClick={() => setShowQr(!showQr)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <QrCode className="size-4" />
             {showQr ? "Sembunyikan QR Code" : "Tampilkan QR Code"}
-          </button>
+          </Button>
         )}
 
         {showQr && trackingUrl && (

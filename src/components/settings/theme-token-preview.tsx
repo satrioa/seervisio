@@ -151,10 +151,11 @@ export function ThemeTokenPreview({ tokens }: ThemeTokenPreviewProps) {
                         {/* Copy button */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleCopy(def.key, value)}
-                              className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted"
+                              className="size-5"
                               aria-label={`Copy ${def.key}`}
                             >
                               {isCopied ? (
@@ -162,7 +163,7 @@ export function ThemeTokenPreview({ tokens }: ThemeTokenPreviewProps) {
                               ) : (
                                 <Copy className="size-3 text-muted-foreground" />
                               )}
-                            </button>
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-[10px]">
                             Copy variable

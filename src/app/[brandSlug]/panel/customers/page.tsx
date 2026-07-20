@@ -13,6 +13,7 @@ import {
   User,
   AlertTriangle,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -417,15 +418,13 @@ function CustomerDetailModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => onOpenChange(false)}
-            className="rounded-md p-1 text-muted-foreground hover:text-foreground"
           >
-            <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <X className="size-4" />
+          </Button>
         </div>
 
         {customer.address && (
