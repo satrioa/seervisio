@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 
-export function SuccessState() {
+export function SuccessState({ dashboardHref = "/welcome" }: { dashboardHref?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -54,7 +54,7 @@ export function SuccessState() {
         className="mt-8 w-full"
       >
         <Link
-          href="/welcome"
+          href={dashboardHref}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <svg

@@ -370,8 +370,8 @@ export function LicenseCenterClient({ initialStatus, bankInfo, initialPackages, 
           })()
         ) : (p?.status === "waiting_verification" || justUploaded) && p ? (
           <Shell><WaitingVerification proofUrl={p.proofUrl} estimatedVerificationHours={p.estimatedVerificationHours} /></Shell>
-        ) : p?.status === "paid" ? (
-          <Shell><SuccessState /></Shell>
+          ) : p?.status === "paid" ? (
+            <Shell><SuccessState dashboardHref={status.brandSlug ? `/${status.brandSlug}/panel/dashboard` : "/welcome"} /></Shell>
         ) : p?.status === "rejected" ? (
           <RejectedCard
             reason={p.rejectedReason ?? null}

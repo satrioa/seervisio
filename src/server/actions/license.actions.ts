@@ -1722,6 +1722,7 @@ export async function getLicenseCenterStatusAction(): Promise<
     hasActiveLicense: boolean;
     licensePackage: string | null;
     daysRemaining: number | null;
+    brandSlug: string | null;
   }>
 > {
   try {
@@ -1747,12 +1748,24 @@ export async function getLicenseCenterStatusAction(): Promise<
       );
     }
 
+    const { data: membership } = await (adminDb as any)
+      .from("user_brand_memberships")
+      .select("brands!user_brand_memberships_brand_id_fkey(slug)")
+      .eq("profile_id", auth.profileId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const brandSlug = (membership?.brands?.slug as string | undefined) ?? null;
+
     return successResult({
       hasPayment: Boolean(payment),
       payment: payment ? mapLicensePaymentView(payment as any) : null,
       hasActiveLicense: Boolean(license),
       licensePackage: license?.package_name ?? null,
       daysRemaining,
+      brandSlug,
     });
   } catch (err: any) {
     return errorResult(err.message || "Gagal memuat pusat lisensi.");
