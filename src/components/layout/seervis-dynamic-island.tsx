@@ -310,7 +310,7 @@ function SeervisIslandContent({
       ref={islandRef}
       data-island-root
       data-tour="dynamic-island"
-      className="flex origin-center cursor-pointer items-stretch rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
+      className="relative flex origin-center cursor-pointer items-stretch overflow-hidden rounded-[46px] border border-white/10 bg-black text-white transition-colors hover:border-white/20 dark:border-white/10 dark:bg-[#262626] dark:text-white dark:hover:border-white/20"
       initial={{
         width: initialDims.width,
         height: initialDims.height,
@@ -345,6 +345,19 @@ function SeervisIslandContent({
         if (e.key === "Enter" || e.key === " ") handleToggle();
       }}
     >
+      {/* ── Dither overlay (top layer) while in ambient-eyes mode ── */}
+      {mode === "idle" && hasActiveShift && ambient.mode === "idle" && showEyes && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20 opacity-[0.10] mix-blend-screen"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at center, rgba(255,255,255,0.6) 0.5px, transparent 0.6px)",
+            backgroundSize: "2.5px 2.5px",
+          }}
+        />
+      )}
+
       <AnimatePresence mode="wait">
         {/* ── Welcome ── */}
         {mode === "welcome" && (
@@ -431,7 +444,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="flex w-full items-center gap-2.5 px-0.5 py-0.5"
+            className="flex w-full items-center gap-2.5 px-0.5 py-0.5 "
           >
             {ambient.mode === "idle" && showEyes ? (
               <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">

@@ -14,20 +14,17 @@ function AmbientEyes() {
   return (
     <span
       aria-hidden="true"
-      className="relative inline-flex items-center justify-center"
-      style={{ gap: 10, height: 34 }}
+      className="relative inline-flex items-center justify-center overflow-hidden"
+      style={{ gap: 8, height: 16 }}
     >
       {Array.from({ length: 2 }, (_, i) => (
         <span
           key={i}
           className="relative inline-block overflow-hidden rounded-[40%]"
           style={{
-            width: 66,
-            height: 40,
+            width: 30,
+            height: 14,
             backgroundColor: "#262626",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow:
-              "inset 0 0 8px rgba(0,0,0,0.9), 0 0 10px rgba(80,220,160,0.10)",
             animation: `ambient-eyes-blink 7s infinite`,
             animationDelay: `${i * 0.3}s`,
           }}
@@ -43,20 +40,19 @@ function AmbientEyes() {
           />
           {/* LED pupil */}
           <span
-            className="absolute rounded-full"
+            className="absolute rounded-xs"
             style={{
-              width: 18,
-              height: 18,
+              width: 16,
+              height: 14,
               background:
                 "radial-gradient(circle at 35% 30%, #aeffd8 0%, #34d399 45%, #059669 100%)",
               boxShadow:
-                "0 0 8px #34d399, 0 0 16px rgba(52,211,153,0.6), inset 0 0 4px rgba(0,0,0,0.4)",
+                "0 0 4px #34d399, 0 0 16px rgba(52,211,153,0.6), inset 0 0 4px rgba(0,0,0,0.4)",
               top: "50%",
               left: "50%",
-              marginLeft: -9,
-              marginTop: -9,
+              marginLeft: -8,
+              marginTop: -7,
               animation: `ambient-pupil-move 7s infinite`,
-              animationDelay: `${i * 0.3}s`,
             }}
           />
         </span>
@@ -64,14 +60,14 @@ function AmbientEyes() {
       <style>{`
         @keyframes ambient-pupil-move {
           0%, 12% { transform: translate(0, 0); }
-          15%, 42% { transform: translate(-5px, 0); }
-          45%, 72% { transform: translate(5px, 0); }
-          75%, 90% { transform: translate(0, 5px); }
+          15%, 42% { transform: translate(-4px, 0); }
+          45%, 72% { transform: translate(4px, 0); }
+          75%, 90% { transform: translate(0, 3px); }
           93%, 100% { transform: translate(0, 0); }
         }
         @keyframes ambient-eyes-blink {
-          0%, 10%, 12%, 22%, 24%, 42%, 44%, 60%, 62%, 72%, 74%, 92%, 94%, 100% { height: 40px; }
-          11%, 23%, 43%, 61%, 73%, 93% { height: 6px; }
+          0%, 10%, 12%, 22%, 24%, 42%, 44%, 60%, 62%, 72%, 74%, 92%, 94%, 100% { height: 14px; }
+          11%, 23%, 43%, 61%, 73%, 93% { height: 5px; }
         }
       `}</style>
     </span>
