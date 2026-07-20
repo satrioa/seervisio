@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -35,15 +36,15 @@ import { RouteTransitionWatcher } from "./route-transition-watcher";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
 import { TrendingUpIcon, ActivityIcon, ShoppingCartIcon, CheckCheckIcon, XIcon } from "@animateicons/react/lucide";
 
-/* ── Types ── */
+/* ÔöÇÔöÇ Types ÔöÇÔöÇ */
 type IslandMode = "welcome" | "idle" | "expanded" | "feedback";
 type ActionState = "idle" | "loading" | "success" | "error" | "info";
 
-/* ── Spring config ── */
+/* ÔöÇÔöÇ Spring config ÔöÇÔöÇ */
 const spring = { type: "spring" as const, stiffness: 400, damping: 30 };
 const feedbackTextTransition = { duration: 0.22, ease: "easeOut" as const };
 
-/* ── Helpers ── */
+/* ÔöÇÔöÇ Helpers ÔöÇÔöÇ */
 function getPresetDimensions(size: keyof typeof DynamicIslandSizePresets) {
   const preset = DynamicIslandSizePresets[size];
   if (!preset || preset.aspectRatio === 0) return { width: 0, height: 0 };
@@ -72,7 +73,7 @@ function getFeedbackDimensions(actionState: ActionState) {
   }
 }
 
-/* ── Inner component ── */
+/* ÔöÇÔöÇ Inner component ÔöÇÔöÇ */
 function SeervisIslandContent({
   userName,
   onOpenShift,
@@ -111,6 +112,8 @@ function SeervisIslandContent({
 
   const ambient = useAmbientIntelligence(activeLicense ?? undefined, pauseAmbient);
   const islandRef = useRef<HTMLDivElement | null>(null);
+  const expandedContentRef = useRef<HTMLDivElement | null>(null);
+  const [measuredExpandedHeight, setMeasuredExpandedHeight] = useState(120);
   const [errorShake, setErrorShake] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
 
@@ -147,7 +150,7 @@ function SeervisIslandContent({
     }
   }, [theme, shouldReduceMotion]);
 
-  /* Tour overlay removed — island stays clean during guided tours. */
+  /* Tour overlay removed ÔÇö island stays clean during guided tours. */
 
   /* Ticker for multi-line feedback */
   useEffect(() => {
@@ -212,7 +215,7 @@ function SeervisIslandContent({
     };
   }, [isExpanded, actionState, minimizeIsland]);
 
-  /* ── Feedback event listener ── */
+  /* ÔöÇÔöÇ Feedback event listener ÔöÇÔöÇ */
   useEffect(() => {
     const handleFeedback = (event: Event) => {
       const detail = (event as CustomEvent<DynamicIslandFeedbackPayload>).detail;
@@ -267,7 +270,7 @@ function SeervisIslandContent({
     onOpenShift?.();
   }, [onOpenShift]);
 
-  /* Listen for shift-changed event — show feedback */
+  /* Listen for shift-changed event ÔÇö show feedback */
   useEffect(() => {
     const handler = () => {
       setActionState("success");
@@ -283,27 +286,33 @@ function SeervisIslandContent({
     return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Current dimensions based on mode — every state has an explicit size */
-  const dims: { width: number; height: number } =
+  /* Current dimensions based on mode ÔÇö width auto hugs content, heights fixed */
+  const dims: { width: number | "auto"; height: number } =
     mode === "expanded"
-      ? { width: 330, height: 120 }
+      ? { width: 330, height: measuredExpandedHeight }
       : mode === "welcome"
-        ? { width: 300, height: 68 }
+        ? { width: "auto", height: measuredExpandedHeight }
         : mode === "feedback"
-          ? getFeedbackDimensions(actionState)
+          ? { width: "auto", height: 31 }
           : mode === "idle" && isLoading
-            ? { width: isMobile ? 180 : 200, height: 31 }
+            ? { width: "auto", height: 31 }
             : mode === "idle" && hasActiveShift && ambient.mode !== "idle"
-              ? { width: isMobile ? 300 : 250, height: 31 }
+              ? { width: "auto", height: 31 }
               : mode === "idle" && hasActiveShift && showEyes
-                ? { width: isMobile ? 110 : 140, height: 31 }
+                ? { width: "auto", height: 31 }
                 : mode === "idle" && hasActiveShift
-                  ? { width: isMobile ? 170 : 200, height: 31 }
+                  ? { width: "auto", height: 31 }
                   : mode === "idle" && !hasActiveShift
-                    ? { width: isMobile ? 240 : 240, height: 31 }
+                    ? { width: "auto", height: 31 }
                     : getPresetDimensions("compact");
-  const initialDims =
-    mode === "welcome" ? getPresetDimensions("compact") : dims;
+  const initialDims = dims;
+
+  /* Measure expanded/welcome content so the island height fits its content */
+  useLayoutEffect(() => {
+    if ((mode === "expanded" || mode === "welcome") && expandedContentRef.current) {
+      setMeasuredExpandedHeight(expandedContentRef.current.offsetHeight);
+    }
+  }, [mode, feedbackTitle, feedbackDescription, isExpanded]);
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
   const islandShadow =
     mode === "expanded" ? "0 18px 40px rgba(15, 23, 42, 0.22)" : "none";
@@ -349,7 +358,7 @@ function SeervisIslandContent({
         if (e.key === "Enter" || e.key === " ") handleToggle();
       }}
     >
-      {/* ── Dither overlay (top layer) while in ambient-eyes mode ── */}
+      {/* ÔöÇÔöÇ Dither overlay (top layer) while in ambient-eyes mode ÔöÇÔöÇ */}
       {mode === "idle" && hasActiveShift && ambient.mode === "idle" && showEyes && (
         <span
           aria-hidden="true"
@@ -363,7 +372,7 @@ function SeervisIslandContent({
       )}
 
       <AnimatePresence mode="wait">
-        {/* ── Welcome ── */}
+        {/* ÔöÇÔöÇ Welcome ÔöÇÔöÇ */}
         {mode === "welcome" && (
           <motion.div
             key="welcome"
@@ -371,7 +380,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-center gap-3 px-0.5 py-0.5"
+            className="flex w-full items-center gap-3 px-2 py-2"
           >
             <img
               src="/images/welcome-wave.gif"
@@ -390,7 +399,7 @@ function SeervisIslandContent({
           </motion.div>
         )}
 
-        {/* ── Idle + No shift ── */}
+        {/* ÔöÇÔöÇ Idle + No shift ÔöÇÔöÇ */}
         {mode === "idle" && !hasActiveShift && !isLoading && (
           <motion.div
             key="idle-none"
@@ -398,7 +407,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-stretch justify-center gap-2 px-0.5 py-0.5"
+            className="flex w-full items-stretch justify-center gap-2 px-2 py-2"
           >
             <div
               className="relative flex min-w-0 flex-1 items-center overflow-hidden"
@@ -420,10 +429,10 @@ function SeervisIslandContent({
                 }}
               >
                 <span className="pr-6 text-xs text-white/60 dark:text-white/60">
-                  {displayBranchName} · Buka toko untuk memulai session
+                  {displayBranchName} ┬À Buka toko untuk memulai session
                 </span>
                 <span className="pr-6 text-xs text-white/60 dark:text-white/60" aria-hidden="true">
-                  {displayBranchName} · Buka toko untuk memulai session
+                  {displayBranchName} ┬À Buka toko untuk memulai session
                 </span>
               </motion.div>
             </div>
@@ -440,7 +449,7 @@ function SeervisIslandContent({
           </motion.div>
         )}
 
-        {/* ── Idle + Shift running → Ambient Intelligence ── */}
+        {/* ÔöÇÔöÇ Idle + Shift running ÔåÆ Ambient Intelligence ÔöÇÔöÇ */}
         {mode === "idle" && hasActiveShift && (
           <motion.div
             key={ambient.mode === "idle" && showEyes ? "ambient-eyes" : ambient.mode === "idle" ? "ambient-idle" : `ambient-${ambient.currentText?.slice(0, 20) ?? "kpi"}`}
@@ -448,7 +457,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="flex w-full items-center gap-2.5 px-0.5 py-0.5 "
+            className="flex w-full items-center gap-2.5 px-2 py-2 "
           >
             {ambient.mode === "idle" && showEyes ? (
               <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">
@@ -509,7 +518,7 @@ function SeervisIslandContent({
           </motion.div>
         )}
 
-        {/* ── Idle + Loading ── */}
+        {/* ÔöÇÔöÇ Idle + Loading ÔöÇÔöÇ */}
         {mode === "idle" && isLoading && (
           <motion.div
             key="idle-loading"
@@ -517,14 +526,14 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex w-full items-center justify-center gap-2.5 px-0.5 py-0.5"
+            className="flex w-full items-center justify-center gap-2.5 px-2 py-2"
           >
             <Loader2 className="size-3.5 animate-spin text-white/100 dark:text-white/100" />
             <span className="text-xs text-white/50 dark:text-white/50">Memuat shift...</span>
           </motion.div>
         )}
 
-        {/* ── Expanded + No shift ── */}
+        {/* ÔöÇÔöÇ Expanded + No shift ÔöÇÔöÇ */}
         {mode === "expanded" && !hasActiveShift && (
           <motion.div
             key="expanded-none"
@@ -533,8 +542,9 @@ function SeervisIslandContent({
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
             className="flex w-full flex-col gap-1 p-0.5"
+            ref={expandedContentRef}
           >
-            <div className="space-y-1 px-2 py-1"  >
+            <div className="space-y-1 px-3 py-3"  >
               <p className="text-sm font-medium text-white dark:text-white">Session belum dimulai</p>
               <p className="text-xs leading-relaxed text-white/50 dark:text-white/50">
                 Buka toko untuk mulai mencatat transaksi, servis, dan kas hari
@@ -557,7 +567,7 @@ function SeervisIslandContent({
           </motion.div>
         )}
 
-        {/* ── Expanded + Shift running ── */}
+        {/* ÔöÇÔöÇ Expanded + Shift running ÔöÇÔöÇ */}
         {mode === "expanded" && hasActiveShift && (
           <motion.div
             key="expanded-open"
@@ -565,12 +575,12 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={spring}
-            className="flex w-full flex-col gap-3 p-0.5"
+            className="flex w-full flex-col gap-3 px-3 py-3"
           >
             <div className="flex items-center gap-2">
               <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
               <p className="text-sm font-medium text-white dark:text-white">
-                {displayBranchName} · {shiftLabel}
+                {displayBranchName} ┬À {shiftLabel}
               </p>
             </div>
 
@@ -599,7 +609,7 @@ function SeervisIslandContent({
           </motion.div>
         )}
 
-        {/* ── Feedback states ── */}
+        {/* ÔöÇÔöÇ Feedback states ÔöÇÔöÇ */}
         {mode === "feedback" && (
           <motion.div
             key={`feedback-container-${actionState}`}
@@ -607,7 +617,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={spring}
-            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-0.5 py-0.5"
+            className="flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
