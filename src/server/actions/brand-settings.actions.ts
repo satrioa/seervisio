@@ -8,6 +8,7 @@ import {
   upsertBrandSettings,
 } from "@/repositories/brand-settings.repository";
 import { sendTransactionalEmail } from "@/server/notifications/email-provider";
+import { createDefaultSections, type ReceiptSection } from "@/lib/receipt-sections";
 
 export type OperationalHoursInput = {
   timezone: string;
@@ -48,6 +49,7 @@ export type BrandSettingsResponse = {
   notificationSettings: NotificationSettingsInput | null;
   workflowRules: WorkflowRulesInput | null;
   autoCloseSettings: AutoCloseSettingsInput | null;
+  receiptSections: ReceiptSection[] | null;
 };
 
 /* ── Helpers ── */
@@ -75,16 +77,20 @@ export async function getBrandSettingsAction(
         notificationSettings: null,
         workflowRules: null,
         autoCloseSettings: null,
+        receiptSections: null,
       });
     }
 
     const metadata = settings.metadata;
+
+    const storedSections = getMetadataField(metadata, "receipt_sections", null) as ReceiptSection[] | null;
 
     return successResult({
       businessHours: (settings.businessHours ?? null) as OperationalHoursInput | null,
       notificationSettings: getMetadataField(metadata, "notification_settings", null) as NotificationSettingsInput | null,
       workflowRules: getMetadataField(metadata, "workflow_rules", null) as WorkflowRulesInput | null,
       autoCloseSettings: getMetadataField(metadata, "auto_close_settings", null) as AutoCloseSettingsInput | null,
+      receiptSections: storedSections,
     });
   } catch (err: any) {
     console.error("[getBrandSettingsAction]", err);
@@ -92,7 +98,7 @@ export async function getBrandSettingsAction(
   }
 }
 
-type SaveSection = "operational_hours" | "notification_settings" | "workflow_rules" | "auto_close_settings";
+type SaveSection = "operational_hours" | "notification_settings" | "workflow_rules" | "auto_close_settings" | "receipt_sections";
 
 /* ── Save ── */
 
@@ -129,6 +135,10 @@ export async function saveBrandSettingsAction(
       const newMetadata = { ...currentMetadata, auto_close_settings: data };
       updates.metadata = newMetadata;
       afterJson = data;
+    } else if (section === "receipt_sections") {
+      const newMetadata = { ...currentMetadata, receipt_sections: data };
+      updates.metadata = newMetadata;
+      afterJson = data;
     }
 
     await upsertBrandSettings(adminDb as any, session.brandId, updates);
@@ -139,6 +149,7 @@ export async function saveBrandSettingsAction(
       notification_settings: "Notifikasi",
       workflow_rules: "Aturan Workflow",
       auto_close_settings: "Penutupan Otomatis",
+      receipt_sections: "Pengaturan Nota",
     };
 
     await (adminDb as any).from("audit_logs").insert({

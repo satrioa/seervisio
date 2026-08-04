@@ -68,8 +68,8 @@ export function BrandProfileSettings() {
     });
   }, [brandSlug]);
 
-  const handleChange = (field: keyof BrandProfileData, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value || null }));
+  const handleChange = (field: keyof BrandProfileData, value: string | boolean) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const logoDropzone = useDropzone<string, string>({
@@ -298,28 +298,6 @@ export function BrandProfileSettings() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="invoiceFooter" className="text-xs font-medium">Footer Invoice</Label>
-              <Input
-                id="invoiceFooter"
-                value={form.invoiceFooter ?? ""}
-                onChange={(e) => handleChange("invoiceFooter", e.target.value)}
-                className="h-9 text-xs"
-                placeholder="Teks footer invoice"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receiptFooter" className="text-xs font-medium">Footer Receipt</Label>
-              <Input
-                id="receiptFooter"
-                value={form.receiptFooter ?? ""}
-                onChange={(e) => handleChange("receiptFooter", e.target.value)}
-                className="h-9 text-xs"
-                placeholder="Teks footer receipt"
-              />
-            </div>
-          </div>
 
           <div className="flex justify-end pt-2">
             <Button

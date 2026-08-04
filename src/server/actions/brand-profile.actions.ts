@@ -15,6 +15,9 @@ export type BrandProfileData = {
   invoiceFooter: string | null;
   receiptFooter: string | null;
   slug: string;
+  receiptPaperWidth?: "58mm" | "80mm";
+  receiptShowBarcode?: boolean;
+  receiptShowPrices?: boolean;
 };
 
 export async function getBrandProfileAction(
@@ -42,6 +45,8 @@ export async function getBrandProfileAction(
       });
     }
 
+    const receiptSettings = settings.metadata?.receipt_settings ?? {};
+
     return successResult({
       storeName: session.brandName,
       tagline: settings.tagline,
@@ -53,6 +58,9 @@ export async function getBrandProfileAction(
       invoiceFooter: settings.invoiceFooter,
       receiptFooter: settings.receiptFooter,
       slug: session.brandSlug,
+      receiptPaperWidth: receiptSettings.paperWidth ?? "80mm",
+      receiptShowBarcode: receiptSettings.showBarcode ?? true,
+      receiptShowPrices: receiptSettings.showPrices ?? true,
     });
   } catch (err: any) {
     console.error("[getBrandProfileAction]", err);
@@ -107,6 +115,17 @@ export async function updateBrandProfileAction(
 
     const existing = await getBrandSettings(adminDb as any, session.brandId);
 
+    const metadata = existing?.metadata ?? {};
+    const updatedMetadata = {
+      ...metadata,
+      receipt_settings: {
+        ...(metadata.receipt_settings ?? {}),
+        paperWidth: data.receiptPaperWidth ?? "80mm",
+        showBarcode: data.receiptShowBarcode ?? true,
+        showPrices: data.receiptShowPrices ?? true,
+      },
+    };
+
     if (existing) {
       const { error } = await (adminDb as any)
         .from("brand_settings")
@@ -119,6 +138,7 @@ export async function updateBrandProfileAction(
           whatsapp_number: data.whatsappNumber ?? null,
           invoice_footer: data.invoiceFooter ?? null,
           receipt_footer: data.receiptFooter ?? null,
+          metadata: updatedMetadata,
         })
         .eq("id", existing.id);
 
@@ -136,6 +156,7 @@ export async function updateBrandProfileAction(
           whatsapp_number: data.whatsappNumber ?? null,
           invoice_footer: data.invoiceFooter ?? null,
           receipt_footer: data.receiptFooter ?? null,
+          metadata: updatedMetadata,
         });
 
       if (error) throw new Error(`Gagal membuat profil brand: ${error.message}`);

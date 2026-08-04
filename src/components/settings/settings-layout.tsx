@@ -12,6 +12,8 @@ import { SystemSettings } from "@/components/settings/system-settings";
 import { UserAccessSettings } from "@/components/settings/user-access-settings";
 import { AiSettings } from "@/components/settings/ai-settings";
 import { LanguageRegionSettings } from "@/components/settings/language-region-settings";
+import { ReceiptSettingsPage } from "@/components/settings/receipt-settings-page";
+import { PrinterSettingsPage } from "@/components/settings/printer-settings-page";
 
 /* ─── Section Definition ─── */
 
@@ -30,6 +32,8 @@ const SECTIONS: SettingsSection[] = [
   { id: "user-access", component: UserAccessSettings },
   { id: "ai", component: AiSettings },
   { id: "language-region", component: LanguageRegionSettings },
+  { id: "receipt", component: ReceiptSettingsPage },
+  { id: "printer", component: PrinterSettingsPage },
 ];
 
 /* ─── Component ─── */
