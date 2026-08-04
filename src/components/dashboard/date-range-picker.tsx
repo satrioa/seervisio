@@ -2,10 +2,7 @@
 
 import * as React from "react";
 import {
-  addDays,
   format,
-  startOfDay,
-  endOfDay,
   startOfWeek,
   endOfWeek,
   startOfMonth,
@@ -130,6 +127,11 @@ function resolveQuickRange(key: QuickKey) {
 
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   const isSmallScreen = useMediaQuery("(max-width: 640px)");
+  const today = React.useMemo(() => new Date(), []);
+
+  const [month, setMonth] = React.useState<Date | undefined>(
+    value.dateRange?.from ?? today
+  );
 
   const years = React.useMemo(() => {
     const current = new Date().getFullYear();
@@ -147,6 +149,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
         endYear: resolved.endYear,
         isSmallScreen,
       });
+      if (resolved.dateRange?.from) setMonth(resolved.dateRange.from);
       onChange({
         ...resolved,
         granularity,
@@ -184,6 +187,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
         endDate: range?.to,
         isSmallScreen,
       });
+      if (range?.from) setMonth(range.from);
       onChange({
         dateRange: range,
         mode: "date",
@@ -336,10 +340,13 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             <div className="p-2">
               <Calendar
                 mode="range"
-                defaultMonth={value.dateRange?.from}
+                month={month}
+                onMonthChange={setMonth}
                 selected={value.dateRange}
                 onSelect={handleDateSelect}
                 numberOfMonths={isSmallScreen ? 1 : 2}
+                captionLayout="dropdown"
+                disabled={{ after: today }}
               />
             </div>
           )}

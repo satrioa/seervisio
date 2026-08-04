@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import {
   getSessionData,
   successResult,
@@ -152,6 +153,17 @@ export interface DashboardInventory {
   stockUsedCount: number;
   stockPurchaseTotal: number;
   lowStockItems: LowStockItem[];
+  stockMovementsToday: {
+    in: number;
+    out: number;
+    byType: { type: string; in: number; out: number }[];
+  };
+  topUsedSpareparts: {
+    itemName: string;
+    sku: string;
+    quantity: number;
+    usageCount: number;
+  }[];
 }
 
 export interface LowStockItem {
@@ -209,6 +221,8 @@ export async function getDashboardOverviewAction(
       dateTo: dateToStr,
       role: session.role,
     });
+
+    const adminDb = createServiceRoleSupabaseClient();
 
     /* ── Parallel queries ── */
     const [
@@ -343,7 +357,7 @@ export async function getDashboardOverviewAction(
         .select("id, name")
         .eq("brand_id", session.brandId),
 
-      (supabase as any)
+      (adminDb as any)
         .from("profiles")
         .select("id, name"),
 
@@ -917,6 +931,13 @@ export async function getDashboardOverviewAction(
     const effectiveCashOut = Math.max(totalOut, totalExpense);
 
     /* ══ INVENTORY TAB ══ */
+    const stockPurchaseTotalCalc = movements
+      .filter((m: any) => m.movement_type === "STOCK_PURCHASE" && m.direction === "OUT")
+      .reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
+    const stockUsedCountCalc = inventoryMovements
+      .filter((m: any) => m.direction === "OUT")
+      .reduce((s: number, m: any) => s + Number(m.quantity || 0), 0);
+
     const branchNamesMap = new Map(allBranches.map((b: any) => [b.id, b.name || b.id]));
     const stockMap = new Map<string, number>();
     for (const s of branchStocks) {
@@ -942,6 +963,44 @@ export async function getDashboardOverviewAction(
         };
       });
     const outOfStockCount = lowStockItems.filter((i) => i.currentStock === 0).length;
+
+    /* ── Stock movements today ── */
+    const todayMovements = inventoryMovements.filter((m: any) => (m.created_at || "").startsWith(todayStr));
+    const stockMovementsToday = {
+      in: todayMovements.filter((m: any) => m.direction === "IN").reduce((s: number, m: any) => s + Number(m.quantity || 0), 0),
+      out: todayMovements.filter((m: any) => m.direction === "OUT").reduce((s: number, m: any) => s + Number(m.quantity || 0), 0),
+      byType: Array.from(
+        (todayMovements.reduce((map: Map<string, { in: number; out: number }>, m: any) => {
+          const key = m.movement_type || "UNKNOWN";
+          const e = map.get(key) || { in: 0, out: 0 };
+          if (m.direction === "IN") e.in += Number(m.quantity || 0);
+          else if (m.direction === "OUT") e.out += Number(m.quantity || 0);
+          map.set(key, e);
+          return map;
+        }, new Map()) as Map<string, { in: number; out: number }>).entries(),
+      ).map(([type, counts]) => ({ type, ...counts })),
+    };
+
+    /* ── Top used spareparts ── */
+    const itemNameMap = new Map(inventoryItems.map((i: any) => [i.id, { name: i.name, sku: i.sku || "-" }]));
+    const usageGroups = new Map<string, { quantity: number; usageCount: number }>();
+    for (const m of inventoryMovements) {
+      if (m.direction !== "OUT") continue;
+      if (!["SERVICE_USAGE", "POS_SALE"].includes(m.movement_type)) continue;
+      const itemId = m.item_id;
+      if (!itemId) continue;
+      const g = usageGroups.get(itemId) || { quantity: 0, usageCount: 0 };
+      g.quantity += Number(m.quantity || 0);
+      g.usageCount += 1;
+      usageGroups.set(itemId, g);
+    }
+    const topUsedSpareparts = Array.from(usageGroups.entries())
+      .sort((a, b) => b[1].quantity - a[1].quantity)
+      .slice(0, 5)
+      .map(([itemId, stats]) => {
+        const meta = itemNameMap.get(itemId) || { name: "Unknown", sku: "-" };
+        return { itemName: meta.name, sku: meta.sku, ...stats };
+      });
 
     const unclosedShiftsCount = shifts.filter((s: any) => s.shift_status === "OPEN" && s.opened_at && new Date(s.opened_at).toDateString() !== new Date().toDateString()).length;
     const unpickedUnitsCount = serviceUncollectedCount;
@@ -1010,9 +1069,11 @@ export async function getDashboardOverviewAction(
       inventory: {
         lowStockCount: lowStockItems.length,
         outOfStockCount,
-        stockUsedCount: stockUsedCountToday,
-        stockPurchaseTotal: totalExpense,
+        stockUsedCount: stockUsedCountCalc,
+        stockPurchaseTotal: stockPurchaseTotalCalc,
         lowStockItems,
+        stockMovementsToday,
+        topUsedSpareparts,
       },
     };
 

@@ -64,6 +64,7 @@ import {
   AreaChart,
   CartesianGrid,
   XAxis,
+  YAxis,
 } from "recharts";
 import type { ChartGranularity } from "@/lib/dashboard/chart-granularity";
 import { calculateOperationalHealth, type OperationalHealthInput } from "@/lib/dashboard/operational-health-score";
@@ -475,6 +476,14 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                       tick={{ fontSize: 10 }}
                       stroke="hsl(var(--muted-foreground))"
                       interval={granularity === "day" ? 1 : 0}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tick={{ fontSize: 10 }}
+                      stroke="hsl(var(--muted-foreground))"
+                      tickFormatter={(value) => value >= 1_000_000 ? `${(value / 1_000_000).toFixed(0)}jt` : value >= 1_000 ? `${(value / 1_000).toFixed(0)}rb` : value}
                     />
                     <ChartTooltip
                       cursor={false}

@@ -180,5 +180,11 @@ export const mockDashboardData: DashboardData = {
       { name: "Charger USB-C 20W", sku: "CHR-UC20", category: "Charger", currentStock: 3, minStock: 5, branch: "Toko Pusat", status: "menipis" },
       { name: "Flexible Cable iPhone X", sku: "FLEX-IPX", category: "Flex Cable", currentStock: 2, minStock: 4, branch: "Cabang Margonda", status: "menipis" },
     ],
+    stockMovementsToday: { in: 15, out: 28, byType: [{ type: "STOCK_PURCHASE", in: 15, out: 0 }, { type: "SERVICE_USAGE", in: 0, out: 20 }, { type: "POS_SALE", in: 0, out: 8 }] },
+    topUsedSpareparts: [
+      { itemName: "LCD iPhone 11", sku: "LCD-IP11", quantity: 5, usageCount: 3 },
+      { itemName: "Baterai Samsung A52", sku: "BAT-A52", quantity: 3, usageCount: 3 },
+      { itemName: "Charger USB-C 20W", sku: "CHR-UC20", quantity: 4, usageCount: 2 },
+    ],
   },
 };

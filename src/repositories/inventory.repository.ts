@@ -84,7 +84,7 @@ export async function getServiceSparepartUsages(
     .from("service_sparepart_usages")
     .select(`
       *,
-      item:inventory_items(id, name, type),
+      item:inventory_items(id, name, item_type),
       serialized_unit:inventory_serialized_units(*)
     `)
     .eq("service_id", serviceId)

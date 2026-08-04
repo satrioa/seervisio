@@ -181,6 +181,10 @@ export async function listFinanceTransactionsAction(
     const session = await getSessionData(input.brandSlug);
     requireActionPermission(session.role, "finance_transaction.view");
 
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "listFinanceTransactionsAction");
+    }
+
     const supabase = await createServerSupabase();
     const sourceFilter = input.sourceFilter ?? "ALL";
 
@@ -589,6 +593,10 @@ export async function voidFinanceTransactionAction(
 
     if (!original) {
       return errorResult("Transaksi tidak ditemukan.");
+    }
+
+    if (original.branch_id) {
+      requireBranchAccess(session, original.branch_id, "voidFinanceTransactionAction");
     }
 
     if (original.is_voided) {

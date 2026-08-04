@@ -309,6 +309,10 @@ export async function listInventoryItemsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
 
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "listInventoryItemsAction");
+    }
+
     const supabase = await createServerSupabase();
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 20;
@@ -756,6 +760,10 @@ export async function findInventoryByBarcodeAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
+
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "findInventoryByBarcodeAction");
+    }
 
     const supabase = await createServerSupabase();
     const code = input.code?.trim();
@@ -1322,6 +1330,10 @@ export async function listInventoryMovementsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
 
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "listInventoryMovementsAction");
+    }
+
     const supabase = await createServerSupabase();
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 10;
@@ -1843,6 +1855,10 @@ export async function listPurchaseHistoryAction(
     const branchFilter =
       input.branchId && input.branchId !== "ALL_BRANCHES" ? [input.branchId] : accessibleBranchIds;
 
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "listPurchaseHistoryAction");
+    }
+
     let query = (supabase as any)
       .from("purchases")
       .select(`
@@ -2009,6 +2025,10 @@ export async function getPaymentAccountsForPurchaseAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
 
+    if (branchId && branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, branchId, "getPaymentAccountsForPurchaseAction");
+    }
+
     const supabase = await createServerSupabase();
 
     let query = (supabase as any)
@@ -2080,6 +2100,10 @@ export async function listSerializedUnitsAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "inventory.view");
+
+    if (input.branchId && input.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, input.branchId, "listSerializedUnitsAction");
+    }
 
     const supabase = await createServerSupabase();
 
@@ -2190,6 +2214,7 @@ export async function createSerializedUnitAction(
     const supabase = await createServerSupabase();
 
     if (!input.branchId) return errorResult("Cabang wajib diisi");
+    requireBranchAccess(session, input.branchId, "createSerializedUnitAction");
     if (!input.inventoryItemId) return errorResult("Item wajib diisi");
 
     await requireActiveStoreSession(supabase, session.brandId, input.branchId);

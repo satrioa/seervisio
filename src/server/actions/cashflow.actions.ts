@@ -6,6 +6,7 @@ import {
   successResult,
   errorResult,
   requireActionPermission,
+  requireBranchAccess,
   type ActionResult,
 } from "./action-helper";
 
@@ -161,6 +162,10 @@ export async function listCashflowMovementsAction(
     requireActionPermission(session.role, "cashflow.view");
 
     const supabase = await createServerSupabase();
+
+    if (filters.branchId && filters.branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, filters.branchId, "listCashflowMovementsAction");
+    }
 
     let query = (supabase as any)
       .from("payment_account_movements")

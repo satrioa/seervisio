@@ -161,10 +161,7 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
           )}
         </div>
         <Card className="min-w-0 py-4 shadow-xs sm:col-span-1 lg:col-span-3">
-        <CardHeader className="px-4">
-          <CardTitle>Risk summary</CardTitle>
-          <CardDescription>Core risk signals vs previous period</CardDescription>
-        </CardHeader>
+        
         <CardContent className="grid grid-cols-1 px-4 sm:grid-cols-3">
           {RISK_ITEMS.map((item, index) => {
             const Icon = item.icon;
