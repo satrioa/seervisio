@@ -19,6 +19,7 @@ import {
   listShifts,
   getShiftMovements,
   resolveBranchCashAccount,
+  getPendingReconciliation,
 } from "@/repositories/store-shift.repository";
 import type { StoreShift } from "@/types/app";
 import {
@@ -450,6 +451,114 @@ export async function listStoreShiftsAction(
   } catch (err: any) {
     console.error("[StoreShiftActions] listStoreShiftsAction:", err.message);
     return errorResult(err.message || "Gagal memuat riwayat shift.");
+  }
+}
+
+export async function getPendingReconciliationAction(
+  brandSlug: string,
+  branchId: string,
+): Promise<ActionResult<StoreShift | null>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "store_shift.view");
+    requireBranchAccess(session, branchId, "getPendingReconciliationAction");
+
+    const supabase = await createServerSupabase();
+    const shift = await getPendingReconciliation(supabase, branchId);
+
+    return successResult(shift);
+  } catch (err: any) {
+    console.error("[StoreShiftActions] getPendingReconciliationAction:", err.message);
+    return errorResult(err.message || "Gagal memuat shift yang perlu rekonsiliasi.");
+  }
+}
+
+export async function reconcileShiftAction(
+  brandSlug: string,
+  shiftId: string,
+  actualCash: number,
+  notes?: string | null,
+): Promise<ActionResult<{ cashDifference: number }>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "store_shift.close");
+
+    const supabase = await createServerSupabase();
+
+    const shift = await getShiftById(supabase, shiftId);
+    if (!shift) return errorResult("Shift tidak ditemukan.");
+    if (shift.shiftStatus !== "CLOSED") return errorResult("Shift belum ditutup.");
+    if (shift.reconciliationStatus !== "PENDING") {
+      return errorResult("Shift ini tidak memerlukan rekonsiliasi.");
+    }
+
+    requireBranchAccess(session, shift.branchId, "reconcileShiftAction");
+
+    if (actualCash < 0) {
+      return errorResult("Jumlah kas fisik tidak boleh negatif.");
+    }
+
+    const expectedCash = shift.expectedClosingCash ?? 0;
+    const cashDiff = actualCash - expectedCash;
+
+    if (Math.abs(cashDiff) > 0 && !notes?.trim()) {
+      return errorResult("Catatan diperlukan jika terdapat selisih kas.");
+    }
+
+    const { data, error } = await (supabase as any).rpc("reconcile_store_shift", {
+      p_shift_id: shiftId,
+      p_actual_cash: actualCash,
+      p_notes: notes || null,
+      p_reconciled_by: session.profileId,
+    });
+
+    if (error) {
+      console.error("[StoreShiftActions] reconcile_store_shift RPC error:", error);
+      return errorResult("Gagal merekonsiliasi shift. Silakan coba lagi.");
+    }
+
+    try {
+      const { data: branchRow } = await (supabase as any)
+        .from("branches")
+        .select("name")
+        .eq("id", shift.branchId)
+        .maybeSingle();
+
+      await insertBrandNotification(
+        session.brandId,
+        "Shift Reconciled",
+        `Shift #${shift.shiftNumber} di ${branchRow?.name ?? ""} telah direkonsiliasi. ${
+          Math.abs(cashDiff) > 0
+            ? `Selisih: Rp${Math.abs(cashDiff).toLocaleString("id-ID")} (${cashDiff >= 0 ? "lebih" : "kurang"})`
+            : "Kas sesuai."
+        }`,
+        "activity",
+        Math.abs(cashDiff) > 0 ? "warning" : "info",
+      );
+
+      if (Math.abs(cashDiff) > 0) {
+        await sendOperationalNotification({
+          brandId: session.brandId,
+          branchId: shift.branchId,
+          eventType: "CASH_DIFFERENCE_DETECTED",
+          actorProfileId: session.profileId,
+          payload: {
+            branchName: branchRow?.name ?? "",
+            cashDifference: cashDiff,
+            expectedCash,
+            countedCash: actualCash,
+            context: "reconciliation",
+          },
+        });
+      }
+    } catch (notifErr: any) {
+      console.warn("[notification:error] reconcile notification failed:", notifErr.message);
+    }
+
+    return successResult({ cashDifference: cashDiff });
+  } catch (err: any) {
+    console.error("[StoreShiftActions] reconcileShiftAction:", err.message);
+    return handleActionError(err, "Gagal merekonsiliasi shift.");
   }
 }
 

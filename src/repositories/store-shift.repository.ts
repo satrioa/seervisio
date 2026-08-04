@@ -21,6 +21,7 @@ interface DbStoreShift {
   updated_at: string;
   auto_closed: boolean | null;
   closing_reason: string | null;
+  reconciliation_status: string | null;
   scheduled_open_time: string | null;
   scheduled_close_time: string | null;
   late_open_minutes: number | null;
@@ -65,6 +66,7 @@ function mapDbShiftToDomain(row: DbStoreShift): StoreShift {
     closedByName,
     autoClosed: row.auto_closed ?? undefined,
     closingReason: (row.closing_reason as StoreShift["closingReason"]) ?? undefined,
+    reconciliationStatus: (row.reconciliation_status as StoreShift["reconciliationStatus"]) ?? undefined,
     scheduledOpenTime: row.scheduled_open_time ?? undefined,
     scheduledCloseTime: row.scheduled_close_time ?? undefined,
     lateOpenMinutes: row.late_open_minutes ?? undefined,
@@ -158,6 +160,27 @@ export async function getShiftMovements(
 
   if (error || !data) return [];
   return data;
+}
+
+export async function getPendingReconciliation(
+  supabase: any,
+  branchId: string,
+): Promise<StoreShift | null> {
+  const { data, error } = await supabase
+    .from("store_shifts")
+    .select(`
+      *,
+      opened_by_profile:profiles!opened_by(name, email),
+      closed_by_profile:profiles!closed_by(name, email)
+    `)
+    .eq("branch_id", branchId)
+    .eq("reconciliation_status", "PENDING")
+    .order("closed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapDbShiftToDomain(data as DbStoreShift);
 }
 
 export async function resolveBranchCashAccount(

@@ -23,7 +23,7 @@ export const StoreAction = {
   POS_REFUND: "POS_REFUND",
   POS_VOID: "POS_VOID",
 
-  // Inventory — stock movements
+  // Inventory — stock movements (no longer require open store)
   STOCK_IN: "STOCK_IN",
   STOCK_OUT: "STOCK_OUT",
   STOCK_MUTATION: "STOCK_MUTATION",
@@ -94,12 +94,6 @@ const STORE_OPEN_REQUIRED: ReadonlySet<string> = new Set([
   StoreAction.POS_PAYMENT,
   StoreAction.POS_REFUND,
   StoreAction.POS_VOID,
-  StoreAction.STOCK_IN,
-  StoreAction.STOCK_OUT,
-  StoreAction.STOCK_MUTATION,
-  StoreAction.STOCK_ADJUSTMENT,
-  StoreAction.STOCK_OPNAME,
-  StoreAction.INVENTORY_TRANSACTION,
   StoreAction.FINANCE_CASH_IN,
   StoreAction.FINANCE_CASH_OUT,
   StoreAction.FINANCE_SHIFT_CASH,

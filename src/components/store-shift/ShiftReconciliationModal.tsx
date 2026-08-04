@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useState, useCallback, useEffect } from "react";
-import { X, AlertTriangle, Loader2 } from "lucide-react";
+import { useState, useCallback } from "react";
+import { AlertTriangle, Clock, Loader2, RotateCcw } from "lucide-react";
 
 import {
   Dialog,
@@ -17,53 +17,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { closeStoreShiftAction, getStoreShiftReportAction } from "@/server/actions/store-shift.actions";
+import { reconcileShiftAction } from "@/server/actions/store-shift.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
+import type { StoreShift } from "@/types/app";
 
 function formatCurrency(n: number | null | undefined): string {
   if (n == null) return "Rp 0";
   return `Rp ${n.toLocaleString("id-ID")}`;
 }
 
-interface StoreShiftCloseModalProps {
+function formatDateTime(dateStr: string | undefined): string {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+interface ShiftReconciliationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   brandSlug: string;
-  shiftId: string;
-  expectedCash: number | null;
+  shift: StoreShift | null;
   onSuccess?: () => void;
 }
 
-export function StoreShiftCloseModal({
+export function ShiftReconciliationModal({
   open,
   onOpenChange,
   brandSlug,
-  shiftId,
-  expectedCash: propExpectedCash,
+  shift,
   onSuccess,
-}: StoreShiftCloseModalProps) {
+}: ShiftReconciliationModalProps) {
   const [actualCash, setActualCash] = useState("");
   const [closingNotes, setClosingNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [liveExpectedCash, setLiveExpectedCash] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setLiveExpectedCash(null);
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getStoreShiftReportAction(brandSlug, shiftId);
-        if (!cancelled && res.success) {
-          setLiveExpectedCash(res.data.expectedCash);
-        }
-      } catch { /* ignore */ }
-    })();
-    return () => { cancelled = true; };
-  }, [open, brandSlug, shiftId]);
-
-  const expected = liveExpectedCash ?? propExpectedCash ?? 0;
+  const expected = shift?.expectedClosingCash ?? 0;
   const actualNum = Number(actualCash.replace(/[^0-9]/g, "")) || 0;
   const diff = actualNum - expected;
 
@@ -82,6 +76,7 @@ export function StoreShiftCloseModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!shift) return;
     setError(null);
 
     if (isNaN(actualNum) || actualNum < 0) {
@@ -95,13 +90,18 @@ export function StoreShiftCloseModal({
     }
 
     setSubmitting(true);
-    const result = await closeStoreShiftAction(brandSlug, shiftId, actualNum, closingNotes || null);
+    const result = await reconcileShiftAction(
+      brandSlug,
+      shift.id,
+      actualNum,
+      closingNotes || null,
+    );
     setSubmitting(false);
 
     if (result.success) {
       triggerDynamicIslandFeedback({
         type: "success",
-        title: "Shift berhasil diakhiri",
+        title: "Rekonsiliasi berhasil",
         duration: 2500,
       });
       window.dispatchEvent(new CustomEvent("seervis:shift-changed"));
@@ -120,17 +120,33 @@ export function StoreShiftCloseModal({
     : "";
 
   return (
-    <Dialog open={open} onOpenChange={(open) => { if (!submitting) handleClose(); }}>
-      <DialogContent className="sm:max-w-[420px]">
+    <Dialog open={open} onOpenChange={(o) => { if (!submitting && !o) handleClose(); }}>
+      <DialogContent className="sm:max-w-[440px]" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <X className="size-5" />
-            Akhiri Shift
+            <RotateCcw className="size-5 text-amber-500" />
+            Rekonsiliasi Shift
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Hitung kas fisik dan masukkan jumlahnya untuk mengakhiri shift.
+            Shift sebelumnya ditutup otomatis oleh sistem. Hitung kas fisik dan masukkan jumlahnya untuk melanjutkan.
           </DialogDescription>
         </DialogHeader>
+
+        {shift && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div className="flex items-start gap-2 text-xs">
+              <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-medium text-amber-800 dark:text-amber-300">
+                  {shift.shiftNumber}
+                </span>
+                <span className="text-amber-700/80 dark:text-amber-400/70">
+                  Ditutup otomatis pada {formatDateTime(shift.closedAt)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -141,11 +157,13 @@ export function StoreShiftCloseModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="close-actual-cash">Kas Fisik (Actual Cash)</Label>
+            <Label htmlFor="reconcile-actual-cash">
+              Kas Fisik (Actual Cash) <span className="text-red-500">*</span>
+            </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
               <Input
-                id="close-actual-cash"
+                id="reconcile-actual-cash"
                 placeholder="0"
                 value={actualDisplay}
                 onChange={(e) => {
@@ -170,12 +188,12 @@ export function StoreShiftCloseModal({
 
           {(diff !== 0 || closingNotes) && (
             <div className="space-y-1.5">
-              <Label htmlFor="close-closing-notes">
+              <Label htmlFor="reconcile-notes">
                 Catatan {diff !== 0 && <span className="text-red-500">*</span>}
               </Label>
               <Textarea
-                id="close-closing-notes"
-                placeholder="Catatan penutupan shift..."
+                id="reconcile-notes"
+                placeholder="Jelaskan alasan selisih kas..."
                 value={closingNotes}
                 onChange={(e) => setClosingNotes(e.target.value)}
                 rows={2}
@@ -192,19 +210,16 @@ export function StoreShiftCloseModal({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={submitting}>
-              Batal
-            </Button>
-            <Button type="submit" size="sm" variant="destructive" className="gap-2" disabled={submitting}>
+            <Button type="submit" size="sm" className="gap-2 w-full" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin" />
-                  Mengakhiri Shift...
+                  Merekonsiliasi...
                 </>
               ) : (
                 <>
-                  <X className="size-3.5" />
-                  Akhiri Shift
+                  <RotateCcw className="size-3.5" />
+                  Rekonsiliasi & Lanjut Buka Shift
                 </>
               )}
             </Button>

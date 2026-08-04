@@ -3,6 +3,7 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
+import { insertBrandNotification } from "@/server/repositories/notification.repository";
 
 export interface AutoCloseResult {
   shiftId: string;
@@ -76,6 +77,18 @@ export async function runAutoCloseCheckAction(
       } catch (notifErr: any) {
         console.warn("[auto-close] notification failed for shift", r.shiftId, notifErr.message);
       }
+
+      try {
+        await insertBrandNotification(
+          r.brandId,
+          "Rekonsiliasi Diperlukan",
+          `Shift #${r.shiftNumber} di ${r.branchName} ditutup otomatis dan memerlukan rekonsiliasi kas sebelum shift baru dapat dibuka.`,
+          "activity",
+          "warning",
+        );
+      } catch (notifErr: any) {
+        console.warn("[auto-close] reconciliation notification failed for shift", r.shiftId, notifErr.message);
+      }
     }
 
     return successResult(results);
@@ -142,6 +155,18 @@ export async function runAutoCloseScheduledAction(
         });
       } catch (notifErr: any) {
         console.warn("[auto-close/scheduled] notification failed for shift", r.shiftId, notifErr.message);
+      }
+
+      try {
+        await insertBrandNotification(
+          r.brandId,
+          "Rekonsiliasi Diperlukan",
+          `Shift #${r.shiftNumber} di ${r.branchName} ditutup otomatis dan memerlukan rekonsiliasi kas sebelum shift baru dapat dibuka.`,
+          "activity",
+          "warning",
+        );
+      } catch (notifErr: any) {
+        console.warn("[auto-close/scheduled] reconciliation notification failed for shift", r.shiftId, notifErr.message);
       }
     }
 

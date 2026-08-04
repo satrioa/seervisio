@@ -424,6 +424,7 @@ export interface StoreShift {
   closedByName?: string;
   autoClosed?: boolean;
   closingReason?: ClosingReason;
+  reconciliationStatus?: "NONE" | "PENDING" | "DONE";
   scheduledOpenTime?: string;
   scheduledCloseTime?: string;
   lateOpenMinutes?: number;

@@ -5,6 +5,8 @@ import { useCallback, useState, useRef } from "react";
 import { Store } from "lucide-react";
 import { useStoreShift } from "./store-shift-provider";
 import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
+import { ShiftReconciliationModal } from "@/components/store-shift/ShiftReconciliationModal";
+import type { StoreShift } from "@/types/app";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -32,6 +34,7 @@ export function useStoreGuardAction(config: StoreGuardConfig) {
   const pendingActionRef = useRef<(() => void) | null>(null);
   const [showClosedDialog, setShowClosedDialog] = useState(false);
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
+  const [pendingReconciliationShift, setPendingReconciliationShift] = useState<StoreShift | null>(null);
 
   const isStoreOpen = !!activeShift && activeShift.shiftStatus === "OPEN";
 
@@ -44,10 +47,22 @@ export function useStoreGuardAction(config: StoreGuardConfig) {
     }
   }, [isStoreOpen]);
 
-  const handleBukaToko = useCallback(() => {
+  const handleBukaToko = useCallback(async () => {
     setShowClosedDialog(false);
-    setShowOpenShiftModal(true);
-  }, []);
+    try {
+      const { getPendingReconciliationAction } = await import(
+        "@/server/actions/store-shift.actions"
+      );
+      const result = await getPendingReconciliationAction(config.brandSlug, config.branchId);
+      if (result.success && result.data) {
+        setPendingReconciliationShift(result.data);
+      } else {
+        setShowOpenShiftModal(true);
+      }
+    } catch {
+      setShowOpenShiftModal(true);
+    }
+  }, [config.brandSlug, config.branchId]);
 
   const handleOpenShiftSuccess = useCallback(() => {
     setShowOpenShiftModal(false);
@@ -59,6 +74,11 @@ export function useStoreGuardAction(config: StoreGuardConfig) {
       setTimeout(pending, 100);
     }
   }, [refreshShiftStatus]);
+
+  const handleReconciliationSuccess = useCallback(() => {
+    setPendingReconciliationShift(null);
+    setShowOpenShiftModal(true);
+  }, []);
 
   const clearPending = useCallback(() => {
     pendingActionRef.current = null;
@@ -93,15 +113,24 @@ export function useStoreGuardAction(config: StoreGuardConfig) {
   ), [showClosedDialog, clearPending, handleBukaToko]);
 
   const OpenShiftModal = useCallback(() => (
-    <StoreShiftOpenModal
-      open={showOpenShiftModal}
-      onOpenChange={setShowOpenShiftModal}
-      brandSlug={config.brandSlug}
-      branchId={config.branchId}
-      branchName={config.branchName}
-      onSuccess={handleOpenShiftSuccess}
-    />
-  ), [showOpenShiftModal, config.brandSlug, config.branchId, config.branchName, handleOpenShiftSuccess]);
+    <>
+      <ShiftReconciliationModal
+        open={!!pendingReconciliationShift}
+        onOpenChange={(open) => { if (!open) setPendingReconciliationShift(null); }}
+        brandSlug={config.brandSlug}
+        shift={pendingReconciliationShift}
+        onSuccess={handleReconciliationSuccess}
+      />
+      <StoreShiftOpenModal
+        open={showOpenShiftModal}
+        onOpenChange={setShowOpenShiftModal}
+        brandSlug={config.brandSlug}
+        branchId={config.branchId}
+        branchName={config.branchName}
+        onSuccess={handleOpenShiftSuccess}
+      />
+    </>
+  ), [pendingReconciliationShift, showOpenShiftModal, config.brandSlug, config.branchId, config.branchName, handleOpenShiftSuccess, handleReconciliationSuccess]);
 
   return {
     isStoreOpen,
