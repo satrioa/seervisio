@@ -205,12 +205,15 @@ function IslandContent({ userName, onOpenShift }: { userName?: string; onOpenShi
       setFeedbackDescription(description ?? null);
       setActionState(type);
       setMode("feedback");
-      if (type === "loading") return;
       if (type === "error") {
         setErrorShake(true);
         setTimeout(() => setErrorShake(false), 500);
       }
-      const dismissAfter = duration ?? 1800;
+
+      // Auto-dismiss. Loading has no explicit follow-up in some flows, so it
+      // gets a generous safety timeout instead of spinning forever.
+      const dismissAfter =
+        type === "loading" ? (duration ?? 8000) : (duration ?? 1800);
       feedbackTimerRef.current = setTimeout(() => {
         setActionState("idle");
         setMode("idle");

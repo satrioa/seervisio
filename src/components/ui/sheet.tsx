@@ -50,14 +50,48 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  closeOnOutsideClick = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  closeOnOutsideClick?: boolean
 }) {
+  const handleOutsidePointer = React.useCallback(
+    (event: { preventDefault: () => void; defaultPrevented?: boolean; target?: EventTarget | null }) => {
+      if (!closeOnOutsideClick) {
+        event.preventDefault();
+        return;
+      }
+      // Check if click is inside a dialog
+      const target = event.target as Element | null;
+      if (target?.closest?.('[data-radix-dialog-content]')) {
+        event.preventDefault();
+      }
+    },
+    [closeOnOutsideClick],
+  );
+
+  const handleOverlayPointer = React.useCallback(
+    (event: React.PointerEvent) => {
+      if (!closeOnOutsideClick) {
+        event.stopPropagation();
+        return;
+      }
+      // Check if click is inside a dialog
+      const target = event.target as Element | null;
+      if (target?.closest?.('[data-radix-dialog-content]')) {
+        event.stopPropagation();
+      }
+    },
+    [closeOnOutsideClick],
+  );
+
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay
+        {...(!closeOnOutsideClick ? { onPointerDownCapture: handleOverlayPointer as any } : {})}
+      />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}
@@ -66,6 +100,8 @@ function SheetContent({
           className
         )}
         {...props}
+        onPointerDownOutside={closeOnOutsideClick ? props.onPointerDownOutside : handleOutsidePointer as any}
+        onInteractOutside={closeOnOutsideClick ? props.onInteractOutside : handleOutsidePointer as any}
       >
         {children}
         {showCloseButton && (

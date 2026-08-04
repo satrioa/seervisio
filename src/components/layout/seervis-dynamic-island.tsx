@@ -338,28 +338,13 @@ function SeervisIslandContent({
     return () => window.removeEventListener("seervis:shift-changed", handler);
   }, [setSize]);
 
-  /* Island dimensions per visual state. `dims` feeds initialDims (first paint)
-     and the root motion.div `animate={{ width: dims.width, height: dims.height }}`.
-     Sizes are explicit NUMBERS (never animating to "auto") so framer-motion can
-     interpolate smoothly. The expanded height comes from `measuredExpandedHeight`,
-     measured via a callback ref the moment the expanded content mounts — so the
-     first painted frame already has the correct numeric target (no auto-snap jump).
-     Only the branch matching the CURRENT mode/condition is active:
-        expanded                                        -> tapped open:  width 420, height = measuredExpandedHeight
-        welcome                                         -> 2.2s greeting:  width auto, height auto
-        feedback                                        -> toast event:    width auto, height 31
-        idle + isLoading                                -> loading shift:   width auto, height 31
-        idle + hasActiveShift + ambient.mode !== "idle" -> KPI text loop:   width 280, height 31
-        idle + hasActiveShift + showEyes                -> idle eyes:       width auto, height 31
-        idle + hasActiveShift                           -> shift plain:     width auto, height 31
-        idle + !hasActiveShift                          -> no shift prompt: width 250, height 31
-        (fallback)                                      -> getPresetDimensions("compact")  [unused normally]
-  */
-  const dims: { width: number | "auto"; height: number | "auto" } =
+  /* Island dimensions — width is "auto" to fit content (grid layout prevents
+     collapse), height is explicit for spring animation. */
+  const dims: { width: number | "auto"; height: number } =
     mode === "expanded"
-      ? { width: 420, height: measuredExpandedHeight }
+      ? { width: "auto" as const, height: measuredExpandedHeight }
       : mode === "welcome"
-        ? { width: "auto", height: "auto" }
+        ? { width: "auto", height: 52 }
         : mode === "feedback"
           ? { width: "auto", height: 31 }
           : mode === "idle" && isLoading
@@ -369,8 +354,8 @@ function SeervisIslandContent({
               : mode === "idle" && hasActiveShift && showEyes
                 ? { width: "auto", height: 31 }
                   : mode === "idle" && !hasActiveShift
-                    ? { width: 250, height: 31 }
-                    : getPresetDimensions("compact");
+                    ? { width: "auto", height: 31 }
+                    : { width: 150, height: 32 };
   const initialDims = dims;
 
   const islandBorderRadius = mode === "expanded" ? 20 : 46;
@@ -400,7 +385,6 @@ function SeervisIslandContent({
         }}
         style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
       transition={{
-        layout: spring,
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,
         scale: themePulse
@@ -430,8 +414,9 @@ function SeervisIslandContent({
         />
       )}
 
+      <div className="grid grid-cols-1">
       <AnimatePresence>
-        {/* ÔöÇÔöÇ Welcome ÔöÇÔöÇ */}
+        {/* ── Welcome ── */}
         {mode === "welcome" && (
           <motion.div
             key="welcome"
@@ -439,7 +424,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={contentReveal}
-            className="absolute inset-0 flex w-full items-center gap-3 px-2 py-2"
+            className="col-start-1 row-start-1 flex min-w-0 items-center gap-3 px-2 py-2"
           >
             <img
               src="/images/welcome-wave.gif"
@@ -466,7 +451,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={contentReveal}
-            className="absolute inset-0 flex w-full items-stretch justify-center gap-2 p-px"
+            className="col-start-1 row-start-1 flex min-w-0 items-stretch justify-center gap-2 p-px"
           >
             <div
               className="relative flex min-w-0 flex-1 items-center overflow-hidden"
@@ -516,7 +501,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="absolute inset-0 flex w-full items-center gap-2.5 px-2 py-2 "
+            className="col-start-1 row-start-1 flex min-w-0 items-center gap-2.5 px-2 py-2 "
           >
             {ambient.mode === "idle" && showEyes ? (
               <div className="flex w-full items-center justify-center text-white/40 dark:text-white/40">
@@ -585,7 +570,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={contentReveal}
-            className="absolute inset-0 flex w-full items-center justify-center gap-2.5 px-2 py-2"
+            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center gap-2.5 px-2 py-2"
           >
             <Loader2 className="size-3.5 animate-spin text-white/100 dark:text-white/100" />
             <span className="text-xs text-white/50 dark:text-white/50">Memuat shift...</span>
@@ -600,28 +585,15 @@ function SeervisIslandContent({
             initial="initial"
             animate="animate"
             exit="exit"
-            className="absolute left-0 right-0 top-0 flex w-full flex-col gap-1 self-start p-0.5"
+            className="col-start-1 row-start-1 flex min-w-0 flex-col gap-6 self-start p-0.5"
             ref={handleExpandedContentRef}
           >
-            <div className="space-y-1 px-3 py-3"  >
+            <div className="space-y-1 px-3 pb-16 pt-3"  >
               <p className="text-sm font-medium text-white dark:text-white">Session belum dimulai</p>
               <p className="text-xs leading-relaxed text-white/50 dark:text-white/50">
                 Buka toko untuk mulai mencatat transaksi, servis, dan kas hari
                 ini.
               </p>
-            </div>
-            <div className="flex w-full gap-1">
-              <Button
-                size="sm"
-                className="h-9 flex-1 gap-1.5 rounded-2xl border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleBukaToko();
-                }}
-              >
-                <Store className="size-3.5 " />
-                Buka Toko
-              </Button>
             </div>
           </motion.div>
         )}
@@ -634,38 +606,22 @@ function SeervisIslandContent({
             initial="initial"
             animate="animate"
             exit="exit"
-            className="absolute left-0 right-0 top-0 flex w-full flex-col gap-3 self-start px-3 py-3"
+            className="col-start-1 row-start-1 flex min-w-0 flex-col gap-3 self-start px-3 py-3"
             ref={handleExpandedContentRef}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-[320px]">
               <Circle className="size-2.5 shrink-0 fill-green-400 text-green-400" />
               <p className="text-sm font-medium text-white dark:text-white">
-                {displayBranchName} ┬À {shiftLabel}
+                {displayBranchName} ● {shiftLabel}
               </p>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="flex w-full flex-col gap-2 pb-12">
               <InfoRow label="Duration" value={shiftDuration} />
               {expectedCash !== null && (
                 <InfoRow label="Expected Cash" value={`Rp${expectedCash.toLocaleString("id-ID")}`} />
               )}
             </div>
-
-            <Button
-              size="sm"
-              variant="destructive"
-              className="w-full h-9 gap-1.5 rounded-full px-3 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMode("idle");
-                setSize("compact" as any);
-                setIsExpanded(false);
-                setShowCloseModal(true);
-              }}
-            >
-              <LogOut className="size-3.5" />
-              Akhiri Shift
-            </Button>
           </motion.div>
         )}
 
@@ -677,7 +633,7 @@ function SeervisIslandContent({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={contentReveal}
-            className="absolute inset-0 flex h-full w-full items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
+            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center gap-2.5 overflow-hidden px-2 py-2"
           >
             <div className="flex shrink-0 items-center justify-center">
               {actionState === "loading" && (
@@ -698,15 +654,7 @@ function SeervisIslandContent({
               <AnimatePresence mode="wait">
                 <motion.p
                   key={`${actionState}-${activeLineIndex}-${feedbackLines[activeLineIndex]}`}
-                  className={`whitespace-nowrap text-xs font-semibold ${
-                    actionState === "loading"
-                      ? "text-white dark:text-white"
-                      : actionState === "success"
-                        ? "text-green-400"
-                        : actionState === "error"
-                          ? "text-red-400"
-                          : "text-blue-400"
-                  }`}
+                  className="whitespace-nowrap text-xs font-semibold text-white"
                   initial={shouldReduceMotion ? { opacity: 0 } : { y: 10, opacity: 0 }}
                   animate={shouldReduceMotion ? { opacity: 1 } : { y: 0, opacity: 1 }}
                   exit={shouldReduceMotion ? { opacity: 0 } : { y: -10, opacity: 0 }}
@@ -716,6 +664,52 @@ function SeervisIslandContent({
                 </motion.p>
               </AnimatePresence>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
+
+      {/* Bottom-anchored action button: pinned to the container's bottom edge
+          so it rides the spring's bounce during the morph (parallel reveal). */}
+      <AnimatePresence>
+        {mode === "expanded" && (
+          <motion.div
+            key="expanded-action"
+            variants={expandedContentVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-3 pb-3"
+          >
+            {hasActiveShift ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="pointer-events-auto h-9 w-full gap-1.5 rounded-full px-3 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMode("idle");
+                  setSize("compact" as any);
+                  setIsExpanded(false);
+                  setShowCloseModal(true);
+                }}
+              >
+                <LogOut className="size-3.5" />
+                Akhiri Shift
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="pointer-events-auto h-9 w-full gap-1.5 rounded-xl border-white/20 bg-white px-4 text-xs font-medium text-black hover:bg-white/90 dark:border-white/10 dark:bg-black dark:text-white dark:hover:bg-black/90"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBukaToko();
+                }}
+              >
+                <Store className="size-3.5" />
+                Buka Toko
+              </Button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
