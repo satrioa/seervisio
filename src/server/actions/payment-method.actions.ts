@@ -94,6 +94,8 @@ export async function listBranchPaymentMethodsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.view");
 
+    requireBranchAccess(session, branchId, "listBranchPaymentMethodsAction");
+
     const supabase = await createServerSupabase();
 
     const { data: branch } = await (supabase as any)
@@ -130,11 +132,44 @@ export async function listBranchPaymentMethodsAction(
       mappingMap.set(m.method_type, m);
     }
 
-    const results: BranchPaymentMethodRow[] = SYSTEM_METHODS.map((def) => {
-      const row = mappingMap.get(def.type);
-      const mdr = parseMdrFromRow(row ?? null);
-      return mapBranchMethodRow(row ?? null, def, branchName, mdr);
-    });
+    const admin = createServiceRoleSupabaseClient();
+
+    const results: BranchPaymentMethodRow[] = [];
+    for (const def of SYSTEM_METHODS) {
+      let row = mappingMap.get(def.type) ?? null;
+
+      // Auto-seed CASH if no branch_payment_methods row exists
+      if (!row && def.type === "CASH") {
+        const { data: cashAccount } = await (admin as any)
+          .from("payment_accounts")
+          .select("id, account_name, type")
+          .eq("brand_id", session.brandId)
+          .eq("branch_id", branchId)
+          .eq("type", "CASH")
+          .eq("is_cash_account", true)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (cashAccount) {
+          const { data: seeded } = await (admin as any)
+            .from("branch_payment_methods")
+            .insert({
+              brand_id: session.brandId,
+              branch_id: branchId,
+              method_type: "CASH",
+              payment_account_id: cashAccount.id,
+              is_active: true,
+            })
+            .select("*, payment_account:payment_accounts(id, account_name, type)")
+            .single();
+
+          if (seeded) row = seeded;
+        }
+      }
+
+      const mdr = parseMdrFromRow(row);
+      results.push(mapBranchMethodRow(row, def, branchName, mdr));
+    }
 
     return successResult(results);
   } catch (err: any) {
@@ -325,6 +360,8 @@ export async function togglePaymentMethodActiveAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.toggle_active");
 
+    requireBranchAccess(session, branchId, "togglePaymentMethodActiveAction");
+
     const supabase = await createServerSupabase();
     const methodType = methodCodeToType(methodCode);
 
@@ -394,6 +431,8 @@ export async function ensureSystemPaymentMethodsAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.repair");
+
+    requireBranchAccess(session, branchId, "ensureSystemPaymentMethodsAction");
 
     const supabase = await createServerSupabase();
 
@@ -513,6 +552,8 @@ export async function listCompatibleAccountsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.view");
 
+    requireBranchAccess(session, branchId, "listCompatibleAccountsAction");
+
     const supabase = await createServerSupabase();
     const methodType = methodCodeToType(methodCode);
     const cashOnly = methodType === "CASH";
@@ -564,6 +605,8 @@ export async function repairBranchCashMethodAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_method.link_account");
+
+    requireBranchAccess(session, branchId, "repairBranchCashMethodAction");
 
     const supabase = await createServerSupabase();
 
@@ -673,6 +716,8 @@ export async function updateMethodMdrAction(
     requireActionPermission(session.role, "payment_method.manage_mdr");
 
     if (!branchId) return errorResult("Cabang belum dipilih.");
+
+    requireBranchAccess(session, branchId, "updateMethodMdrAction");
 
     const sup = await createServerSupabase();
 

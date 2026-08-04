@@ -18,13 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -61,6 +54,7 @@ interface ServicePaymentPanelProps {
   onOpenChange: (open: boolean) => void;
   onPaymentRecorded?: () => void;
   brandSlug: string;
+  onSetBill?: () => void;
 }
 
 /* ── Helpers ── */
@@ -86,6 +80,7 @@ export function ServicePaymentPanel({
   onOpenChange,
   onPaymentRecorded,
   brandSlug,
+  onSetBill,
 }: ServicePaymentPanelProps) {
   const [paymentType, setPaymentType] = useState<"DOWN_PAYMENT" | "PARTIAL_PAYMENT" | "FINAL_PAYMENT">("FINAL_PAYMENT");
   const [amount, setAmount] = useState("");
@@ -289,14 +284,15 @@ export function ServicePaymentPanel({
   const canSubmit = !validationError && !submitting;
   const selectedMethod = methods.find((m) => m.id === methodId);
   const isPaid = paymentState === "PAID";
+  const billMissing = totalBill <= 0 && !isPaid;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col sm:max-w-md"
+        className="flex w-full flex-col gap-0 p-6 sm:max-w-md"
       >
-        <SheetHeader className="space-y-1">
+        <SheetHeader className="space-y-1 p-0">
           <SheetTitle className="flex items-center gap-2 text-base">
             <Wallet className="size-4 text-muted-foreground" />
             Terima Pembayaran
@@ -309,6 +305,26 @@ export function ServicePaymentPanel({
         {paymentDataLoading ? (
           <div className="mt-6 flex items-center justify-center py-12">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : billMissing ? (
+          <div className="mt-4 flex flex-col items-center gap-4 rounded-lg border border-dashed bg-muted/20 p-6 text-center">
+            <div className="flex size-11 items-center justify-center rounded-full bg-muted/40">
+              <Wallet className="size-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Total Tagihan belum ada</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Estimasi biaya servis belum diisi. Atur tagihan terlebih dahulu agar pembayaran bisa dicatat.
+              </p>
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="text-xs"
+              onClick={() => (onSetBill ? onSetBill() : onOpenChange(false))}
+            >
+              Atur Tagihan
+            </Button>
           </div>
         ) : (
           <>
@@ -399,7 +415,7 @@ export function ServicePaymentPanel({
                       </div>
                     </div>
 
-                    {/* Amount */}
+                     {/* Amount */}
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="pay-amount" className="text-xs font-medium">
                         Jumlah Pembayaran
@@ -410,15 +426,34 @@ export function ServicePaymentPanel({
                         </span>
                         <Input
                           id="pay-amount"
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           min={0}
                           max={remainingBalance}
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                          className="h-10 pl-10 text-sm"
-                          placeholder="0"
+                          value={amount ? Number(amount).toLocaleString("id-ID") : ""}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            setAmount(raw);
+                          }}
+                          className={`h-10 pl-10 text-sm tabular-nums ${
+                            amount !== "" && (parseInt(amount) <= 0 || Number.isNaN(parseInt(amount)))
+                              ? "border-destructive ring-1 ring-destructive/20"
+                              : ""
+                          }`}
+                          placeholder={`Min. Rp1`}
                         />
                       </div>
+                      {/* Persistent validation hint */}
+                      {amount !== "" && (parseInt(amount) <= 0 || Number.isNaN(parseInt(amount))) ? (
+                        <p className="flex items-center gap-1 text-[10px] text-destructive">
+                          <AlertTriangle className="size-3" />
+                          Jumlah pembayaran harus lebih dari 0
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">
+                          Masukkan nominal pembayaran
+                        </p>
+                      )}
                       {paymentType === "FINAL_PAYMENT" && (
                         <p className="text-[10px] text-muted-foreground">
                           Default ke sisa tagihan ({formatCurrency(remainingBalance)})
@@ -428,28 +463,38 @@ export function ServicePaymentPanel({
 
                     {/* Payment Method */}
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="pay-method" className="text-xs font-medium">
-                        Metode Pembayaran
-                      </Label>
-                      <Select value={methodId} onValueChange={setMethodId}>
-                        <SelectTrigger className="h-10 text-sm" id="pay-method">
-                          <SelectValue placeholder="Pilih metode" />
-                        </SelectTrigger>
-                        <SelectContent className="z-[1001]">
-                          {methods.map((method) => (
-                            <SelectItem key={method.id} value={method.id} className="text-sm">
-                              <div className="flex flex-col">
-                                <span>{method.name}</span>
-                                {method.accountName && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {method.accountName}
-                                  </span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label className="text-xs font-medium">Metode Pembayaran</Label>
+                      {methodsLoading ? (
+                        <div className="h-10 flex items-center justify-center rounded-sm border bg-muted/30">
+                          <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        </div>
+                      ) : methodsError ? (
+                        <p className="text-[10px] text-destructive">{methodsError}</p>
+                      ) : methods.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground">Tidak ada metode pembayaran tersedia.</p>
+                      ) : (
+                        <div className="flex rounded-sm overflow-hidden border border-border/70">
+                          {methods.map((method, idx) => {
+                            const isSelected = methodId === method.id;
+                            return (
+                              <button
+                                key={method.id}
+                                type="button"
+                                onClick={() => setMethodId(method.id)}
+                                className={`flex-1 px-2.5 py-2.5 text-xs font-medium transition-colors
+                                  ${isSelected
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-card text-muted-foreground hover:bg-muted"
+                                  }
+                                  ${idx > 0 ? "border-l border-border/70" : ""}
+                                `}
+                              >
+                                {method.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Note */}
@@ -529,15 +574,7 @@ export function ServicePaymentPanel({
               </div>
             )}
 
-            {/* Validation hint */}
-            {validationError && !error && !submitting && !isPaid && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-400">
-                <AlertTriangle className="size-3.5 shrink-0" />
-                {validationError}
-              </div>
-            )}
-
-            {/* Footer / Submit */}
+            {/* Submit button */}
             <div className="mt-4 flex items-center justify-end gap-2 border-t pt-4">
               <Button
                 variant="outline"

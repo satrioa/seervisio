@@ -31,7 +31,7 @@ export async function getServicePayments(
     .select(`
       *,
       payment_method:payment_methods(id, name, type),
-      payment_account:payment_accounts(id, name, account_type)
+      payment_account:payment_accounts(id, account_name, type)
     `)
     .eq("service_id", serviceId)
     .in("payment_status", ["COMPLETED", "PAID", "SUCCESS"])
@@ -105,6 +105,78 @@ export async function getBranchPaymentMethods(
     .not("payment_account_id", "is", null);
 
   if (bpmErr) throw bpmErr;
+
+  // Step 1b: Auto-seed default Cash method if no branch_payment_methods exist
+  const rawRows = (bpmRows as any[] ?? []);
+  if (rawRows.length === 0) {
+    const admin = createServiceRoleSupabaseClient();
+    const { data: cashAccount } = await (admin as any)
+      .from("payment_accounts")
+      .select("id")
+      .eq("brand_id", brandId)
+      .eq("branch_id", branchId)
+      .eq("type", "CASH")
+      .eq("is_cash_account", true)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    let cashAccountId: string | null = cashAccount?.id ?? null;
+
+    if (!cashAccountId) {
+      const { data: branch } = await (admin as any)
+        .from("branches")
+        .select("name")
+        .eq("id", branchId)
+        .single();
+      if (branch) {
+        const { data: created } = await (admin as any)
+          .from("payment_accounts")
+          .insert({
+            brand_id: brandId,
+            branch_id: branchId,
+            account_name: `Kas - ${branch.name}`,
+            type: "CASH",
+            is_cash_account: true,
+            is_system_account: true,
+            is_default_receiving_account: true,
+            is_active: true,
+            allow_negative_balance: false,
+            current_balance: 0,
+            description: "Akun kas tunai sistem cabang",
+          })
+          .select("id")
+          .single();
+        if (created) cashAccountId = created.id;
+      }
+    }
+
+    if (cashAccountId) {
+      await (admin as any)
+        .from("branch_payment_methods")
+        .insert({
+          brand_id: brandId,
+          branch_id: branchId,
+          method_type: "CASH",
+          payment_account_id: cashAccountId,
+          is_active: true,
+        })
+        .select("id")
+        .maybeSingle();
+
+      // Retry query after seeding
+      const { data: retryRows } = await (supabase as any)
+        .from("branch_payment_methods")
+        .select(`id, method_type, mdr_percentage, mdr_min_transaction, payment_account_id, is_active`)
+        .eq("brand_id", brandId)
+        .eq("branch_id", branchId)
+        .eq("is_active", true)
+        .not("payment_account_id", "is", null);
+
+      if (retryRows && retryRows.length > 0) {
+        (bpmRows as any) = retryRows;
+      }
+    }
+  }
 
   // Step 2: Load payment_accounts that are valid (active + global or branch-specific)
   const accountIds = [...new Set((bpmRows as any[] ?? []).map(r => r.payment_account_id).filter(Boolean))];

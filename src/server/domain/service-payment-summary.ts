@@ -36,7 +36,7 @@ export async function getServicesPaymentSummary(
       created_at,
       notes,
       payment_method:payment_methods(id, name, type),
-      payment_account:payment_accounts(id, name, account_type)
+      payment_account:payment_accounts(id, account_name, type)
     `)
     .in("service_id", serviceIds)
     .in("payment_status", ["COMPLETED", "PAID", "SUCCESS"])
@@ -91,7 +91,7 @@ export async function getServicesPaymentSummary(
       amount: Number(p.gross_amount) || 0,
       method: p.payment_method?.name ?? "",
       methodType: p.payment_method?.type ?? "",
-      accountName: p.payment_account?.name ?? "",
+      accountName: p.payment_account?.account_name ?? "",
       status: "SUCCEEDED" as const,
       paidAt: p.paid_at ?? p.created_at,
       note: p.notes ?? undefined,
