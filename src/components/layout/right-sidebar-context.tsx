@@ -31,6 +31,7 @@ export function RightSidebarProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const showDetail = React.useCallback((service: ServiceRecord) => {
+    console.log("[TRACE:RightSidebarContext] showDetail called with timeline length:", service.timeline?.length ?? 0, "for", service.id);
     setData(service);
     setType("detail");
   }, []);
