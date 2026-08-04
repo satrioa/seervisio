@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2, Sparkles, Crown, Rocket, StarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatePresence, motion } from "framer-motion";
-import NumberFlow from "@number-flow/react";
+
 import { cn } from "@/lib/utils";
 
 export interface PricingPackage {
@@ -25,6 +25,21 @@ interface PricingSectionProps {
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
+}
+
+function formatPriceCompact(price: number): string {
+  if (price === 0) return "Gratis";
+  if (price >= 1_000_000) {
+    const jt = price / 1_000_000;
+    const formatted = jt % 1 === 0 ? jt.toString() : jt.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+    return `Rp ${formatted}jt`;
+  }
+  if (price >= 1_000) {
+    const rb = price / 1_000;
+    const formatted = rb % 1 === 0 ? rb.toString() : rb.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+    return `Rp ${formatted}rb`;
+  }
+  return `Rp ${price}`;
 }
 
 function billingLabel(pkg: PricingPackage): string {
@@ -144,15 +159,9 @@ export function PricingSection({ packages }: PricingSectionProps) {
                   </div>
 
                   <div className="mt-5 flex items-end gap-1.5">
-                    {isFree ? (
-                      <span className="text-4xl font-extrabold tracking-tight text-foreground">Gratis</span>
-                    ) : (
-                      <NumberFlow
-                        value={pkg.price}
-                        format={{ style: "currency", currency: "IDR", notation: "compact", minimumFractionDigits: 0 }}
-                        className="text-4xl font-extrabold tracking-tight text-foreground [&::part(suffix)]:font-normal [&::part(suffix)]:text-base [&::part(suffix)]:text-muted-foreground"
-                      />
-                    )}
+                    <span className="text-4xl font-extrabold tracking-tight text-foreground">
+                      {formatPriceCompact(pkg.price)}
+                    </span>
                     {!isFree && (
                       <span className="mb-1 text-sm text-muted-foreground">{billingLabel(pkg)}</span>
                     )}

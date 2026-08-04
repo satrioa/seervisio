@@ -5,8 +5,6 @@ import Link from "next/link";
 import { ArrowRight, Sparkles, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import Typewriter from "@/components/fancy/text/typewriter";
-import { AmbientEyes } from "@/components/ambient-eyes";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -69,22 +67,7 @@ export function HeroSection() {
             transition={{ duration: 0.6, delay: 0.16, ease: EASE }}
             className="mt-7 text-balance text-2xl font-semibold text-foreground/90 sm:text-3xl"
           >
-            Kelola{" "}
-            <Typewriter
-              text={[
-                "Data Servis",
-                "Tracking Servis",
-                "Inventori Stok",
-                "Laporan Keuangan",
-                "Performa Teknisi",
-                "CRM Pelanggan",
-              ]}
-              speed={80}
-              className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent"
-              waitTime={1500}
-              deleteSpeed={40}
-              cursorChar="_"
-            />
+            Kelola Data Servis, Tracking Servis, Inventori Stok, Laporan Keuangan, Performa Teknisi, CRM Pelanggan
           </motion.div>
 
           {/* Description */}
@@ -153,9 +136,6 @@ export function HeroSection() {
               <span className="ml-3 rounded-md bg-white/5 px-3 py-1 text-xs text-muted-foreground">
                 dashboard.seervisio.com
               </span>
-              <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-                <AmbientEyes />
-              </div>
             </div>
 
             {/* mock content */}

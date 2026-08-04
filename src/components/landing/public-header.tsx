@@ -129,9 +129,8 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
     if (!isAuth) return { label: "Start Free", href: "/signup" };
     if (auth.accountType === 'platform') return { label: "Platform Dashboard", href: "/platform/dashboard" };
     if (auth.license.hasPendingPayment) return null;
-    if (!auth.license.exists) return { label: "Choose a Plan", href: "/license" };
-    if (!auth.license.isActive) return { label: "My License", href: "/panel/licenses" };
-    if (!auth.profile?.onboardingCompleted) return { label: "Continue Setup", href: "/welcome" };
+    if (!auth.license.exists || !auth.license.isActive) return { label: "Pilih Paket", href: "/#pricing" };
+    if (!auth.profile?.onboardingCompleted) return { label: "Dashboard", href: auth.dashboardHref };
     return { label: "Dashboard", href: auth.dashboardHref };
   }, [isAuth, auth]);
 
@@ -208,7 +207,7 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                   <DropdownMenuContent
                     align="end"
                     sideOffset={10}
-                    className="w-[280px]"
+                    className="dark w-[280px] border-white/10 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/40"
                   >
                     {/* Profile info */}
                     <DropdownMenuLabel className="p-0 font-normal">
@@ -311,7 +310,7 @@ export function PublicHeader({ auth }: PublicHeaderProps) {
                           Language
                         </DropdownMenuSubTrigger>
                         <DropdownMenuPortal>
-                          <DropdownMenuSubContent sideOffset={8}>
+                          <DropdownMenuSubContent sideOffset={8} className="dark border-white/10 bg-zinc-900 text-zinc-100 shadow-2xl shadow-black/40">
                             {LANGUAGES.map((lang) => (
                               <DropdownMenuItem
                                 key={lang.value}

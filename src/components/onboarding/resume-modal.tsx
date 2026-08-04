@@ -31,7 +31,7 @@ export function ResumeModal({
   return (
     <Dialog open={open}>
       <DialogContent
-        hideClose
+        showCloseButton={false}
         className="max-w-sm border-white/10 bg-background/95 p-0 shadow-2xl backdrop-blur-xl sm:rounded-2xl"
         onPointerDownOutside={(e) => e.preventDefault()}
       >

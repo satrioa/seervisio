@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Loader2, Crown, Check, ShieldCheckIcon, ArrowRight } from "lucide-react";
+import { Crown, Check, ShieldCheckIcon, ArrowRight } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { InfiniteRibbon } from "@/components/ui/infinite-ribbon";
 import { Badge } from "@/components/ui/badge";
@@ -174,11 +174,7 @@ export function OfferSection() {
             <div className="flex flex-col gap-6 p-8">
             <hr className="via-primary absolute top-0 left-[10%] h-[1px] w-[80%] border-0 bg-linear-to-r from-transparent to-transparent" />
             
-            {pkg.loading ? (
-              <div className="flex h-[360px] items-center justify-center">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : pkg.data ? (
+             {pkg.data ? (
               <>
               <div className="relative z-10 flex flex-col items-center gap-5 text-center">
                 <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -225,12 +221,12 @@ export function OfferSection() {
                       onClick={handleBuyLifetime}
                       disabled={buying}
                     >
-                  {buying ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Memproses...
-                    </>
-                  ) : (
+                   {buying ? (
+                     <>
+                       <span className="size-4 animate-spin inline-block border-2 border-white/30 border-t-white rounded-full" />
+                       Memproses...
+                     </>
+                   ) : (
                     <>
                       Beli Sekarang
                       <ArrowRight className="size-4" />
