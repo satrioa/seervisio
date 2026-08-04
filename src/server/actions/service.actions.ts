@@ -20,7 +20,7 @@ import { findOrCreateCustomer } from "@/repositories/customer.repository";
 import { callGenerateServiceNumber, callRecordServicePayment, getServicePayments, callCalculateServicePaymentSummary } from "@/repositories/payment.repository";
 import { getServiceSparepartUsages } from "@/repositories/inventory.repository";
 import { getServiceStatusHistory } from "@/repositories/service.repository";
-import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, TimelineEntry, ServicePaymentSummary } from "@/components/services/service-data";
+import type { ServiceRecord, ServiceStatus, SparepartItem, PaymentItem, ServicePaymentRecord, ServicePaymentRecordType, TimelineEntry, TimelineEvent, TimelineEventType, ServicePaymentSummary } from "@/components/services/service-data";
 import { mapDbStatusToUI, SERVICE_STATUS_LABELS, getDeviceIconKey, type ServiceDbStatus, type ServiceUiStatus } from "@/lib/services/service-status";
 import { getServicesPaymentSummary } from "@/server/domain/service-payment-summary";
 import { sendOperationalNotification } from "@/server/notifications/notification.service";
@@ -157,7 +157,8 @@ export async function listServicesAction(
     )];
 
     if (technicianIds.length > 0) {
-      const { data: techProfiles } = await (supabase as any)
+      const adminDb = createServiceRoleSupabaseClient();
+      const { data: techProfiles } = await (adminDb as any)
         .from("profiles")
         .select("id, name")
         .in("id", technicianIds);
@@ -275,6 +276,7 @@ function mapServiceRowToUiItem(row: any): ServiceRecord {
     spareparts: [],
     payments: [],
     timeline: [],
+    activityEvents: [],
     notes: [],
     pickedUpAt: row.picked_up_at ?? undefined,
     pickupName: row.pickup_name ?? undefined,
@@ -283,6 +285,290 @@ function mapServiceRowToUiItem(row: any): ServiceRecord {
     pickupNote: row.pickup_note ?? undefined,
     pickedUpBy: row.picked_up_by_profile_id ?? undefined,
   };
+}
+
+/* ─── Overview V2 Types ─── */
+
+export interface OverviewActionRequiredItem {
+  id: string;
+  serviceNumber: string;
+  deviceName: string;
+  customerName: string;
+  priorityLabel: string;
+  priorityScore: number;
+  technicianName: string | null;
+  doneAt?: string;
+}
+
+export interface OverviewPickupQueueItem {
+  id: string;
+  serviceNumber: string;
+  deviceName: string;
+  customerName: string;
+  doneAt: string;
+  daysSinceReady: number;
+}
+
+export interface OverviewV2Data {
+  totalMasuk: number;
+  dalamPerbaikan: number;
+  qc: number;
+  selesaiHariIni: number;
+  actionRequired: OverviewActionRequiredItem[];
+  pickupQueue: OverviewPickupQueueItem[];
+  trend14Days: Array<{ date: string; masuk: number; selesai: number }>;
+}
+
+/* ─── Service Overview V2 (with Action Required + Pickup Queue) ─── */
+
+export async function getServiceOverviewV2Action(
+  brandSlug: string,
+  branchId?: string | null,
+): Promise<ActionResult<OverviewV2Data>> {
+  try {
+    const session = await getSessionData(brandSlug);
+    requireActionPermission(session.role, "service.view");
+
+    const requestedBranchId = branchId === "ALL_BRANCHES" ? null : (branchId ?? null);
+    let resolvedBranchId = requestedBranchId;
+
+    if (resolvedBranchId) {
+      requireBranchAccess(session, resolvedBranchId, "getServiceOverviewV2Action");
+    } else if (!session.canAccessAllBranches) {
+      resolvedBranchId = session.defaultBranchId;
+      if (!resolvedBranchId) {
+        return errorResult("Anda tidak memiliki akses ke cabang ini.");
+      }
+      requireBranchAccess(session, resolvedBranchId, "getServiceOverviewV2Action");
+    }
+
+    const supabase = await createServerSupabase();
+
+    const baseSelect = `
+      id,
+      brand_id,
+      branch_id,
+      service_number,
+      device_type,
+      device_brand,
+      device_model,
+      reported_issue,
+      current_status,
+      assigned_technician_id,
+      estimated_cost,
+      final_cost,
+      intake_at,
+      created_at,
+      done_at,
+      qc_at,
+      updated_at,
+      picked_up_at,
+      pickup_name,
+      pickup_phone,
+      deleted_at,
+      customers:customers!services_customer_id_fkey(id, name, phone),
+      branches:branches!services_branch_id_fkey(id, name),
+      assigned_technician:profiles!services_assigned_technician_id_fkey(id, name)
+    `;
+
+    let query = (supabase as any)
+      .from("services")
+      .select(baseSelect)
+      .eq("brand_id", session.brandId)
+      .is("deleted_at", null)
+      .neq("current_status", "CANCELLED");
+
+    if (resolvedBranchId) query = query.eq("branch_id", resolvedBranchId);
+
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    // ── KPI Counts ──
+    const totalMasuk = rows.filter((r: any) => r.current_status === "INTAKE").length;
+    const dalamPerbaikan = rows.filter(
+      (r: any) =>
+        r.current_status === "DIAGNOSIS" ||
+        r.current_status === "REPAIRING" ||
+        r.current_status === "WAITING_APPROVAL",
+    ).length;
+    const qc = rows.filter((r: any) => r.current_status === "QC").length;
+    const selesaiHariIni = rows.filter(
+      (r: any) =>
+        r.current_status === "DONE" &&
+        (r.done_at ?? r.updated_at ?? "").startsWith(today),
+    ).length;
+
+    // ── Action Required Scoring ──
+    const actionRequired: OverviewActionRequiredItem[] = [];
+
+    const getDaysSince = (dateStr: string): number =>
+      Math.floor((now.getTime() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+
+    for (const r of rows) {
+      let score = 0;
+      let label = "";
+
+      const customer = Array.isArray(r.customers) ? r.customers[0] : r.customers;
+      const deviceName =
+        [r.device_brand, r.device_model].filter(Boolean).join(" ") ||
+        r.device_type ||
+        "-";
+      const customerName = customer?.name ?? customer?.phone ?? "Tanpa nama";
+
+      // Pickup Overdue (>3 days since done, not picked up)
+      if (r.current_status === "DONE" && !r.picked_up_at && r.done_at) {
+        const days = getDaysSince(r.done_at);
+        if (days >= 3) {
+          score = 100;
+          label = "Pickup Overdue";
+          actionRequired.push({
+            id: r.id,
+            serviceNumber: r.service_number,
+            deviceName,
+            customerName,
+            priorityLabel: label,
+            priorityScore: score,
+            technicianName: null,
+            doneAt: r.done_at,
+          });
+          continue;
+        }
+      }
+
+      // Waiting Technician
+      if (!r.assigned_technician_id &&
+          r.current_status !== "DONE" &&
+          r.current_status !== "CANCELLED") {
+        score = 90;
+        label = "Waiting Technician";
+        actionRequired.push({
+          id: r.id,
+          serviceNumber: r.service_number,
+          deviceName,
+          customerName,
+          priorityLabel: label,
+          priorityScore: score,
+          technicianName: null,
+        });
+        continue;
+      }
+
+      // Waiting Customer Approval
+      if (r.current_status === "WAITING_APPROVAL") {
+        score = 80;
+        label = "Waiting Approval";
+        actionRequired.push({
+          id: r.id,
+          serviceNumber: r.service_number,
+          deviceName,
+          customerName,
+          priorityLabel: label,
+          priorityScore: score,
+          technicianName: null,
+        });
+        continue;
+      }
+
+      // QC Overdue (>2 days in QC)
+      if (r.current_status === "QC" && r.qc_at) {
+        const days = getDaysSince(r.qc_at);
+        if (days >= 2) {
+          score = 60;
+          label = "QC Overdue";
+          actionRequired.push({
+            id: r.id,
+            serviceNumber: r.service_number,
+            deviceName,
+            customerName,
+            priorityLabel: label,
+            priorityScore: score,
+            technicianName: null,
+          });
+          continue;
+        }
+      }
+
+      // Payment Pending
+      if (r.current_status !== "DONE" && r.current_status !== "CANCELLED") {
+        const cost = Number(r.final_cost || r.estimated_cost || 0);
+        if (cost > 0) {
+          actionRequired.push({
+            id: r.id,
+            serviceNumber: r.service_number,
+            deviceName,
+            customerName,
+            priorityLabel: "Payment Pending",
+            priorityScore: 50,
+            technicianName: null,
+          });
+          continue;
+        }
+      }
+    }
+
+    // Sort by score descending, take top 5
+    actionRequired.sort((a, b) => b.priorityScore - a.priorityScore);
+
+    // ── Pickup Queue ──
+    const pickupQueue: OverviewPickupQueueItem[] = rows
+      .filter((r: any) => r.current_status === "DONE" && !r.picked_up_at && r.done_at)
+      .sort((a: any, b: any) => new Date(a.done_at).getTime() - new Date(b.done_at).getTime())
+      .slice(0, 5)
+      .map((r: any) => {
+        const customer = Array.isArray(r.customers) ? r.customers[0] : r.customers;
+        const deviceName =
+          [r.device_brand, r.device_model].filter(Boolean).join(" ") ||
+          r.device_type ||
+          "-";
+        return {
+          id: r.id,
+          serviceNumber: r.service_number,
+          deviceName,
+          customerName: customer?.name ?? customer?.phone ?? "Tanpa nama",
+          doneAt: r.done_at,
+          daysSinceReady: getDaysSince(r.done_at),
+        };
+      });
+
+    // ── Trend: last 14 days ──
+    const trendMap = new Map<string, { date: string; masuk: number; selesai: number }>();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      trendMap.set(key, { date: key, masuk: 0, selesai: 0 });
+    }
+
+    for (const r of rows) {
+      const createdDay = (r.created_at ?? "").slice(0, 10);
+      const doneDay = r.current_status === "DONE"
+        ? (r.done_at ?? r.updated_at ?? "").slice(0, 10)
+        : null;
+
+      if (trendMap.has(createdDay)) {
+        trendMap.get(createdDay)!.masuk += 1;
+      }
+      if (doneDay && trendMap.has(doneDay)) {
+        trendMap.get(doneDay)!.selesai += 1;
+      }
+    }
+
+    return successResult({
+      totalMasuk,
+      dalamPerbaikan,
+      qc,
+      selesaiHariIni,
+      actionRequired: actionRequired.slice(0, 5),
+      pickupQueue,
+      trend14Days: Array.from(trendMap.values()),
+    });
+  } catch (err: any) {
+    console.error("[getServiceOverviewV2Action]", err);
+    return errorResult(err.message ?? "Gagal memuat overview servis.");
+  }
 }
 
 /* ─── Service Overview & Trend ─── */
@@ -385,11 +671,18 @@ export async function getServiceDetailAction(
     if (!row) return errorResult("Servis tidak ditemukan.");
     
     // 2. Fetch all relations in parallel
-    const [payments, spareparts, timeline] = await Promise.all([
+    const supabase = await createServerSupabase();
+    const [payments, spareparts, v4Spareparts, timeline] = await Promise.all([
       getServicePayments(serviceId),
       getServiceSparepartUsages(serviceId),
+      (supabase as any)
+        .from("inv_sparepart_usage")
+        .select("*")
+        .eq("service_id", serviceId)
+        .order("created_at", { ascending: true }),
       getServiceStatusHistory(serviceId),
     ]);
+    console.log("[TRACE:Action] getServiceDetailAction timeline raw length:", timeline?.length ?? 0, "for serviceId:", serviceId);
 
     // 3. Calculate payment summary
     let paymentSummary: ServicePaymentSummary | null = null;
@@ -419,12 +712,12 @@ export async function getServiceDetailAction(
     }));
     const mappedPaymentRecords: ServicePaymentRecord[] = payments.map((p: any) => ({
       id: p.id,
-      serviceId: service.id,
+      serviceId: row.id,
       paymentType: resolveServicePaymentRecordType(p.metadata),
       amount: Number(p.gross_amount) || 0,
       method: p.payment_method?.name ?? "",
       methodType: p.payment_method?.type ?? "",
-      accountName: p.payment_account?.name ?? "",
+      accountName: p.payment_account?.account_name ?? "",
       status: "SUCCEEDED" as const,
       paidAt: p.paid_at ?? p.created_at,
       note: p.notes ?? undefined,
@@ -442,7 +735,6 @@ export async function getServiceDetailAction(
         price,
         totalPrice: qty * price,
         type: "sparepart",
-        // Snapshot data
         itemNameSnapshot: s.item_name_snapshot ?? null,
         variantSnapshot: s.variant_snapshot ?? null,
         skuSnapshot: s.sku_snapshot ?? null,
@@ -470,8 +762,30 @@ export async function getServiceDetailAction(
         } : null,
       };
     });
+
+    // 5b. Map V4 sparepart usage records and merge
+    const v4Data = (v4Spareparts as any)?.data ?? [];
+    const mappedV4Spareparts: SparepartItem[] = v4Data.map((u: any) => {
+      const qty = Number(u.quantity ?? 1);
+      const price = Number(u.selling_price_snapshot ?? 0);
+      const variantName = u.variant_name_snapshot ? ` (${u.variant_name_snapshot})` : "";
+      return {
+        id: u.id,
+        name: `${u.item_name_snapshot ?? "Unknown"}${variantName}`,
+        qty,
+        price,
+        totalPrice: qty * price,
+        type: "sparepart",
+        itemNameSnapshot: u.item_name_snapshot ?? null,
+        variantSnapshot: u.attributes_snapshot ?? null,
+        sellingPriceSnapshot: price || null,
+        unitCostSnapshot: u.cost_price_snapshot != null ? Number(u.cost_price_snapshot) : null,
+      };
+    });
+
+    const allSpareparts = [...mappedSpareparts, ...mappedV4Spareparts];
     
-    // 6. Map timeline to UI TimelineEntry[]
+    // 6. Map timeline to UI TimelineEntry[] and activity events
     const mappedTimeline: TimelineEntry[] = timeline.map((t: any) => ({
       id: t.id,
       status: fromDbStatus(t.to_status),
@@ -479,9 +793,12 @@ export async function getServiceDetailAction(
       toStatus: fromDbStatus(t.to_status),
       timestamp: t.changed_at ?? t.created_at,
       note: t.reason ?? undefined,
-      changedBy: t.changed_by_profile?.full_name ?? undefined,
+      changedBy: t.changed_by_profile?.name ?? undefined,
     }));
-    
+    console.log("[TRACE:Action] mappedTimeline length:", mappedTimeline.length, "sample:", mappedTimeline[0]?.status ?? "N/A");
+
+    const activityEvents: TimelineEvent[] = timeline.map((t: any) => mapTimelineRowToEvent(t)).reverse();
+
     // 7. Map service row to ServiceRecord
     const uiStatus = mapDbStatusToUI(row.current_status);
     const deviceName =
@@ -519,9 +836,10 @@ export async function getServiceDetailAction(
       createdAt: row.created_at ?? new Date().toISOString(),
       updatedAt: row.updated_at ?? new Date().toISOString(),
       estimatedCompletion: undefined,
-      spareparts: mappedSpareparts,
+      spareparts: allSpareparts,
       payments: mappedPayments,
       timeline: mappedTimeline,
+      activityEvents,
       notes: [],
       pickedUpAt: row.picked_up_at ?? undefined,
       pickupName: row.pickup_name ?? undefined,
@@ -538,7 +856,21 @@ export async function getServiceDetailAction(
       dpAmount: 0,
       paymentStatus: "UNPAID",
     };
-    
+
+    // Post-fetch technician name if FK join returned null (RLS on profiles)
+    if (service.assignedTechnicianId && !service.technicianName) {
+      const adminDb = createServiceRoleSupabaseClient();
+      const { data: techProfile } = await (adminDb as any)
+        .from("profiles")
+        .select("name")
+        .eq("id", service.assignedTechnicianId)
+        .maybeSingle();
+      if (techProfile?.name) {
+        service.technicianName = techProfile.name;
+        service.technician = techProfile.name;
+      }
+    }
+
     return successResult(service);
   } catch (err: any) {
     console.error("[getServiceDetailAction]", err);
@@ -549,6 +881,147 @@ export async function getServiceDetailAction(
 /**
  * Map payment DB row to UI payment type based on metadata.
  */
+function deriveEventType(t: any): TimelineEventType {
+  const metaEventType = t.metadata?.event_type;
+  if (metaEventType && typeof metaEventType === "string") return metaEventType as TimelineEventType;
+
+  const reason = (t.reason ?? "") as string;
+  const fromStatus = t.from_status as string | null;
+  const toStatus = t.to_status as string;
+
+  if (!fromStatus) {
+    if (reason.startsWith("Servis baru")) return "SERVICE_CREATED";
+    if (reason.startsWith("Teknisi dihapus")) return "TECHNICIAN_UNASSIGNED";
+    if (reason.startsWith("Teknisi ditugaskan") || reason.startsWith("Teknisi berubah")) return "TECHNICIAN_ASSIGNED";
+    if (reason.startsWith("DP diterima")) return "PAYMENT_CREATED";
+    if (reason.startsWith("Sparepart")) return "SPAREPART_ADDED";
+    if (reason.startsWith("Pembayaran")) return "PAYMENT_RECEIVED";
+    if (reason.startsWith("Tagihan")) return "BILLING_SET";
+    if (reason.startsWith("Unit diserahkan")) return "SERVICE_PICKED_UP";
+  }
+
+  if (fromStatus === "CANCELLED" && toStatus === "INTAKE") return "SERVICE_REOPENED";
+  if (fromStatus && toStatus && fromStatus !== toStatus) return "STATUS_CHANGED";
+
+  return "STATUS_CHANGED";
+}
+
+function buildEventDescription(eventType: TimelineEventType, t: any): string {
+  const reason = (t.reason ?? "") as string;
+  const meta = t.metadata ?? {};
+
+  switch (eventType) {
+    case "SERVICE_CREATED":
+      return "Servis baru dibuat.";
+    case "TECHNICIAN_ASSIGNED": {
+      const name = reason.replace(/^Teknisi (ditugaskan|berubah):\s*/, "").replace(/\s*→.*$/, "").trim();
+      return name ? `${name} ditugaskan sebagai teknisi.` : "Teknisi ditugaskan.";
+    }
+    case "TECHNICIAN_UNASSIGNED":
+      return "Teknisi dihapus dari servis.";
+    case "PAYMENT_CREATED": {
+      const amount = meta.amount ? Number(meta.amount) : 0;
+      return amount > 0 ? `Tagihan sebesar Rp${amount.toLocaleString("id-ID")} dibuat.` : reason || "Tagihan dibuat.";
+    }
+    case "PAYMENT_RECEIVED": {
+      const amount = meta.amount ? Number(meta.amount) : 0;
+      return amount > 0 ? `Pembayaran Rp${amount.toLocaleString("id-ID")} diterima.` : reason || "Pembayaran diterima.";
+    }
+    case "SPAREPART_ADDED":
+      return reason || "Sparepart ditambahkan.";
+    case "BILLING_SET":
+      return reason || "Tagihan diperbarui.";
+    case "SERVICE_PICKED_UP":
+      return reason || "Perangkat telah diserahkan kepada pelanggan.";
+    case "SERVICE_REOPENED":
+      return "Servis dibuka kembali.";
+    case "STATUS_CHANGED":
+      return "Status servis berubah.";
+    case "SERVICE_CANCELLED":
+      return "Servis dibatalkan.";
+    default:
+      return reason || "Aktivitas servis.";
+  }
+}
+
+function mapTimelineRowToEvent(t: any): TimelineEvent {
+  const eventType = deriveEventType(t);
+  const actor = t.changed_by_profile?.name ?? t.changed_by ?? "Sistem";
+  const createdAt = t.changed_at ?? t.created_at ?? new Date().toISOString();
+  const fromLabel = t.from_status ? fromDbStatus(t.from_status) : null;
+  const toLabel = t.to_status ? fromDbStatus(t.to_status) : null;
+  const reason = (t.reason ?? "") as string;
+
+  let title: string;
+  let description: string;
+
+  switch (eventType) {
+    case "SERVICE_CREATED":
+      title = "Servis dibuat";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "STATUS_CHANGED":
+      title = "Status berubah";
+      description = fromLabel && toLabel && fromLabel !== toLabel
+        ? `${fromLabel} → ${toLabel}`
+        : buildEventDescription(eventType, t);
+      break;
+    case "TECHNICIAN_ASSIGNED":
+      title = "Teknisi ditugaskan";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "TECHNICIAN_UNASSIGNED":
+      title = "Teknisi dihapus";
+      description = "Teknisi dihapus dari servis.";
+      break;
+    case "PAYMENT_CREATED":
+      title = "Tagihan dibuat";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "PAYMENT_RECEIVED":
+      title = "Pembayaran diterima";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "SPAREPART_ADDED":
+      title = "Sparepart ditambahkan";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "SPAREPART_REMOVED":
+      title = "Sparepart dihapus";
+      description = "Sparepart dihapus dari servis.";
+      break;
+    case "BILLING_SET":
+      title = "Tagihan diperbarui";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "SERVICE_PICKED_UP":
+      title = "Perangkat diambil";
+      description = buildEventDescription(eventType, t);
+      break;
+    case "SERVICE_REOPENED":
+      title = "Servis dibuka kembali";
+      description = "Servis dibuka kembali untuk diproses.";
+      break;
+    case "SERVICE_CANCELLED":
+      title = "Servis dibatalkan";
+      description = reason || "Servis dibatalkan.";
+      break;
+    default:
+      title = "Aktivitas";
+      description = t.reason || "Aktivitas servis.";
+  }
+
+  return {
+    id: t.id,
+    eventType,
+    title,
+    description,
+    actor,
+    createdAt,
+    metadata: t.metadata ?? {},
+  };
+}
+
 function resolvePaymentType(metadata?: Record<string, unknown> | null): PaymentItem["type"] {
   const meta = metadata ?? {};
   if (meta.payment_type === "DOWN_PAYMENT" || meta.is_dp === true) return "dp";
@@ -676,6 +1149,8 @@ export async function createServiceAction(
       if (!branchAccess) {
         return errorResult("Teknisi tidak memiliki akses ke cabang yang dipilih.");
       }
+    } else if (session.role === ROLES.TECHNICIAN) {
+      validatedTechnicianId = session.profileId;
     }
 
     const serviceNumber = await callGenerateServiceNumber(brandId);
@@ -707,6 +1182,7 @@ export async function createServiceAction(
       from_status: null,
       to_status: "INTAKE",
       reason: "Servis baru dibuat",
+      metadata: { event_type: "SERVICE_CREATED" },
       changed_by: session.profileId,
     });
 
@@ -724,6 +1200,7 @@ export async function createServiceAction(
         from_status: null,
         to_status: "INTAKE",
         reason: `Teknisi ditugaskan: ${techProfile?.name ?? "—"}`,
+        metadata: { event_type: "TECHNICIAN_ASSIGNED" },
         changed_by: session.profileId,
       });
     }
@@ -816,7 +1293,7 @@ export async function createServiceAction(
         from_status: null,
         to_status: "INTAKE",
         reason: `DP diterima: ${paymentResult?.payment_number ?? ""}`,
-        metadata: { payment_type: "DOWN_PAYMENT", amount: input.dpAmount, payment_number: paymentResult?.payment_number },
+        metadata: { event_type: "PAYMENT_CREATED", payment_type: "DOWN_PAYMENT", amount: input.dpAmount, payment_number: paymentResult?.payment_number },
         changed_by: session.profileId,
       });
 
@@ -984,8 +1461,10 @@ export async function assignServiceTechnicianAction(
     const isChange = oldTechnicianId && oldTechnicianId !== technicianProfileId;
 
     let reason: string;
+    let eventType: string = "TECHNICIAN_ASSIGNED";
     if (isUnassign) {
       reason = "Teknisi dihapus dari servis";
+      eventType = "TECHNICIAN_UNASSIGNED";
     } else if (isChange) {
       const { data: oldProfile } = await (adminDb as any)
         .from("profiles")
@@ -1004,6 +1483,7 @@ export async function assignServiceTechnicianAction(
       from_status: null,
       to_status: service.current_status ?? "INTAKE",
       reason,
+      metadata: { event_type: eventType },
       changed_by: session.profileId,
     });
 

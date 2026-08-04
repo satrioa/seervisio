@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Wallet,
   ClipboardList,
@@ -8,6 +9,7 @@ import {
   Package,
   Clock,
 } from "lucide-react";
+import { Label, Pie, PieChart } from "recharts";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   flexRender,
@@ -19,6 +21,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,22 +36,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Separator } from "@/components/ui/separator";
 import { SummaryCard } from "@/components/dashboard/summary-card";
+import { ActionRequiredCard } from "@/components/services/service-overview-action-card";
+import { PickupQueueCard } from "@/components/services/service-overview-pickup-card";
+import { useActiveBranch } from "@/components/layout/active-branch-context";
 import type { DashboardService } from "@/server/actions/dashboard.actions";
-
-/* ── Helpers ── */
+import {
+  getServiceOverviewV2Action,
+  type OverviewV2Data,
+} from "@/server/actions/service.actions";
 
 function formatRp(n: number) {
   return `Rp ${n.toLocaleString("id-ID")}`;
-}
-
-function sevBadge(s: "high" | "medium" | "low") {
-  switch (s) {
-    case "high": return { variant: "destructive" as const, label: "High" };
-    case "medium": return { variant: "default" as const, label: "Medium" };
-    case "low": return { variant: "secondary" as const, label: "Low" };
-  }
 }
 
 type RecentServis = {
@@ -60,10 +66,54 @@ interface ServiceOverviewTabProps {
 }
 
 export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const brandSlug = pathname.split("/")[1];
+  const { activeBranchId } = useActiveBranch();
+
   const pipelineData = data?.pipelineData ?? [];
   const recentServices = (data?.recentServices ?? []).slice(0, 5);
-  const needAttention = data?.needAttention ?? [];
   const techPerformances = data?.techPerformances ?? [];
+
+  const [overviewData, setOverviewData] = React.useState<OverviewV2Data | null>(null);
+
+  React.useEffect(() => {
+    getServiceOverviewV2Action(brandSlug, activeBranchId).then((result) => {
+      if (result.success) setOverviewData(result.data);
+    });
+  }, [brandSlug, activeBranchId]);
+
+  const handleOpenService = React.useCallback(
+    (serviceId: string) => {
+      router.push(`/${brandSlug}/panel/services?service=${serviceId}`);
+    },
+    [brandSlug, router],
+  );
+
+  const pipelineChartData = React.useMemo(() => {
+    const colorMap = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--color-success)", "var(--chart-5)"];
+    return pipelineData.map((p, i) => ({
+      status: p.label,
+      count: p.count,
+      fill: colorMap[i % colorMap.length],
+    }));
+  }, [pipelineData]);
+
+  const pipelineChartConfig = {
+    count: { label: "Servis", color: "var(--chart-1)" },
+    Masuk: { label: "Masuk", color: "var(--chart-1)" },
+    Diagnosa: { label: "Diagnosa", color: "var(--chart-2)" },
+    Menunggu: { label: "Menunggu", color: "var(--chart-3)" },
+    Perbaikan: { label: "Perbaikan", color: "var(--chart-4)" },
+    QC: { label: "QC", color: "var(--chart-5)" },
+    Selesai: { label: "Selesai", color: "var(--color-success)" },
+    Batal: { label: "Batal", color: "var(--chart-5)" },
+  } satisfies ChartConfig;
+
+  const totalPipeline = React.useMemo(
+    () => pipelineData.reduce((s, p) => s + p.count, 0),
+    [pipelineData],
+  );
 
   const columns: ColumnDef<RecentServis>[] = [
     {
@@ -117,8 +167,8 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
     },
     {
       id: "actions",
-      cell: () => (
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+      cell: ({ row }) => (
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleOpenService(row.original.id)}>
           Detail
         </Button>
       ),
@@ -141,58 +191,113 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
   });
 
   return (
-    <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px]">
       {/* ══ LEFT COLUMN ══ */}
       <div className="space-y-3">
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Penghasilan Servis" value={formatRp(data?.totalServiceRevenue ?? 0)} helper="dari pembayaran servis" icon={Wallet} />
-          <SummaryCard label="Servis Diterima" value={String(data?.serviceInCount ?? 0)} helper="servis masuk" icon={ClipboardList} />
-          <SummaryCard label="Servis Selesai" value={String(data?.serviceDoneCount ?? 0)} helper="selesai" icon={CheckCircle2} />
-          <SummaryCard label="Unit Belum Diambil" value={String(data?.serviceUncollectedCount ?? 0)} helper="belum diserahkan" icon={Package} />
-        </div>
+        {/* ── KPI (2x2) + Pipeline Chart row ── */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.2fr]">
+          {/* 2x2 KPI Cards — no gap */}
+          <div className="grid grid-cols-2 gap-0 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs">
+            <SummaryCard label="Penghasilan Servis" value={formatRp(data?.totalServiceRevenue ?? 0)} helper="dari pembayaran servis" icon={Wallet} />
+            <SummaryCard label="Servis Diterima" value={String(data?.serviceInCount ?? 0)} helper="servis masuk" icon={ClipboardList} />
+            <SummaryCard label="Servis Selesai" value={String(data?.serviceDoneCount ?? 0)} helper="selesai" icon={CheckCircle2} />
+            <SummaryCard label="Unit Belum Diambil" value={String(data?.serviceUncollectedCount ?? 0)} helper="belum diserahkan" icon={Package} />
+          </div>
 
-        {/* ── Pipeline Servis ── */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pipeline Servis</CardTitle>
-            <CardDescription>Distribusi status servis aktif hari ini</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {pipelineData.length > 0 ? (
-              <>
-                <Separator />
-                <div className="space-y-0.5">
-                  <p className="font-medium text-xl">Total {pipelineData.reduce((s, p) => s + p.count, 0)} Servis</p>
-                  <p className="text-muted-foreground text-xs">Aktif berdasarkan periode terpilih</p>
+          {/* Pipeline Donut Chart */}
+          <Card>
+            <CardHeader className="items-center pb-0">
+              <CardTitle>Pipeline Servis</CardTitle>
+              <CardDescription>Distribusi status servis</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+              {pipelineData.length > 0 ? (
+                <ChartContainer
+                  config={pipelineChartConfig}
+                  className="mx-auto aspect-square max-h-[260px]"
+                >
+                  <PieChart accessibilityLayer>
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          className="min-w-36 gap-2"
+                          formatter={(value, name) => {
+                            const cfg = pipelineChartConfig[name as keyof typeof pipelineChartConfig];
+                            const dotColor = cfg?.color || "var(--chart-1)";
+                            return (
+                              <div className="flex w-full items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <div
+                                    className="h-2.5 w-2.5 shrink-0 rounded-xs"
+                                    style={{ backgroundColor: dotColor }}
+                                  />
+                                  <span className="text-muted-foreground">
+                                    {cfg?.label || name}
+                                  </span>
+                                </div>
+                                <span className="text-foreground font-semibold tabular-nums">
+                                  {Number(value).toLocaleString()}
+                                </span>
+                              </div>
+                            );
+                          }}
+                        />
+                      }
+                    />
+                    <ChartLegend
+                      content={<ChartLegendContent nameKey="status" />}
+                      className="-translate-y-2 flex-wrap gap-2"
+                    />
+                    <Pie
+                      data={pipelineChartData}
+                      dataKey="count"
+                      nameKey="status"
+                      innerRadius={55}
+                      cornerRadius={4}
+                      paddingAngle={2}
+                      stroke="var(--background)"
+                      strokeWidth={2}
+                    >
+                      <Label
+                        content={({ viewBox }) => {
+                          if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                            return (
+                              <text
+                                x={viewBox.cx}
+                                y={viewBox.cy}
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                              >
+                                <tspan
+                                  x={viewBox.cx}
+                                  y={viewBox.cy}
+                                  className="fill-foreground text-2xl font-bold tabular-nums"
+                                >
+                                  {totalPipeline}
+                                </tspan>
+                                <tspan
+                                  x={viewBox.cx}
+                                  y={(viewBox.cy || 0) + 20}
+                                  className="fill-muted-foreground text-xs"
+                                >
+                                  Total Servis
+                                </tspan>
+                              </text>
+                            );
+                          }
+                        }}
+                      />
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
+                  Belum ada data servis pada periode ini.
                 </div>
-                <Separator />
-                {pipelineData.map((p) => (
-                  <div key={p.label} className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <p className="font-medium text-sm">{p.label}</p>
-                      <p className="text-muted-foreground text-xs">Dalam status ini</p>
-                    </div>
-                    <Badge variant={p.variant === "destructive" ? "destructive" : "secondary"} className="tabular-nums">
-                      {p.count}
-                    </Badge>
-                  </div>
-                ))}
-                <Separator />
-                <p className="text-muted-foreground text-xs">
-                  Pipeline health:{" "}
-                  <span className="font-medium text-primary">
-                    {pipelineData.some((p) => p.variant === "destructive") ? "Perlu perhatian" : "Stabil"}
-                  </span>
-                </p>
-              </>
-            ) : (
-              <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">
-                Belum ada data servis pada periode ini.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {/* ── Recent Servis ── */}
         <Card className="shadow-xs">
@@ -237,36 +342,52 @@ export function ServiceOverviewTab({ data }: ServiceOverviewTabProps) {
 
       {/* ══ RIGHT COLUMN ══ */}
       <div className="space-y-3">
-        {/* ── Butuh Perhatian ── */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Butuh Perhatian</CardTitle>
-            <CardDescription className="text-xs">Servis yang membutuhkan tindakan segera</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {needAttention.length > 0 ? (
-              needAttention.map((item) => {
-                const b = sevBadge(item.severity);
-                return (
-                  <div key={`${item.customer}-${item.device}-${item.reason}`} className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-foreground">{item.customer}</p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {item.reason} · {item.device}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Badge variant={b.variant} className="h-5 rounded-full px-2 text-[10px] font-normal">{b.label}</Badge>
-                      <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]">Lihat</Button>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground">Semua dalam kondisi baik.</p>
-            )}
-          </CardContent>
-        </Card>
+        {/* ── Action Required ── */}
+        {overviewData && overviewData.actionRequired.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1 px-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Action Required
+              </span>
+              <span className="text-[10px] text-muted-foreground/50">{overviewData.actionRequired.length}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {overviewData.actionRequired.map((item) => (
+                <ActionRequiredCard key={item.id} item={item} onOpen={handleOpenService} className="w-full" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Pickup Queue ── */}
+        {overviewData && overviewData.pickupQueue.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1 px-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Pickup Queue
+              </span>
+              <span className="text-[10px] text-muted-foreground/50">{overviewData.pickupQueue.length}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {overviewData.pickupQueue.map((item) => (
+                <PickupQueueCard key={item.id} item={item} onOpen={handleOpenService} className="w-full" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state when nothing needs attention */}
+        {overviewData && overviewData.actionRequired.length === 0 && overviewData.pickupQueue.length === 0 && (
+          <Card className="shadow-xs">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Butuh Perhatian</CardTitle>
+              <CardDescription className="text-xs">Servis yang membutuhkan tindakan segera</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Tidak ada item yang memerlukan perhatian saat ini.</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Performa Teknisi ── */}
         <Card className="shadow-xs">
