@@ -144,7 +144,7 @@ export function ServiceSparepartUsageV4Section({
           variantName: item.variantName,
           productName: item.productName,
           quantity: 1,
-          maxStock: item.currentStock,
+          maxStock: item.stockAvailable,
           unit: item.unit,
         },
       ];
@@ -153,7 +153,9 @@ export function ServiceSparepartUsageV4Section({
 
   const updateCartQty = (tempId: string, qty: number) => {
     setCart((prev) =>
-      prev.map((c) => (c.tempId === tempId ? { ...c, quantity: Math.max(1, qty) } : c)),
+      prev.map((c) =>
+        c.tempId === tempId ? { ...c, quantity: Math.max(1, Math.min(qty, c.maxStock)) } : c,
+      ),
     );
   };
 
@@ -331,7 +333,7 @@ export function ServiceSparepartUsageV4Section({
                     type="button"
                     className="flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-xs transition-colors hover:bg-accent"
                     onClick={() => addToCart(sp)}
-                    disabled={sp.currentStock <= 0}
+                    disabled={sp.stockAvailable <= 0}
                   >
                     <Plus className="size-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
@@ -345,8 +347,8 @@ export function ServiceSparepartUsageV4Section({
                       <div className="font-medium">{formatCurrency(sp.sellingPrice)}</div>
                       <div className="text-muted-foreground">
                         Stok:{" "}
-                        <span className={sp.currentStock <= 0 ? "text-destructive font-medium" : ""}>
-                          {sp.currentStock}
+                        <span className={sp.stockAvailable <= 0 ? "text-destructive font-medium" : ""}>
+                          {sp.stockAvailable}
                         </span>
                       </div>
                     </div>

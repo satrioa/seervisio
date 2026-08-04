@@ -474,6 +474,19 @@ export interface ServiceSparepartUsageResult {
   usageIds: string[];
 }
 
+export interface ReturnSparepartFromServiceInput {
+  branchId: string;
+  serviceId: string;
+  usageId: string;
+}
+
+export interface ReturnSparepartFromServiceResult {
+  usageId: string;
+  movementId: string;
+  restoredQuantity: number;
+  stockAfter: number;
+}
+
 export interface ServiceSparepartUsageV4Row {
   id: string;
   serviceId: string;

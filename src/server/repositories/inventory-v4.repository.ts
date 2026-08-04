@@ -35,6 +35,8 @@ import type {
   UseSparepartForServiceV4Input,
   ServiceSparepartUsageResult,
   ServiceSparepartUsageV4Row,
+  ReturnSparepartFromServiceInput,
+  ReturnSparepartFromServiceResult,
   PosProductV4Row,
   PosVariantV4Row,
   PosUnitSecondOptionV4Row,
@@ -1223,20 +1225,13 @@ export async function searchServiceSparepartsV4(
     .eq("inv_variants.inv_products.is_active", true)
     .gte("current_stock", 1);
 
-  if (search && search.trim()) {
-    const term = search.trim();
-    query = query.or(
-      `inv_variants.inv_products.name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
-    );
-  }
-
   const { data, error } = await query;
   if (error) {
     console.error("[service-sparepart-v4/search/error]", { brandId, branchId, search, error });
     throw new Error(parsePgErr(error));
   }
 
-  const rows: PurchaseVariantSearchRow[] = [];
+  let rows: PurchaseVariantSearchRow[] = [];
   for (const raw of (data as any[]) ?? []) {
     const variant = raw.inv_variants;
     const product = variant.inv_products;
@@ -1268,6 +1263,17 @@ export async function searchServiceSparepartsV4(
   }
 
   rows.sort((a, b) => a.productName.localeCompare(b.productName));
+
+  if (search && search.trim()) {
+    const term = search.trim().toLowerCase();
+    rows = rows.filter(
+      (r) =>
+        r.productName.toLowerCase().includes(term) ||
+        r.variantName.toLowerCase().includes(term) ||
+        (r.sku && r.sku.toLowerCase().includes(term)) ||
+        (r.barcode && r.barcode.toLowerCase().includes(term)),
+    );
+  }
 
   console.log("[service-sparepart-v4/search/debug]", {
     brandId,
@@ -1317,6 +1323,33 @@ export async function useSparepartForServiceV4(
     usageCount: Number(data.usage_count),
     movementIds: (data.movement_ids ?? []) as string[],
     usageIds: (data.usage_ids ?? []) as string[],
+  };
+}
+
+/* ─── Remove sparepart from service V4 (atomic RPC) ─── */
+
+export async function removeSparepartFromServiceV4(
+  supabase: SupabaseClientLike,
+  input: ReturnSparepartFromServiceInput,
+  brandId: number,
+  createdBy: string,
+): Promise<ReturnSparepartFromServiceResult> {
+  const { data, error } = await (supabase as any)
+    .rpc("return_inv_sparepart_from_service", {
+      p_brand_id: brandId,
+      p_branch_id: input.branchId,
+      p_service_id: input.serviceId,
+      p_usage_id: input.usageId,
+      p_created_by: createdBy,
+    });
+
+  if (error) throw new Error(parsePgErr(error));
+
+  return {
+    usageId: data.usage_id,
+    movementId: data.movement_id,
+    restoredQuantity: Number(data.restored_quantity),
+    stockAfter: Number(data.stock_after),
   };
 }
 

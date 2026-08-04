@@ -24,6 +24,7 @@ import type {
   SubmitStockOpnameV4Input,
   ListStockOpnameVariantsV4Params,
   UseSparepartForServiceV4Input,
+  ReturnSparepartFromServiceInput,
   CheckoutPosV4Input,
   VoidPosTransactionV4Input,
 } from "@/server/domain/inventory-v4.types";
@@ -56,6 +57,7 @@ import {
   useSparepartForServiceV4 as repoUseSparepart,
   listServiceSparepartUsageV4 as repoListServiceUsage,
   searchServicesV4 as repoSearchServices,
+  removeSparepartFromServiceV4 as repoRemoveSparepart,
   listPosProductsV4 as repoListPosProducts,
   listPosUnitOptionsV4 as repoListPosUnitOptions,
   checkoutPosV4 as repoCheckoutPos,
@@ -658,6 +660,11 @@ export async function getProductDetailV4Action(
 
     if (!result) return errorResult("Produk tidak ditemukan.");
 
+    if (result.product.branchId) {
+      const { canAccessBranch } = await import("@/domain/access/branch-access");
+      if (!canAccessBranch(session, result.product.branchId)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
+    }
+
     return successResult(result);
   } catch (err: any) {
     console.error("[getProductDetailV4Action]", err);
@@ -786,6 +793,9 @@ export async function searchUnitSecondModelsV4Action(
     if (!query.trim()) return successResult([]);
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
+
+    const { canAccessBranch } = await import("@/domain/access/branch-access");
+    if (!canAccessBranch(session, branchId)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
 
     const supabase = await createServerSupabase();
     const result = await repoSearchUnitSecondModels(supabase as any, session.brandId, branchId, query);
@@ -954,7 +964,7 @@ export async function useSparepartForServiceV4Action(
         from_status: null,
         to_status: service?.current_status ?? "REPAIRING",
         reason: `Sparepart ditambahkan: ${itemSummary} — Rp ${totalCost.toLocaleString("id-ID")}`,
-        metadata: { items: input.items as any, usage_ids: result.usageIds, total_sparepart_cost: totalCost, source: "V4" },
+        metadata: { event_type: "SPAREPART_ADDED", items: input.items as any, usage_ids: result.usageIds, total_sparepart_cost: totalCost, source: "V4" },
         changed_by: session.profileId,
       });
 
@@ -982,6 +992,78 @@ export async function useSparepartForServiceV4Action(
   } catch (err: any) {
     console.error("[useSparepartForServiceV4Action]", err);
     return handleActionError(err, "Gagal mencatat pemakaian sparepart.");
+  }
+}
+
+/* ─── Remove sparepart from service V4 ─── */
+
+export async function removeSparepartFromServiceV4Action(
+  brandSlug: string,
+  input: ReturnSparepartFromServiceInput,
+) {
+  try {
+    const session = await getSessionData(brandSlug);
+    if (!session) return errorResult("Sesi tidak valid.");
+    requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
+
+    const supabase = await createServerSupabase();
+    await requireActiveStoreSession(supabase, session.brandId, input.branchId);
+
+    const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
+    const { canAccessBranch } = await import("@/domain/access/branch-access");
+    if (!canAccessBranch(ctx, input.branchId)) {
+      return errorResult("Anda tidak memiliki akses ke cabang ini.");
+    }
+
+    if (!input.usageId) return errorResult("Pemakaian sparepart tidak valid.");
+    if (!input.serviceId) return errorResult("Servis wajib dipilih.");
+
+    const result = await repoRemoveSparepart(supabase as any, input, session.brandId, session.profileId);
+
+    /* Record timeline and audit for sparepart removal */
+    try {
+      const adminDb = createServiceRoleSupabaseClient();
+      const { data: service } = await (adminDb as any)
+        .from("services")
+        .select("service_number, current_status")
+        .eq("id", input.serviceId)
+        .maybeSingle();
+
+      await addServiceTimelineEntry({
+        brand_id: session.brandId,
+        branch_id: input.branchId,
+        service_id: input.serviceId,
+        from_status: null,
+        to_status: service?.current_status ?? "REPAIRING",
+        reason: `Sparepart dikembalikan: ${result.restoredQuantity} item — stok dikembalikan.`,
+        metadata: { event_type: "SPAREPART_REMOVED", usage_id: input.usageId, movement_id: result.movementId, restored_quantity: result.restoredQuantity, source: "V4" },
+        changed_by: session.profileId,
+      });
+
+      await addAuditLog({
+        brand_id: session.brandId,
+        branch_id: input.branchId,
+        action: "SERVICE_SPAREPART_REMOVED",
+        target_type: "service",
+        target_id: input.serviceId,
+        target_label: service?.service_number ?? input.serviceId,
+        actor_id: session.profileId,
+        description: `Sparepart dikembalikan (V4): ${result.restoredQuantity} item`,
+        details: {
+          usage_id: input.usageId,
+          movement_id: result.movementId,
+          restored_quantity: result.restoredQuantity,
+          source: "V4",
+        },
+      });
+    } catch (auditErr: any) {
+      console.warn("[removeSparepartFromServiceV4Action] audit/timeline error:", auditErr.message);
+    }
+
+    return successResult(result);
+  } catch (err: any) {
+    console.error("[removeSparepartFromServiceV4Action]", err);
+    return handleActionError(err, "Gagal mengembalikan sparepart.");
   }
 }
 
@@ -1072,6 +1154,9 @@ export async function listPosUnitOptionsV4Action(
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_VIEW);
+
+    const { canAccessBranch } = await import("@/domain/access/branch-access");
+    if (!canAccessBranch(session, branchId)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
 
     const supabase = await createServerSupabase();
     const result = await repoListPosUnitOptions(supabase as any, productIds, branchId);
