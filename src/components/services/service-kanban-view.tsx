@@ -17,13 +17,10 @@ import {
 } from "@/components/reui/kanban";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
-import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert";
 import {
   type ServiceRecord,
   type ServiceStatus,
@@ -34,9 +31,8 @@ import {
   getPickupLabel,
   getPickupColor,
 } from "@/components/services/service-data";
-import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
-import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
+import { triggerDynamicIslandFeedback, type DynamicIslandFeedbackPayload } from "@/lib/dynamic-island/dynamic-island-events";
 import {
   updateServiceStatusAction,
   cancelServiceAction,
@@ -370,8 +366,6 @@ export function ServiceKanbanView({
   role,
   onCardDoubleClick,
 }: ServiceKanbanViewProps) {
-  const { showDetail } = useRightSidebar();
-
   console.log("[services:kanban] received", services.length);
 
   React.useEffect(() => {
@@ -438,8 +432,6 @@ export function ServiceKanbanView({
 
   const [columns, setColumns] = useState<Record<string, ServiceRecord[]>>(initialColumns);
   const [cancelTarget, setCancelTarget] = React.useState<ServiceRecord | null>(null);
-  const [dragError, setDragError] = React.useState<string | null>(null);
-  const dragErrorTimer = React.useRef<ReturnType<typeof setTimeout>>(null);
   // Guard so a single drop is only handled once even if dnd-kit fires the
   // move callback more than once (e.g. after the columns state changes
   // mid-drop). Prevents the error feedback from looping / never closing.
@@ -448,6 +440,50 @@ export function ServiceKanbanView({
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
   const [statusSubmitLoading, setStatusSubmitLoading] = React.useState(false);
   const [statusSubmitError, setStatusSubmitError] = React.useState<string | null>(null);
+  // Red banner shown above the kanban when a drag transition is rejected.
+  // It loops in sync with the dynamic island feedback: it appears on rejection
+  // and auto-clears on the same timer as the island so both dismiss together.
+  const [dragError, setDragError] = React.useState<string | null>(null);
+  const dragErrorTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showDragError = React.useCallback((message: string) => {
+    if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
+    setDragError(message);
+    dragErrorTimer.current = setTimeout(() => {
+      setDragError(null);
+      dragErrorTimer.current = null;
+    }, 2400);
+  }, []);
+
+  const clearDragError = React.useCallback(() => {
+    if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
+    dragErrorTimer.current = null;
+    setDragError(null);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
+    };
+  }, []);
+
+  // Drive the banner from the dynamic island feedback loop: whenever an
+  // `error` feedback is broadcast it shows; any other feedback type clears it.
+  // This keeps the alert in sync with (i.e. looping alongside) the island.
+  React.useEffect(() => {
+    const onFeedback = (event: Event) => {
+      const payload = (event as CustomEvent<DynamicIslandFeedbackPayload>).detail;
+      if (payload?.type === "error") {
+        showDragError(payload.description ?? payload.title);
+      } else {
+        clearDragError();
+      }
+    };
+    window.addEventListener("seervis:dynamic-island-feedback", onFeedback);
+    return () => {
+      window.removeEventListener("seervis:dynamic-island-feedback", onFeedback);
+    };
+  }, [showDragError, clearDragError]);
 
   const workflow = useServiceWorkflow((role ?? "MASTER_ADMIN") as any);
 
@@ -476,8 +512,6 @@ export function ServiceKanbanView({
       next[originalStatus] = [...(next[originalStatus] ?? []), service];
       return next;
     });
-    // Allow this card to be re-dropped later (guard is per-drop).
-    handledMoveRef.current = null;
   }, []);
 
   /**
@@ -555,9 +589,6 @@ export function ServiceKanbanView({
 
     if (!result.allowed) {
       revertCardToOriginal(service);
-      setDragError(result.reason ?? "Transisi tidak valid.");
-      if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current);
-      dragErrorTimer.current = setTimeout(() => setDragError(null), 4000);
 
       triggerDynamicIslandFeedback({
         type: "error",
@@ -613,6 +644,7 @@ export function ServiceKanbanView({
         setStatusDialogOpen(false);
         setPendingTransition(null);
         handledMoveRef.current = null;
+        clearDragError();
 
         triggerDynamicIslandFeedback({
           type: "success",
@@ -646,25 +678,14 @@ export function ServiceKanbanView({
     }
   }, [pendingTransition, brandSlug]);
 
-  const openDetail = React.useCallback(
-    (service: ServiceRecord) => {
-      showDetail(service);
-    },
-    [showDetail]
-  );
+  // Single click intentionally does nothing in Kanban view — details open via
+  // double click (sheet). Right sidebar is not used here.
+  const openDetail = useCallback((_service: ServiceRecord) => {
+    /* no-op */
+  }, []);
 
   return (
     <>
-      {/* Drag error alert */}
-      {dragError && (
-        <div className="mb-3">
-          <Alert variant="destructive" className="py-2">
-            <AlertCircle className="size-4" />
-            <AlertDescription className="text-xs">{dragError}</AlertDescription>
-          </Alert>
-        </div>
-      )}
-
       {/* Status transition dialog */}
       <StatusTransitionDialog
         open={statusDialogOpen}
@@ -769,10 +790,24 @@ export function ServiceKanbanView({
         </div>
       )}
 
+      {dragError && (
+        <Alert variant="destructive" className="mb-3">
+          <AlertCircle />
+          <AlertTitle>Perubahan status ditolak</AlertTitle>
+          <AlertDescription>{dragError}</AlertDescription>
+        </Alert>
+      )}
+
     <Kanban
       value={columns}
       onValueChange={handleValueChange}
       onMove={handleMove}
+      onDragStart={() => {
+        // Reset the per-drop guard so a fresh drag can be handled, and clear
+        // any stale rejection banner from a previous attempt.
+        handledMoveRef.current = null;
+        clearDragError();
+      }}
       getItemValue={(item) => item.id}
     >
       <KanbanBoard className="flex h-[calc(100dvh-14rem)] min-h-[360px] items-stretch gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

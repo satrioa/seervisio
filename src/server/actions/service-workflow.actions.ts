@@ -26,6 +26,7 @@ import {
   callRecordServicePayment,
   callCalculateServicePaymentSummary,
   getBranchPaymentMethods,
+  getServicePayments,
 } from "@/repositories/payment.repository";
 import { getServicePaymentSummary, type PaymentSummaryResult } from "@/repositories/payment-summary.repository";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -90,7 +91,7 @@ export async function updateServiceStatusAction(
     });
     const { data: service, error: lookupError } = await (supabase as any)
       .from("services")
-      .select("id, brand_id, branch_id, current_status, service_number, deleted_at")
+      .select("id, brand_id, branch_id, current_status, service_number, deleted_at, assigned_technician_id")
       .eq("id", input.serviceId)
       .eq("brand_id", session.brandId)
       .is("deleted_at", null)
@@ -104,6 +105,7 @@ export async function updateServiceStatusAction(
       serviceBrandId: service?.brand_id,
       serviceBranchId: service?.branch_id,
       currentStatus: service?.current_status,
+      hasTechnician: service?.assigned_technician_id != null,
       deletedAt: service?.deleted_at,
     });
 
@@ -119,11 +121,16 @@ export async function updateServiceStatusAction(
     const nextStatus = normalizeServiceStatus(input.nextStatus);
     const userRole = session.role as unknown as ServiceWorkflowRole;
 
+    if (!service.assigned_technician_id && nextStatus !== "CANCELLED") {
+      return errorResult("Tugaskan teknisi terlebih dahulu sebelum mengubah status servis.");
+    }
+
     const validation = validateServiceStatusTransition({
       currentStatus,
       nextStatus,
       role: userRole,
       reason: input.reason,
+      hasTechnician: service.assigned_technician_id != null,
     });
 
     if (!validation.allowed) {
@@ -295,6 +302,7 @@ export async function updateServiceStatusAction(
       from_status: service.current_status,
       to_status: dbNextStatus,
       reason: input.note ?? input.reason ?? null,
+      metadata: { event_type: "STATUS_CHANGED" },
       changed_by: session.profileId,
     });
 
@@ -414,6 +422,7 @@ export interface CancelServiceInput {
   serviceId: string;
   reason: string;
   returnStock: boolean;
+  paymentAction?: "void" | "refund";
 }
 
 export async function cancelServiceAction(
@@ -459,6 +468,30 @@ export async function cancelServiceAction(
       }
     }
 
+    if (input.paymentAction) {
+      try {
+        const payments = await getServicePayments(service.id);
+        const completedPayments = payments.filter(
+          (p: any) => p.payment_status === "COMPLETED"
+        );
+        const supabase = await createServerSupabase();
+        for (const payment of completedPayments) {
+          const rpcName =
+            input.paymentAction === "void"
+              ? "void_service_payment"
+              : "refund_service_payment";
+          await (supabase as any).rpc(rpcName, {
+            p_service_payment_id: payment.id,
+            p_reason: input.reason,
+            p_created_by: session.profileId,
+            p_metadata: { cancel_reason: input.reason, service_id: service.id },
+          });
+        }
+      } catch (payErr: any) {
+        console.warn("[cancelServiceAction] Payment reversal failed:", payErr.message);
+      }
+    }
+
     await addAuditLog({
       brand_id: service.brand_id,
       branch_id: service.branch_id,
@@ -468,7 +501,7 @@ export async function cancelServiceAction(
       target_label: service.service_number,
       actor_id: session.profileId,
       description: `Servis dibatalkan: ${input.reason}`,
-      details: { reason: input.reason, return_stock: input.returnStock, previous_status: service.current_status },
+      details: { reason: input.reason, return_stock: input.returnStock, payment_action: input.paymentAction, previous_status: service.current_status },
     });
 
     return successResult(undefined);
@@ -631,7 +664,7 @@ export async function addServiceSparepartAction(
       from_status: null,
       to_status: service.current_status,
       reason: `Sparepart ditambahkan: ${itemSummary} — Rp ${totalSparepartCost.toLocaleString("id-ID")}`,
-      metadata: { items: input.items as any, usage_ids: usageIds, total_sparepart_cost: totalSparepartCost },
+      metadata: { event_type: "SPAREPART_ADDED", items: input.items as any, usage_ids: usageIds, total_sparepart_cost: totalSparepartCost },
       changed_by: session.profileId,
     });
 
@@ -835,7 +868,7 @@ export async function receiveServicePaymentAction(
       from_status: null,
       to_status: service.current_status,
       reason: `Pembayaran diterima: ${paymentResult?.payment_number ?? ""}`,
-      metadata: { amount: input.amount, payment_number: paymentResult?.payment_number, payment_type: input.paymentType },
+      metadata: { event_type: "PAYMENT_RECEIVED", amount: input.amount, payment_number: paymentResult?.payment_number, payment_type: input.paymentType },
       changed_by: session.profileId,
     });
 
@@ -986,10 +1019,10 @@ export async function getServicePaymentPanelDataAction(
     if (paIds.length > 0) {
       const { data: paRows } = await (supabase as any)
         .from("payment_accounts")
-        .select("id, name")
+        .select("id, account_name")
         .in("id", paIds);
       if (paRows) {
-        for (const a of paRows) paMap[a.id] = { name: a.name };
+        for (const a of paRows) paMap[a.id] = { name: a.account_name };
       }
     }
 
@@ -1125,6 +1158,7 @@ export async function verifyServicePickupAction(
       to_status: service.current_status,
       reason: `Unit diserahkan kepada ${input.pickupName.trim()}`,
       metadata: {
+        event_type: "SERVICE_PICKED_UP",
         pickup_name: input.pickupName.trim(),
         pickup_relation: input.pickupRelation.trim(),
         pickup_phone: input.pickupPhone?.trim() || null,

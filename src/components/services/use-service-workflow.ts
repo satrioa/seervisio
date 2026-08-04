@@ -93,6 +93,7 @@ export function useServiceWorkflow(role: ServiceWorkflowRole = "MASTER_ADMIN") {
         nextStatus,
         role,
         reason,
+        hasTechnician: service.assignedTechnicianId != null,
       });
     },
     [role, getServiceStatus],

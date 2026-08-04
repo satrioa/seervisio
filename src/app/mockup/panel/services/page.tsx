@@ -151,6 +151,7 @@ function ServicesPageContent() {
   const selectedServiceIdRef = React.useRef(selectedServiceId);
   React.useEffect(() => { selectedServiceIdRef.current = selectedServiceId; }, [selectedServiceId]);
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
+  const urlRestoredRef = React.useRef(false);
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -225,9 +226,15 @@ function ServicesPageContent() {
   // Restore right sidebar from URL on mount
   React.useEffect(() => {
     const serviceId = searchParams.get("service");
-    if (serviceId && services.length > 0) {
+    if (serviceId && services.length > 0 && !urlRestoredRef.current) {
+      urlRestoredRef.current = true;
       setSelectedServiceId(serviceId);
       setIsDetailOpen(true);
+      getServiceDetailAction(brandSlug, serviceId).then((result) => {
+        if (result.success) {
+          setServices(prev => prev.map(s => s.id === serviceId ? result.data : s));
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
@@ -251,25 +258,35 @@ function ServicesPageContent() {
   const isMobile = useIsMobile(1024);
 
   const handleShowDetail = React.useCallback(
-    (service: ServiceRecord) => {
+    async (service: ServiceRecord) => {
+      const result = await getServiceDetailAction(brandSlug, service.id);
+      if (result.success) {
+        setServices(prev => prev.map(s => s.id === result.data.id ? result.data : s));
+      }
+      const s = result.success ? result.data : service;
       if (isMobile) {
-        setSelectedServiceId(service.id);
+        setSelectedServiceId(s.id);
         setIsDetailOpen(true);
-        updateUrlParam(service.id);
+        updateUrlParam(s.id);
       } else {
-        showDetail(service);
+        showDetail(s);
       }
     },
-    [isMobile, showDetail, updateUrlParam]
+    [brandSlug, isMobile, showDetail, updateUrlParam]
   );
 
   const handleCardDoubleClick = React.useCallback(
-    (service: ServiceRecord) => {
-      setSelectedServiceId(service.id);
+    async (service: ServiceRecord) => {
+      const result = await getServiceDetailAction(brandSlug, service.id);
+      if (result.success) {
+        setServices(prev => prev.map(s => s.id === result.data.id ? result.data : s));
+      }
+      const s = result.success ? result.data : service;
+      setSelectedServiceId(s.id);
       setIsDetailOpen(true);
-      updateUrlParam(service.id);
+      updateUrlParam(s.id);
     },
-    [updateUrlParam]
+    [brandSlug, updateUrlParam]
   );
 
   const handleSheetOpenChange = React.useCallback(

@@ -66,6 +66,40 @@ export interface TimelineEntry {
   by?: string;
 }
 
+export type TimelineEventType =
+  | "SERVICE_CREATED"
+  | "STATUS_CHANGED"
+  | "TECHNICIAN_ASSIGNED"
+  | "TECHNICIAN_UNASSIGNED"
+  | "DIAGNOSIS_UPDATED"
+  | "ESTIMATION_CREATED"
+  | "ESTIMATION_UPDATED"
+  | "SPAREPART_ADDED"
+  | "SPAREPART_REMOVED"
+  | "PAYMENT_CREATED"
+  | "PAYMENT_RECEIVED"
+  | "NOTE_ADDED"
+  | "PHOTO_ADDED"
+  | "CUSTOMER_CONTACTED"
+  | "QC_STARTED"
+  | "QC_PASSED"
+  | "QC_FAILED"
+  | "READY_FOR_PICKUP"
+  | "SERVICE_PICKED_UP"
+  | "SERVICE_CANCELLED"
+  | "BILLING_SET"
+  | "SERVICE_REOPENED";
+
+export interface TimelineEvent {
+  id: string;
+  eventType: TimelineEventType;
+  title: string;
+  description: string;
+  actor: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ServiceNote {
   text: string;
   timestamp: string;
@@ -157,6 +191,7 @@ export interface ServiceRecord extends ServiceUiItem {
   spareparts: SparepartItem[];
   payments: PaymentItem[];
   timeline: TimelineEntry[];
+  activityEvents: TimelineEvent[];
   notes: ServiceNote[];
   pickedUpAt?: string;
   pickupName?: string;

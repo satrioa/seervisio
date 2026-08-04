@@ -36,6 +36,7 @@ export interface ValidateTransitionInput {
   nextStatus: ServiceWorkflowStatus;
   role: ServiceWorkflowRole;
   reason?: string;
+  hasTechnician?: boolean;
 }
 
 export interface ValidateCancelInput {
@@ -189,7 +190,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     DIAGNOSA: { allowedNext: ["PERBAIKAN"], canCancel: true, canReopen: false },
     PERBAIKAN: { allowedNext: ["QC"], canCancel: true, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: true, canReopen: false },
-    SELESAI: { allowedNext: [], canCancel: false, canReopen: true },
+    SELESAI: { allowedNext: [], canCancel: true, canReopen: true },
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   ADMIN: {
@@ -197,7 +198,7 @@ const ROLE_RULES: Record<ServiceWorkflowRole, Partial<Record<ServiceWorkflowStat
     DIAGNOSA: { allowedNext: ["PERBAIKAN"], canCancel: true, canReopen: false },
     PERBAIKAN: { allowedNext: ["QC"], canCancel: true, canReopen: false },
     QC: { allowedNext: ["SELESAI"], canCancel: true, canReopen: false },
-    SELESAI: { allowedNext: [], canCancel: false, canReopen: true },
+    SELESAI: { allowedNext: [], canCancel: true, canReopen: true },
     CANCELLED: { allowedNext: [], canCancel: false, canReopen: false },
   },
   FRONTLINER: {
@@ -236,7 +237,7 @@ export function canRoleTransitionServiceStatus(
 export function validateServiceStatusTransition(
   input: ValidateTransitionInput
 ): TransitionValidationResult {
-  const { currentStatus, nextStatus, role, reason } = input;
+  const { currentStatus, nextStatus, role, reason, hasTechnician } = input;
 
   if (currentStatus === nextStatus) {
     return { allowed: false, reason: "Status servis sudah sama." };
@@ -291,7 +292,12 @@ return {
     };
   }
 
-
+  if (!hasTechnician) {
+    return {
+      allowed: false,
+      reason: "Tugaskan teknisi terlebih dahulu sebelum mengubah status servis.",
+    };
+  }
 
   return { allowed: true };
 }
@@ -303,6 +309,7 @@ const CANCELLABLE_STATUSES: ServiceWorkflowStatus[] = [
   "DIAGNOSA",
   "PERBAIKAN",
   "QC",
+  "SELESAI",
 ];
 
 export function canCancelService(input: {
@@ -333,7 +340,7 @@ export function validateCancelService(
   if (!CANCELLABLE_STATUSES.includes(currentStatus)) {
     return {
       allowed: false,
-      reason: "Servis selesai tidak bisa dibatalkan langsung. Buka ulang servis terlebih dahulu.",
+      reason: "Servis sudah dalam status terminal. Tidak dapat membatalkan.",
     };
   }
 

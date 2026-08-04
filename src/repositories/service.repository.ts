@@ -337,15 +337,23 @@ export async function getServiceStatusHistory(
   serviceId: string
 ): Promise<any[]> {
   const supabase = await createServerSupabase();
+  console.log("[TRACE:Repository] getServiceStatusHistory called with serviceId:", serviceId);
   const { data, error } = await (supabase as any)
     .from("service_status_history")
     .select(`
       *,
-      changed_by_profile:profiles(id, full_name)
+      changed_by_profile:profiles(id, name)
     `)
     .eq("service_id", serviceId)
     .order("changed_at", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    console.error("[TRACE:Repository] getServiceStatusHistory ERROR:", error);
+    throw error;
+  }
+  console.log("[TRACE:Repository] getServiceStatusHistory returned", data?.length ?? 0, "rows for serviceId:", serviceId);
+  if (data && data.length > 0) {
+    console.log("[TRACE:Repository] first row sample:", JSON.stringify(data[0], null, 2).slice(0, 200));
+  }
   return data ?? [];
 }
 

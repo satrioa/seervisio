@@ -69,13 +69,14 @@ function SharePopover({ service }: { service: ServiceRecord }) {
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const trackingUrl = data?.trackingToken ? `${baseUrl}/t/${data.trackingToken}` : null;
+  const invoiceUrl = `${baseUrl}/${data?.brandSlug}/invoice/${service.id}`;
 
   const copyToClipboard = async (type: "link" | "invoice" | "summary") => {
     let text: string;
     if (type === "link") {
       text = trackingUrl || `${baseUrl}/track/${data?.brandSlug}?invoice=${service.serviceNumber || service.id}`;
     } else if (type === "invoice") {
-      text = `${baseUrl}/track/${data?.brandSlug}?invoice=${service.serviceNumber || service.id}`;
+      text = invoiceUrl;
     } else {
       text = [
         `Service: ${service.serviceNumber || service.id}`,
@@ -114,8 +115,8 @@ function SharePopover({ service }: { service: ServiceRecord }) {
           <div className="flex items-center justify-center py-4">
             <div className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
           </div>
-        ) : !data?.trackingToken ? (
-          <p className="p-2 text-xs text-muted-foreground">Tracking token belum tersedia.</p>
+        ) : !data ? (
+          <p className="p-2 text-xs text-muted-foreground">Data tidak tersedia.</p>
         ) : (
           <div className="space-y-1">
             <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -133,14 +134,16 @@ function SharePopover({ service }: { service: ServiceRecord }) {
                 WhatsApp
               </a>
             )}
-            <button
-              type="button"
-              onClick={() => copyToClipboard("link")}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              {copied === "link" ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-              {copied === "link" ? <span className="text-emerald-600">Tersalin!</span> : "Salin Tautan Tracking"}
-            </button>
+            {trackingUrl && (
+              <button
+                type="button"
+                onClick={() => copyToClipboard("link")}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+              >
+                {copied === "link" ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                {copied === "link" ? <span className="text-emerald-600">Tersalin!</span> : "Salin Tautan Tracking"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => copyToClipboard("invoice")}
@@ -162,7 +165,7 @@ function SharePopover({ service }: { service: ServiceRecord }) {
             <Separator className="my-1" />
             <button
               type="button"
-              onClick={() => window.open(`/track/${data?.brandSlug}?invoice=${service.serviceNumber || service.id}`, "_blank")}
+              onClick={() => window.open(`${invoiceUrl}?print=true`, "_blank")}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
             >
               <Printer className="size-3.5" />

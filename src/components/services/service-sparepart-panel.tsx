@@ -17,6 +17,7 @@ interface ServiceSparepartPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSparepartAdded?: () => void;
+  onSparepartRemoved?: () => void;
   brandSlug: string;
 }
 
@@ -25,6 +26,7 @@ export function ServiceSparepartPanel({
   open,
   onOpenChange,
   onSparepartAdded,
+  onSparepartRemoved,
   brandSlug,
 }: ServiceSparepartPanelProps) {
   if (!service) return null;
@@ -34,6 +36,7 @@ export function ServiceSparepartPanel({
       <SheetContent
         side="right"
         className="flex w-full flex-col sm:max-w-md"
+        closeOnOutsideClick={false}
       >
         <SheetHeader className="space-y-1">
           <SheetTitle className="flex items-center gap-2 text-base">
@@ -44,7 +47,7 @@ export function ServiceSparepartPanel({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 flex-1 overflow-y-auto">
+        <div className="mt-4 flex-1 overflow-y-auto px-4 pb-4">
           <ServiceSparepartSection
             serviceId={service.id}
             serviceNumber={service.serviceNumber || service.id}
@@ -52,6 +55,7 @@ export function ServiceSparepartPanel({
             spareparts={service.spareparts}
             currentStatus={service.status}
             onSparepartAdded={onSparepartAdded}
+            onSparepartRemoved={onSparepartRemoved}
             brandSlug={brandSlug}
           />
         </div>

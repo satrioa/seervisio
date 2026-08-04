@@ -554,34 +554,50 @@ export function CreateServiceForm({
             )}
 
             {/* Assigned Technician */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cs-technician" className="text-xs font-medium">
-                Teknisi Penanggung Jawab
-              </Label>
-              <Select
-                value={formData.assignedTechnicianId}
-                onValueChange={(v) => updateField("assignedTechnicianId", v)}
-              >
-                <SelectTrigger className="h-10 text-sm" id="cs-technician">
-                  <SelectValue placeholder={
-                    loadingTechs ? "Memuat teknisi..." : "Belum ditugaskan"
-                  } />
-                </SelectTrigger>
-                <SelectContent className="z-[1001]">
-                  <SelectItem value={UNASSIGNED_TECHNICIAN_VALUE} className="text-sm text-muted-foreground">
-                    Belum ditugaskan
-                  </SelectItem>
-                  {technicians.filter((t) => Boolean(t.profileId)).map((t) => (
-                    <SelectItem key={t.profileId} value={t.profileId} className="text-sm">
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                Bisa dikosongkan jika teknisi belum ditentukan.
-              </p>
-            </div>
+            {userRole === "TECHNICIAN" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cs-technician" className="text-xs font-medium">
+                  Teknisi Penanggung Jawab
+                </Label>
+                <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm text-foreground">
+                  Anda (otomatis ditugaskan)
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Teknisi otomatis diisi dengan profil Anda.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cs-technician" className="text-xs font-medium">
+                    Teknisi Penanggung Jawab
+                  </Label>
+                  <Select
+                    value={formData.assignedTechnicianId}
+                    onValueChange={(v) => updateField("assignedTechnicianId", v)}
+                  >
+                    <SelectTrigger className="h-10 text-sm" id="cs-technician">
+                      <SelectValue placeholder={
+                        loadingTechs ? "Memuat teknisi..." : "Belum ditugaskan"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent className="z-[1001]">
+                      <SelectItem value={UNASSIGNED_TECHNICIAN_VALUE} className="text-sm text-muted-foreground">
+                        Belum ditugaskan
+                      </SelectItem>
+                      {technicians.filter((t) => Boolean(t.profileId)).map((t) => (
+                        <SelectItem key={t.profileId} value={t.profileId} className="text-sm">
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    Bisa dikosongkan jika teknisi belum ditentukan.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Estimated Cost */}
             <div className="flex flex-col gap-1.5">

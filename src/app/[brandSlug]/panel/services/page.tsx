@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { CreateServiceOverlay } from "@/components/services/create-service-overlay";
@@ -81,7 +82,7 @@ function ServicesPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const brandSlug = pathname.split("/")[1];
-  const { setOnServiceUpdated, showDetail, closeCreateService } = useRightSidebar();
+  const { setOnServiceUpdated, showDetail, closeCreateService, data: sidebarData } = useRightSidebar();
   const { activeBranchId } = useActiveBranch();
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list");
@@ -150,7 +151,10 @@ function ServicesPageContent() {
   const [selectedServiceId, setSelectedServiceId] = React.useState<string | null>(null);
   const selectedServiceIdRef = React.useRef(selectedServiceId);
   React.useEffect(() => { selectedServiceIdRef.current = selectedServiceId; }, [selectedServiceId]);
+  const sidebarDataRef = React.useRef(sidebarData);
+  React.useEffect(() => { sidebarDataRef.current = sidebarData; }, [sidebarData]);
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
+  const urlRestoredRef = React.useRef(false);
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -225,9 +229,15 @@ function ServicesPageContent() {
   // Restore right sidebar from URL on mount
   React.useEffect(() => {
     const serviceId = searchParams.get("service");
-    if (serviceId && services.length > 0) {
+    if (serviceId && services.length > 0 && !urlRestoredRef.current) {
+      urlRestoredRef.current = true;
       setSelectedServiceId(serviceId);
       setIsDetailOpen(true);
+      getServiceDetailAction(brandSlug, serviceId).then((result) => {
+        if (result.success) {
+          setServices(prev => prev.map(s => s.id === serviceId ? result.data : s));
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
@@ -251,25 +261,36 @@ function ServicesPageContent() {
   const isMobile = useIsMobile(1024);
 
   const handleShowDetail = React.useCallback(
-    (service: ServiceRecord) => {
+    async (service: ServiceRecord) => {
+      const result = await getServiceDetailAction(brandSlug, service.id);
+      console.log("[TRACE:Page] handleShowDetail result.success:", result.success, "timeline length:", result.success ? result.data.timeline.length : "N/A", "for", service.id);
+      if (result.success) {
+        setServices(prev => prev.map(s => s.id === result.data.id ? result.data : s));
+      }
+      const s = result.success ? result.data : service;
       if (isMobile) {
-        setSelectedServiceId(service.id);
+        setSelectedServiceId(s.id);
         setIsDetailOpen(true);
-        updateUrlParam(service.id);
+        updateUrlParam(s.id);
       } else {
-        showDetail(service);
+        showDetail(s);
       }
     },
-    [isMobile, showDetail, updateUrlParam]
+    [brandSlug, isMobile, showDetail, updateUrlParam]
   );
 
   const handleCardDoubleClick = React.useCallback(
-    (service: ServiceRecord) => {
-      setSelectedServiceId(service.id);
+    async (service: ServiceRecord) => {
+      const result = await getServiceDetailAction(brandSlug, service.id);
+      if (result.success) {
+        setServices(prev => prev.map(s => s.id === result.data.id ? result.data : s));
+      }
+      const s = result.success ? result.data : service;
+      setSelectedServiceId(s.id);
       setIsDetailOpen(true);
-      updateUrlParam(service.id);
+      updateUrlParam(s.id);
     },
-    [updateUrlParam]
+    [brandSlug, updateUrlParam]
   );
 
   const handleSheetOpenChange = React.useCallback(
@@ -283,7 +304,7 @@ function ServicesPageContent() {
   );
 
   const handleServiceUpdated = useCallback(async (serviceId?: string) => {
-    const sid = serviceId ?? selectedServiceIdRef.current;
+    const sid = serviceId ?? sidebarDataRef.current?.id ?? selectedServiceIdRef.current;
     if (sid) {
       const result = await getServiceDetailAction(brandSlug, sid);
       if (result.success) {
@@ -297,9 +318,14 @@ function ServicesPageContent() {
           paymentState: fresh.paymentSummary?.paymentStatus,
         });
         setServices(prev => prev.map(s => s.id === sid ? fresh : s));
-        if (serviceId || selectedServiceIdRef.current === sid) {
+        if (sidebarDataRef.current?.id === sid || selectedServiceIdRef.current === sid) {
           showDetail(fresh);
         }
+        fetchServices().then(() => {
+          setServices(prev => prev.map(s => s.id === sid ? fresh : s));
+          router.refresh();
+        });
+        return;
       }
     }
     fetchServices().then(() => router.refresh());
@@ -382,34 +408,21 @@ function ServicesPageContent() {
               </Button>
 
               {/* View Toggle */}
-              <div className="inline-flex items-center rounded-lg border bg-muted p-0.5">
-                <Button
-                  size="sm"
-                  aria-pressed={viewMode === "list"}
-                  className={`${
-                    viewMode === "list"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => handleViewModeChange("list")}
-                >
-                  <LayoutList className="size-3.5" />
-                  Table
-                </Button>
-                <Button
-                  size="sm"
-                  aria-pressed={viewMode === "kanban"}
-                  className={`${
-                    viewMode === "kanban"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => handleViewModeChange("kanban")}
-                >
-                  <Columns3 className="size-3.5" />
-                  Kanban
-                </Button>
-              </div>
+              <Tabs
+                value={viewMode}
+                onValueChange={(v) => handleViewModeChange(v as ViewMode)}
+              >
+                <TabsList>
+                  <TabsTrigger value="list">
+                    <LayoutList className="size-3.5" />
+                    Table
+                  </TabsTrigger>
+                  <TabsTrigger value="kanban">
+                    <Columns3 className="size-3.5" />
+                    Kanban
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
           </div>
 
@@ -646,6 +659,9 @@ function ServicesPageContent() {
         onSparepartAdded={() => {
           setSparepartServiceId(null);
           handleServiceUpdated();
+        }}
+        onSparepartRemoved={() => {
+          handleServiceUpdated(sparepartServiceId ?? undefined);
         }}
       />
     </>

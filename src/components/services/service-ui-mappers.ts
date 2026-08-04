@@ -18,7 +18,7 @@ import { mapDbStatusToUI as mapCanonicalDbStatusToUI } from "@/lib/services/serv
 export interface DbPaymentRow {
   id: string;
   payment_method?: { id: string; name: string; type: string } | null;
-  payment_account?: { id: string; name: string; account_type: string } | null;
+  payment_account?: { id: string; name: string; type: string } | null;
   gross_amount: number;
   mdr_amount: number;
   net_amount: number;

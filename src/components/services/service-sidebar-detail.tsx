@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import type { ServiceRecord } from "@/components/services/service-data";
 import { ServiceDetailContent } from "@/components/services/service-detail-content";
-import { getSessionRoleAction } from "@/server/actions/service.actions";
+import { getSessionRoleAction, getServiceDetailAction } from "@/server/actions/service.actions";
 
 interface ServiceSidebarDetailProps {
   service: ServiceRecord;
@@ -21,11 +21,12 @@ export function ServiceSidebarDetail({
   onServiceUpdated,
   role,
 }: ServiceSidebarDetailProps) {
+  console.log("[TRACE:ServiceSidebarDetail] received service timeline length:", service.timeline?.length ?? 0, "for", service.id);
   const params = useParams();
   const brandSlug = brandSlugProp ?? (params?.brandSlug as string) ?? "";
   const { showOverview } = useRightSidebar();
   const [resolvedRole, setResolvedRole] = React.useState<string | undefined>(role);
-  const [hideStatusSteps, setHideStatusSteps] = React.useState(false);
+  const [enrichedService, setEnrichedService] = React.useState<ServiceRecord | null>(null);
 
   React.useEffect(() => {
     if (role || !brandSlug) {
@@ -38,18 +39,28 @@ export function ServiceSidebarDetail({
   }, [role, brandSlug]);
 
   React.useEffect(() => {
-    const mode = localStorage.getItem("seervis:services:view-mode");
-    setHideStatusSteps(mode === "list");
-  }, []);
+    const hasTimeline = service.timeline && service.timeline.length > 0;
+    if (hasTimeline) {
+      setEnrichedService(null);
+      return;
+    }
+    getServiceDetailAction(brandSlug, service.id).then((result) => {
+      if (result.success) {
+        console.log("[TRACE:ServiceSidebarDetail] enriched with timeline length:", result.data.timeline.length, "for", service.id);
+        setEnrichedService(result.data);
+      }
+    });
+  }, [service, brandSlug]);
+
+  const displayService = enrichedService ?? service;
 
   return (
     <ServiceDetailContent
-      service={service}
+      service={displayService}
       onClose={showOverview}
       brandSlug={brandSlug}
       onServiceUpdated={onServiceUpdated}
       role={resolvedRole}
-      hideStatusSteps={hideStatusSteps}
     />
   );
 }

@@ -27,7 +27,6 @@ import {
   STATUS_CONFIG,
   STATUS_ORDER,
   formatCurrency,
-  getTotalSparepartCost,
   getTotalPayment,
   getPaymentStatusLabel,
 } from "@/components/services/service-data";
@@ -36,12 +35,17 @@ import {
   type PickupStatus,
 } from "@/components/services/service-data";
 import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
-import { ServiceSparepartPanel } from "@/components/services/service-sparepart-panel";
+import { ServiceSparepartSection } from "@/components/services/service-sparepart-section";
 import { UpdateServiceStatusDialog } from "@/components/services/update-service-status-floating-panel";
 import { CancelServiceDialog } from "@/components/services/cancel-service-dialog";
 import { ReopenServiceDialog } from "@/components/services/reopen-service-dialog";
 import { ServiceDetailHeader } from "@/components/services/service-detail-header";
-import { ServiceTimeline } from "@/components/services/service-detail-timeline";
+import { ServiceActivityTimeline } from "@/components/services/service-activity-timeline";
+import {
+  ProcessTimelineEngine,
+  type ProcessTimelineItem,
+} from "@/components/matos-ui/process-timeline-engine";
+import { TechnicianAssignBanner } from "@/components/services/technician-assign-banner";
 import { verifyServicePickupAction, getServicePaymentPanelDataAction } from "@/server/actions/service-workflow.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
 import {
@@ -51,6 +55,14 @@ import {
 import { SlideToVerify } from "@/components/ui/slide-to-verify";
 import { RepresentativePickupDialog } from "@/components/services/pickup/representative-pickup-dialog";
 import { QRVerifyPickupDialog } from "@/components/services/pickup/qr-verify-pickup-dialog";
+import { ServiceBillingEditor } from "@/components/services/service-billing-editor";
+import { can } from "@/lib/permissions/can";
+import { PERMISSIONS } from "@/lib/permissions/permissions";
+import {
+  canCancelService,
+  normalizeServiceStatus,
+  type ServiceWorkflowRole,
+} from "@/domain/service/service-workflow";
 
 /* ─── Props ─── */
 
@@ -92,18 +104,48 @@ export function ServiceDetailContent({
   if (!service) return null;
 
   const [paymentOpen, setPaymentOpen] = React.useState(false);
-  const [sparepartOpen, setSparepartOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [reopenOpen, setReopenOpen] = React.useState(false);
   const [localStatus, setLocalStatus] = React.useState<ServiceStatus>(service.status);
   const [enrichedPayments, setEnrichedPayments] = React.useState<ServicePaymentRecord[]>(() => (service as any).__paymentRecords ?? []);
   const [repDialogOpen, setRepDialogOpen] = React.useState(false);
   const [qrDialogOpen, setQrDialogOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState("general");
+  const [billingMode, setBillingMode] = React.useState<"view" | "edit">("view");
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const canSetBill = can(role as any, PERMISSIONS.SERVICE_BILLING_SET);
 
   React.useEffect(() => {
     setLocalStatus(service.status);
     setEnrichedPayments((service as any).__paymentRecords ?? []);
+    setPaymentData(null);
   }, [service]);
+
+  /* ESC returns to the overview (General tab) instead of closing the sheet.
+     When already on the overview, we let the event through so Radix closes it.
+     The capture-phase listener runs before Radix's own Escape handler; calling
+     preventDefault() makes Radix skip closing. */
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (cancelOpen || paymentOpen) return;
+      if (activeTab !== "general") {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveTab("general");
+        scrollRef.current?.scrollTo({ top: 0 });
+        return;
+      }
+      e.stopPropagation();
+    };
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
+  }, [activeTab, cancelOpen, paymentOpen]);
+
+  console.log("[TRACE:ServiceDetailContent] received timeline length:", service.timeline?.length ?? 0, "for service:", service.id);
+  if (service.timeline?.length > 0) {
+    console.log("[TRACE:ServiceDetailContent] timeline sample:", JSON.stringify(service.timeline[0]));
+  }
 
   const [paymentData, setPaymentData] = React.useState<ServicePaymentSummaryResult | null>(null);
 
@@ -130,7 +172,6 @@ export function ServiceDetailContent({
   );
 
   const statusIndex = STATUS_ORDER.indexOf(localStatus);
-  const totalSparepart = getTotalSparepartCost(service.spareparts);
   const totalCost = Number(service.finalCost || service.estimatedCost || 0);
 
   const summary = React.useMemo(() => {
@@ -158,7 +199,63 @@ export function ServiceDetailContent({
   const isPaid = summary.paymentState === "PAID";
   const isCancelled = localStatus === "cancelled";
   const paymentStatusLabel = getPaymentStatusLabel(summary.paymentState);
-  const progressPercent = Math.round(((statusIndex + 1) / STATUS_ORDER.length) * 100);
+
+  const workflowStatus = normalizeServiceStatus(localStatus);
+  const userRole = (role?.toUpperCase() ?? "MASTER_ADMIN") as ServiceWorkflowRole;
+  const canCancel = canCancelService({ currentStatus: workflowStatus, role: userRole });
+
+  const processTimelineItems = React.useMemo<ProcessTimelineItem[]>(() => {
+    const safeStatusIndex = Math.max(0, statusIndex);
+    const finalStatusIndex = Math.max(STATUS_ORDER.indexOf("selesai"), STATUS_ORDER.length - 1);
+    const currentLabel = STATUS_CONFIG[localStatus]?.label ?? "Masuk";
+    const progress = isCancelled
+      ? 0
+      : finalStatusIndex > 0
+        ? Math.round((Math.min(safeStatusIndex, finalStatusIndex) / finalStatusIndex) * 100)
+        : 0;
+    const status: ProcessTimelineItem["status"] = isCancelled
+      ? "blocked"
+      : localStatus === "selesai"
+        ? "complete"
+        : "active";
+
+    let badgeStatus: ProcessTimelineItem["badgeStatus"];
+    if (isCancelled) {
+      badgeStatus = "blocked";
+    } else if (localStatus === "masuk" || localStatus === "selesai") {
+      badgeStatus = "complete";
+    } else if (localStatus === "menunggu_persetujuan") {
+      badgeStatus = "active";
+    } else {
+      badgeStatus = "in-progress";
+    }
+
+    const nextStatusKey = safeStatusIndex < STATUS_ORDER.length - 1 ? STATUS_ORDER[safeStatusIndex + 1] : null;
+    const nextLabel = nextStatusKey ? STATUS_CONFIG[nextStatusKey]?.label : null;
+    const lastTimelineEntry = service.timeline?.[service.timeline.length - 1];
+    const lastUpdateTime = lastTimelineEntry?.timestamp ?? service.updatedAt ?? service.createdAt;
+    const formattedTime = formatDateTime(lastUpdateTime);
+    const resultText = isCancelled ? "Dibatalkan" : nextLabel ? `Next: ${nextLabel}` : "Selesai";
+
+    return [
+      {
+        id: "service-progress",
+        title: "Masuk - Selesai",
+        description: "Progres",
+        target: currentLabel,
+        rightLabel: formattedTime,
+        result: resultText,
+        status,
+        badgeStatus,
+        progress,
+        badge: isCancelled ? "Dibatalkan" : currentLabel,
+      },
+    ];
+  }, [statusIndex, isCancelled, localStatus, service.timeline, service.updatedAt, service.createdAt]);
+
+  const totalStages = STATUS_ORDER.length - 1;
+  const completedStages = isCancelled ? 0 : Math.min(Math.max(0, statusIndex), totalStages);
+  const counterLabel = `${completedStages}/${totalStages}`;
 
   return (
     <div className="flex h-full flex-col">
@@ -168,7 +265,7 @@ export function ServiceDetailContent({
         onClose={onClose}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* ═══ Pickup Banner (outside tabs) ═══ */}
         {service.status === "selesai" && (
           <div className="p-6 pb-0">
@@ -184,8 +281,19 @@ export function ServiceDetailContent({
           </div>
         )}
 
+        {/* ═══ Technician Assignment Banner ═══ */}
+        {!service.assignedTechnicianId && !service.technicianName && service.status !== "cancelled" && (
+          <div className="p-6 pb-0">
+            <TechnicianAssignBanner
+              service={service}
+              brandSlug={brandSlug}
+              onAssigned={() => onServiceUpdated?.()}
+            />
+          </div>
+        )}
+
         {/* ═══ Tabs ═══ */}
-        <Tabs defaultValue="general" className={service.status === "selesai" ? "mt-5" : "mt-0"}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={service.status === "selesai" ? "mt-5" : "mt-0 pt-6"}>
           <div className="sticky top-0 z-10 bg-background px-6">
             <TabsList className="w-full">
               <TabsTrigger value="general" className="flex-1 text-xs">General</TabsTrigger>
@@ -210,52 +318,15 @@ export function ServiceDetailContent({
 
                   <Separator />
 
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-muted-foreground">Progress</span>
-                      <span className="text-[11px] tabular-nums text-muted-foreground">{Math.min(progressPercent, 100)}%</span>
-                    </div>
-                    <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${Math.min(progressPercent, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
                   {!hideStatusSteps && (
-                    <div className="flex items-center gap-1.5">
-                      {STATUS_ORDER.map((s, i) => {
-                        const isActive = i <= statusIndex;
-                        const isCurrent = i === statusIndex;
-                        const isLast = i === STATUS_ORDER.length - 1;
-                        return (
-                          <React.Fragment key={s}>
-                            <div className="flex items-center gap-1">
-                              <div
-                                className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
-                                  isCurrent
-                                    ? "bg-primary text-primary-foreground"
-                                    : isActive
-                                      ? "bg-primary/15 text-primary"
-                                      : "bg-muted text-muted-foreground/50"
-                                }`}
-                              >
-                                <span className="text-[7px] font-bold">{i + 1}</span>
-                              </div>
-                              <span
-                                className={`hidden truncate text-[9px] font-medium sm:inline ${
-                                  isActive ? "text-foreground" : "text-muted-foreground/50"
-                                }`}
-                              >
-                                {STATUS_CONFIG[s].label}
-                              </span>
-                            </div>
-                            {!isLast && <div className={`h-px flex-1 ${i < statusIndex ? "bg-primary/40" : "bg-border"}`} />}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
+                    <ProcessTimelineEngine
+                      items={processTimelineItems}
+                      activeId="service-progress"
+                      title="Progress Servis"
+                      subtitle={isCancelled ? "Dibatalkan" : undefined}
+                      counterLabel={counterLabel}
+                      className="border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
+                    />
                   )}
                 </div>
               </section>
@@ -322,111 +393,130 @@ export function ServiceDetailContent({
 
             {/* ═══ Timeline Tab ═══ */}
             <TabsContent value="timeline" className="mt-0">
-              <ServiceTimeline entries={service.timeline} />
+              <ServiceActivityTimeline events={service.activityEvents ?? []} />
             </TabsContent>
 
             {/* ═══ Payment Tab ═══ */}
             <TabsContent value="payment" className="mt-0 space-y-5">
-              <section>
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center gap-1.5">
-                    <Wallet className="size-3.5 text-muted-foreground" />
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</span>
-                    <Badge variant="outline" className={`ml-auto text-[10px] ${paymentStatusLabel.color}`}>
-                      {paymentStatusLabel.label}
-                    </Badge>
-                  </div>
+              {billingMode === "edit" ? (
+                <section>
+                  <ServiceBillingEditor
+                    brandSlug={brandSlug}
+                    serviceId={service.id}
+                    estimatedCost={service.estimatedCost}
+                    onSaved={() => {
+                      setBillingMode("view");
+                      onServiceUpdated?.();
+                    }}
+                    onCancel={() => setBillingMode("view")}
+                  />
+                </section>
+              ) : (
+                <section>
+                  <div className="rounded-xl border bg-card p-4">
+                    <div className="flex items-center gap-1.5">
+                      <Wallet className="size-3.5 text-muted-foreground" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</span>
+                      <Badge variant="outline" className={`ml-auto text-[10px] ${paymentStatusLabel.color}`}>
+                        {paymentStatusLabel.label}
+                      </Badge>
+                    </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-4">
-                    <div>
-                      <span className="text-[10px] text-muted-foreground">Total Bill</span>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(summary.totalBill)}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-muted-foreground">Paid</span>
-                      <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(summary.totalPaid)}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-muted-foreground">Remaining</span>
-                      <p className="text-sm font-bold tabular-nums">{formatCurrency(summary.remainingAmount)}</p>
-                    </div>
-                  </div>
-
-                  {summary.successfulPayments.length > 0 && (
-                    <div className="mt-3 space-y-1.5 border-t pt-3">
-                      {summary.successfulPayments.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between rounded-md bg-muted/30 px-2.5 py-1.5">
-                          <div className="flex flex-col">
-                            <span className="text-[11px] font-medium">{p.paymentNumber}</span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {[p.methodType, p.accountName].filter(Boolean).join(" · ")}
-                            </span>
+                    {summary.totalBill === 0 && !isPaid ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Wallet className="mb-3 size-8 text-muted-foreground/40" />
+                        <p className="text-sm font-medium text-muted-foreground">Belum ada tagihan untuk servis ini.</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground/60">Atur tagihan untuk mulai mencatat pembayaran.</p>
+                        {canSetBill && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="mt-4 w-full text-xs"
+                            onClick={() => setBillingMode("edit")}
+                          >
+                            <FileText className="size-3.5 mr-1.5" />
+                            Atur Tagihan
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-3 grid grid-cols-3 gap-4">
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Total Bill</span>
+                            <p className="text-sm font-semibold tabular-nums">{formatCurrency(summary.totalBill)}</p>
                           </div>
-                          <span className="text-[11px] font-medium tabular-nums">{formatCurrency(p.grossAmount)}</span>
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Paid</span>
+                            <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(summary.totalPaid)}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Remaining</span>
+                            <p className="text-sm font-bold tabular-nums">{formatCurrency(summary.remainingAmount)}</p>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
 
-                  {role !== "TECHNICIAN" && (
-                    <div className="mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => setPaymentOpen(true)}
-                      >
-                        <Wallet className="size-3.5 mr-1.5" />
-                        {isPaid ? "Payment Detail" : "Receive Payment"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </section>
+                        {canSetBill && !isPaid && summary.paymentState === "UNPAID" && (
+                          <div className="mt-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-xs text-muted-foreground"
+                              onClick={() => setBillingMode("edit")}
+                            >
+                              <FileText className="size-3 mr-1.5" />
+                              Edit Tagihan
+                            </Button>
+                          </div>
+                        )}
+
+                        {summary.successfulPayments.length > 0 && (
+                          <div className="mt-3 space-y-1.5 border-t pt-3">
+                            {summary.successfulPayments.map((p) => (
+                              <div key={p.id} className="flex items-center justify-between rounded-md bg-muted/30 px-2.5 py-1.5">
+                                <div className="flex flex-col">
+                                  <span className="text-[11px] font-medium">{p.paymentNumber}</span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {[p.methodType, p.accountName].filter(Boolean).join(" · ")}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-medium tabular-nums">{formatCurrency(p.grossAmount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {role !== "TECHNICIAN" && !isPaid && (
+                          <div className="mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-xs"
+                              onClick={() => setPaymentOpen(true)}
+                            >
+                              <Wallet className="size-3.5 mr-1.5" />
+                              Receive Payment
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
             </TabsContent>
 
-            {/* ═══ Sparepart Tab ═══ */}
-            <TabsContent value="sparepart" className="mt-0 space-y-5">
-              <section>
-                <SectionHeader icon={Wrench} label="Spareparts Used" />
-                <div className="mt-3">
-                  {service.spareparts.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {service.spareparts.map((sp, i) => (
-                        <div key={sp.id ?? i} className="flex items-center justify-between rounded-lg border px-3 py-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium truncate">{sp.name}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {sp.qty}x @ {formatCurrency(sp.price)}
-                              {sp.imeiSnapshot && <span className="ml-1">· IMEI: {sp.imeiSnapshot}</span>}
-                              {sp.isReturned && <span className="ml-1 text-amber-500">· Returned</span>}
-                            </p>
-                          </div>
-                          <span className="shrink-0 text-xs font-medium tabular-nums ml-2">{formatCurrency(sp.price * sp.qty)}</span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between px-3 py-1">
-                        <span className="text-xs font-semibold">Total (internal)</span>
-                        <span className="text-xs font-semibold tabular-nums">{formatCurrency(totalSparepart)}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <EmptyState icon={Wrench} text="No spareparts used" />
-                  )}
-                </div>
-
-                <div className="mt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => setSparepartOpen(true)}
-                  >
-                    <Plus className="size-3.5 mr-1.5" />
-                    Manage Spareparts
-                  </Button>
-                </div>
-              </section>
+            {/* ═══ Sparepart Tab (inline) ═══ */}
+            <TabsContent value="sparepart" className="mt-0">
+              <ServiceSparepartSection
+                serviceId={service.id}
+                serviceNumber={service.serviceNumber || service.id}
+                branchId={service.branchId}
+                spareparts={service.spareparts}
+                currentStatus={service.status}
+                onSparepartAdded={onServiceUpdated}
+                brandSlug={brandSlug}
+              />
             </TabsContent>
           </div>
         </Tabs>
@@ -440,23 +530,27 @@ export function ServiceDetailContent({
           {!isCancelled ? (
             <>
               <div className="flex items-center gap-2">
-                <UpdateServiceStatusDialog
-                  service={displayService}
-                  brandSlug={brandSlug}
-                  onStatusUpdated={(status) => {
-                    setLocalStatus(status);
-                    onServiceUpdated?.();
-                  }}
-                />
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-9 text-xs"
-                  onClick={() => setCancelOpen(true)}
-                >
-                  <XCircle className="size-3.5 mr-1.5" />
-                  Cancel
-                </Button>
+                <div className="min-w-0 flex-1">
+                  <UpdateServiceStatusDialog
+                    service={displayService}
+                    brandSlug={brandSlug}
+                    onStatusUpdated={(status) => {
+                      setLocalStatus(status);
+                      onServiceUpdated?.();
+                    }}
+                  />
+                </div>
+                {canCancel && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-9 shrink-0 text-xs"
+                    onClick={() => setCancelOpen(true)}
+                  >
+                    <XCircle className="size-3.5 mr-1.5" />
+                    Cancel
+                  </Button>
+                )}
               </div>
             </>
           ) : (
@@ -492,19 +586,15 @@ export function ServiceDetailContent({
         onPaymentRecorded={() => { onServiceUpdated?.(); }}
       />
 
-      <ServiceSparepartPanel
-        open={sparepartOpen}
-        onOpenChange={setSparepartOpen}
-        service={service}
-        brandSlug={brandSlug}
-        onSparepartAdded={() => { onServiceUpdated?.(); }}
-      />
-
       <CancelServiceDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         service={service}
         brandSlug={brandSlug}
+        role={userRole}
+        payments={enrichedPayments
+          .filter((p) => p.status === "SUCCEEDED")
+          .map((p) => ({ id: p.id, amount: p.amount, method: p.method }))}
         onConfirm={() => {
           setCancelOpen(false);
           onServiceUpdated?.();

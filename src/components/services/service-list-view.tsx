@@ -24,6 +24,7 @@ import {
   getPickupStatus,
   getPickupLabel,
   getPickupColor,
+  getPaymentStatusLabel,
 } from "@/components/services/service-data";
 
 import { useServiceWorkflow } from "@/components/services/use-service-workflow";
@@ -173,7 +174,7 @@ function ServicePagination({
   );
 }
 
-const SERVICE_TABLE_GRID = "grid-cols-[28px_1fr_130px_120px_120px_100px]";
+const SERVICE_TABLE_GRID = "grid-cols-[28px_1fr_130px_120px_120px_100px_110px]";
 
 function ServiceTableSkeletonRows() {
   return (
@@ -200,9 +201,11 @@ function ServiceTableSkeletonRows() {
           <div className="flex items-center">
             <Skeleton className="h-5 w-16 rounded-full" />
           </div>
-          <div className="flex flex-col justify-center gap-1">
+          <div className="flex items-center">
             <Skeleton className="h-3.5 w-20" />
-            <Skeleton className="h-2.5 w-16" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-5 w-20 rounded-full" />
           </div>
           <div className="flex items-center">
             <Skeleton className="h-4 w-4" />
@@ -491,6 +494,7 @@ export function ServiceListView({
             <span>Teknisi</span>
             <span>Status</span>
             <span>Biaya</span>
+            <span>Pembayaran</span>
             <span />
           </div>
 
@@ -566,25 +570,21 @@ export function ServiceListView({
                       })()
                     )}
                   </div>
-                  <div className="flex flex-col items-start justify-center gap-0">
+                  <div className="flex items-center">
                     <span className="truncate text-xs font-medium tabular-nums text-foreground">
                       {formatCurrency(totalBiaya)}
                     </span>
-                    {service.paymentSummary?.paymentStatus === "PAID" && (
-                      <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                        LUNAS
-                      </span>
-                    )}
-                    {service.paymentSummary?.paymentStatus === "PARTIAL" && (
-                      <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">
-                        Sisa {formatCurrency(service.paymentSummary.remainingBalance)}
-                      </span>
-                    )}
-                    {(!service.paymentSummary || service.paymentSummary.paymentStatus === "UNPAID") && (
-                      <span className="text-[9px] text-muted-foreground/50">
-                        Belum dibayar
-                      </span>
-                    )}
+                  </div>
+                  <div className="flex items-center">
+                    {(() => {
+                      const ps = service.paymentSummary?.paymentStatus ?? "UNPAID";
+                      const lbl = getPaymentStatusLabel(ps);
+                      return (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium ${lbl.color}`}>
+                          {lbl.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </button>
               </div>
@@ -654,6 +654,12 @@ export function ServiceListView({
                 <span className="tabular-nums">
                   {formatCurrency(totalBiaya)}
                 </span>
+                <span>·</span>
+                {(() => {
+                  const ps = service.paymentSummary?.paymentStatus ?? "UNPAID";
+                  const lbl = getPaymentStatusLabel(ps);
+                  return <span className={lbl.textColor}>{lbl.label}</span>;
+                })()}
               </div>
             </div>
           );

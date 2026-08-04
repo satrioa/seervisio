@@ -279,8 +279,14 @@ export function UpdateServiceStatusDialog({ service, brandSlug, onStatusUpdated 
 
         <Drawer.Root open={open} onOpenChange={setOpen}>
           <Drawer.Portal>
-            <Drawer.Overlay className="fixed inset-0 z-40 bg-black/40" />
-            <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 mx-auto flex max-h-[85vh] flex-col rounded-t-2xl border border-border bg-background px-4 pb-6 pt-2 outline-none">
+            <Drawer.Overlay
+              className="fixed inset-0 z-[60] bg-black/40"
+              onPointerDownCapture={(e: React.PointerEvent) => e.stopPropagation()}
+            />
+            <Drawer.Content
+              data-radix-dialog-content
+              className="fixed bottom-0 left-0 right-0 z-[60] mx-auto flex max-h-[85vh] flex-col rounded-t-2xl border border-border bg-background px-4 pb-6 pt-2 outline-none"
+            >
               <div className="mx-auto mb-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
               <h3 className="mb-1 text-base font-semibold text-foreground">Update Status Servis</h3>
               <p className="mb-4 text-xs text-muted-foreground">

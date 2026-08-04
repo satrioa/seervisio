@@ -116,12 +116,13 @@ export interface KanbanMoveEvent {
   overIndex: number
 }
 
-export interface KanbanRootProps<T> extends HTMLAttributes<HTMLDivElement> {
+export interface KanbanRootProps<T> extends Omit<HTMLAttributes<HTMLDivElement>, "onDragStart"> {
   value: Record<string, T[]>
   onValueChange: (value: Record<string, T[]>) => void
   getItemValue: (item: T) => string
   children: ReactNode
   onMove?: (event: KanbanMoveEvent) => void
+  onDragStart?: (event: DragStartEvent) => void
   asChild?: boolean
   modifiers?: Modifiers
 }
@@ -134,6 +135,7 @@ function Kanban<T>({
   className,
   asChild = false,
   onMove,
+  onDragStart,
   modifiers,
   ...props
 }: KanbanRootProps<T>) {
@@ -181,10 +183,6 @@ function Kanban<T>({
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
-      if (onMove) {
-        return
-      }
-
       const { active, over } = event
       if (!over) return
 
@@ -371,7 +369,10 @@ function Kanban<T>({
             strategy: MeasuringStrategy.Always,
           },
         }}
-        onDragStart={handleDragStart}
+        onDragStart={(event) => {
+          handleDragStart(event)
+          onDragStart?.(event)
+        }}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}

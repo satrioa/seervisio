@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/r-switch";
 import { SlideToVerify } from "@/components/ui/slide-to-verify";
 import { verifyServicePickupAction } from "@/server/actions/service-workflow.actions";
 import { triggerDynamicIslandFeedback } from "@/lib/dynamic-island/dynamic-island-events";
@@ -39,6 +40,7 @@ export function RepresentativePickupDialog({
   const [phone, setPhone] = React.useState("");
   const [idNumber, setIdNumber] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [selfPickup, setSelfPickup] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -49,16 +51,29 @@ export function RepresentativePickupDialog({
       setPhone("");
       setIdNumber("");
       setNotes("");
+      setSelfPickup(false);
       setError(null);
       setSubmitting(false);
     }
   }, [open]);
 
-  const readyToSlide = name.trim().length > 0 && relationship.trim().length > 0 && phone.trim().length > 0;
+  const readyToSlide = selfPickup
+    ? true
+    : name.trim().length > 0 && relationship.trim().length > 0 && phone.trim().length > 0;
 
   const handleSlideComplete = async () => {
     if (!readyToSlide || submitting) return;
     setSubmitting(true);
+
+    const pickupName = selfPickup ? service.customerName : name.trim();
+    const pickupRelation = selfPickup ? "Self" : relationship.trim();
+    const pickupPhone = selfPickup ? undefined : phone.trim() || undefined;
+    const pickupNote = selfPickup
+      ? (notes.trim() || undefined)
+      : [idNumber.trim() ? `KTP: ${idNumber.trim()}` : "", notes.trim()]
+          .filter(Boolean)
+          .join("\n") || undefined;
+
     triggerDynamicIslandFeedback({
       type: "loading",
       title: "Verifying pickup",
@@ -68,12 +83,10 @@ export function RepresentativePickupDialog({
       const result = await verifyServicePickupAction({
         brandSlug,
         serviceId: service.id,
-        pickupName: name.trim(),
-        pickupPhone: phone.trim() || undefined,
-        pickupRelation: relationship.trim(),
-        pickupNote: [idNumber.trim() ? `KTP: ${idNumber.trim()}` : "", notes.trim()]
-          .filter(Boolean)
-          .join("\n") || undefined,
+        pickupName,
+        pickupPhone,
+        pickupRelation,
+        pickupNote,
         checklist: {
           unitChecked: true,
           paymentConfirmed: true,
@@ -84,7 +97,7 @@ export function RepresentativePickupDialog({
         triggerDynamicIslandFeedback({
           type: "success",
           title: "Pickup verified",
-          description: `Device handed to ${name.trim()}.`,
+          description: `Device handed to ${pickupName}.`,
           duration: 1800,
         });
         onSuccess();
@@ -129,59 +142,91 @@ export function RepresentativePickupDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs font-medium">
-                Representative Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Full name"
-                className="text-xs h-9"
-              />
+          <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2.5">
+            <div className="min-w-0 pr-3">
+              <p className="text-xs font-medium text-foreground">Diambil sendiri</p>
+              <p className="text-[10px] text-muted-foreground">
+                Unit diambil langsung oleh {service.customerName || "pelanggan"}.
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Relationship <span className="text-destructive">*</span>
-              </Label>
-              <select
-                value={relationship}
-                onChange={(e) => setRelationship(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="" disabled>
-                  Select
-                </option>
-                {["Family", "Friend", "Colleague", "Driver", "Courier", "Other"].map((r) => (
-                  <option key={r} value={r}>
-                    {r}
+            <Switch
+              checked={selfPickup}
+              onCheckedChange={setSelfPickup}
+              label=""
+              description=""
+              aria-label="Diambil sendiri oleh pelanggan"
+            />
+          </div>
+
+          {!selfPickup && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-medium">
+                  Representative Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Full name"
+                  className="text-xs h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Relationship <span className="text-destructive">*</span>
+                </Label>
+                <select
+                  value={relationship}
+                  onChange={(e) => setRelationship(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="" disabled>
+                    Select
                   </option>
-                ))}
-              </select>
+                  {["Family", "Friend", "Colleague", "Driver", "Courier", "Other"].map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="08xxx"
+                  className="text-xs h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  ID Number <span className="text-[10px] text-muted-foreground/60">(optional)</span>
+                </Label>
+                <Input
+                  value={idNumber}
+                  onChange={(e) => setIdNumber(e.target.value)}
+                  placeholder="KTP / SIM"
+                  className="text-xs h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Notes <span className="text-[10px] text-muted-foreground/60">(optional)</span>
+                </Label>
+                <Input
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Additional info"
+                  className="text-xs h-9"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Phone Number <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="08xxx"
-                className="text-xs h-9"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">
-                ID Number <span className="text-[10px] text-muted-foreground/60">(optional)</span>
-              </Label>
-              <Input
-                value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
-                placeholder="KTP / SIM"
-                className="text-xs h-9"
-              />
-            </div>
+          )}
+
+          {selfPickup && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">
                 Notes <span className="text-[10px] text-muted-foreground/60">(optional)</span>
@@ -193,7 +238,7 @@ export function RepresentativePickupDialog({
                 className="text-xs h-9"
               />
             </div>
-          </div>
+          )}
 
           <Separator />
 
