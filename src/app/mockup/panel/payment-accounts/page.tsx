@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -201,34 +202,18 @@ export default function PaymentAccountsPage() {
         </div>
 
         {/* View Toggle */}
-        <div className="inline-flex items-center rounded-lg border bg-muted p-0.5 ml-auto">
-          <button
-            type="button"
-            aria-pressed={viewMode === "card"}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              viewMode === "card"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("card")}
-          >
-            <LayoutGrid className="size-3.5" />
-            Card
-          </button>
-          <button
-            type="button"
-            aria-pressed={viewMode === "table"}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              viewMode === "table"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("table")}
-          >
-            <LayoutList className="size-3.5" />
-            Table
-          </button>
-        </div>
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)} className="ml-auto">
+          <TabsList className="h-9">
+            <TabsTrigger value="card" className="gap-1.5 text-xs">
+              <LayoutGrid className="size-3.5" />
+              Card
+            </TabsTrigger>
+            <TabsTrigger value="table" className="gap-1.5 text-xs">
+              <LayoutList className="size-3.5" />
+              Table
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <Button onClick={() => setShowCreate(true)} className="gap-2">
           <Plus className="size-4" />
@@ -269,27 +254,29 @@ export default function PaymentAccountsPage() {
         loading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <article key={i} className="flex min-h-[200px] flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div className="space-y-3 bg-slate-900 p-4">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="size-10 rounded-lg bg-white/20" />
-                    <div className="space-y-1.5 flex-1">
-                      <Skeleton className="h-4 w-32 bg-white/20" />
-                      <Skeleton className="h-3 w-20 bg-white/20" />
+              <Card key={i}>
+                <CardContent className="p-0">
+                  <div className="space-y-3 bg-muted/30 p-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="size-10 rounded-lg" />
+                      <div className="space-y-1.5 flex-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex-1 space-y-3 bg-white p-4">
-                  <Skeleton className="h-3 w-40" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-8 w-28" />
-                </div>
-                <div className="flex justify-end gap-1 border-t bg-muted/50 p-2">
-                  <Skeleton className="size-8 rounded-md" />
-                  <Skeleton className="size-8 rounded-md" />
-                  <Skeleton className="size-8 rounded-md" />
-                </div>
-              </article>
+                  <div className="space-y-3 p-4">
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-8 w-28" />
+                  </div>
+                  <div className="flex justify-end gap-1 border-t p-2">
+                    <Skeleton className="size-8 rounded-md" />
+                    <Skeleton className="size-8 rounded-md" />
+                    <Skeleton className="size-8 rounded-md" />
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         ) : accounts.length === 0 ? (

@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import dynamic from "next/dynamic";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { StoreShiftOpenModal } from "@/components/store-shift/StoreShiftOpenModal";
+import { ShiftReconciliationModal } from "@/components/store-shift/ShiftReconciliationModal";
 import { NotificationPopover } from "@/components/notifications/NotificationPopover";
 import { BrandThemeProvider } from "@/components/theme/brand-theme-provider";
 import { useBrandTheme } from "@/components/theme/brand-theme-provider";
@@ -175,6 +176,7 @@ function PanelLayoutShell({
   const mainScrollRef = React.useRef<HTMLElement | null>(null);
   const { activeBranchId, branches, activeBranchName } = useActiveBranch();
   const [openShiftModal, setOpenShiftModal] = React.useState(false);
+  const [pendingReconciliationShift, setPendingReconciliationShift] = React.useState<import("@/types/app").StoreShift | null>(null);
   const isMobile = useIsMobile();
 
   useAutoClose();
@@ -238,12 +240,35 @@ function PanelLayoutShell({
   }, [router]);
 
   React.useEffect(() => {
-    const handler = () => setOpenShiftModal(true);
+    const handler = async () => {
+      if (!resolvedBranchId) {
+        setOpenShiftModal(true);
+        return;
+      }
+      try {
+        const { getPendingReconciliationAction } = await import(
+          "@/server/actions/store-shift.actions"
+        );
+        const result = await getPendingReconciliationAction(brandSlug, resolvedBranchId);
+        if (result.success && result.data) {
+          setPendingReconciliationShift(result.data);
+        } else {
+          setOpenShiftModal(true);
+        }
+      } catch {
+        setOpenShiftModal(true);
+      }
+    };
     window.addEventListener("seervis:open-shift-modal", handler);
     return () => window.removeEventListener("seervis:open-shift-modal", handler);
-  }, []);
+  }, [brandSlug, resolvedBranchId]);
 
   const handleOpenShift = useCallback(() => {
+    setOpenShiftModal(true);
+  }, []);
+
+  const handleReconciliationSuccess = useCallback(() => {
+    setPendingReconciliationShift(null);
     setOpenShiftModal(true);
   }, []);
 
@@ -495,13 +520,22 @@ function PanelLayoutShell({
           <MobileNav brandSlug={brandSlug} />
 
       {resolvedBranchId && (
-        <StoreShiftOpenModal
-          open={openShiftModal}
-          onOpenChange={setOpenShiftModal}
-          brandSlug={brandSlug}
-          branchId={resolvedBranchId}
-          branchName={resolvedBranchName}
-        />
+        <>
+          <ShiftReconciliationModal
+            open={!!pendingReconciliationShift}
+            onOpenChange={(open) => { if (!open) setPendingReconciliationShift(null); }}
+            brandSlug={brandSlug}
+            shift={pendingReconciliationShift}
+            onSuccess={handleReconciliationSuccess}
+          />
+          <StoreShiftOpenModal
+            open={openShiftModal}
+            onOpenChange={setOpenShiftModal}
+            brandSlug={brandSlug}
+            branchId={resolvedBranchId}
+            branchName={resolvedBranchName}
+          />
+        </>
       )}
     </div>
     </LanguageProviderWrapper>

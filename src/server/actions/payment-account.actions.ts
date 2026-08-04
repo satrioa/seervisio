@@ -134,6 +134,10 @@ export async function listPaymentAccountsAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_account.view");
 
+    if (branchId && branchId !== "ALL_BRANCHES") {
+      requireBranchAccess(session, branchId, "listPaymentAccountsAction");
+    }
+
     const supabase = await createServerSupabase();
 
     let query = (supabase as any)
@@ -345,6 +349,10 @@ export async function updatePaymentAccountAction(
 
     if (!existing) return errorResult("Akun tidak ditemukan.");
 
+    if (existing.branch_id) {
+      requireBranchAccess(session, existing.branch_id, "updatePaymentAccountAction");
+    }
+
     if (existing.is_system_account || existing.is_cash_account) {
       if (input.isActive === false) {
         return errorResult("Akun kas sistem tidak dapat dinonaktifkan.");
@@ -508,6 +516,10 @@ export async function adjustPaymentAccountBalanceAction(
       .single();
 
     if (!account) return errorResult("Akun tidak ditemukan.");
+
+    if (account.branch_id) {
+      requireBranchAccess(session, account.branch_id, "adjustPaymentAccountBalanceAction");
+    }
 
     const adjBranchId = account.branch_id || session.defaultBranchId;
 
@@ -674,6 +686,10 @@ export async function getPaymentMdrTotalAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "payment_account.view");
+
+    if (branchId) {
+      requireBranchAccess(session, branchId, "getPaymentMdrTotalAction");
+    }
 
     const supabase = await createServerSupabase();
 

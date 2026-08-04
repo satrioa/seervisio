@@ -19,7 +19,7 @@
 "use server";
 
 import { createServerSupabase } from "@/lib/supabase/server";
-import { getSessionData, successResult, errorResult, requireActionPermission } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess } from "./action-helper";
 import type { ActionResult } from "./action-helper";
 import type {
   PosProductResult,
@@ -306,6 +306,10 @@ export async function listPosSalesAction(
   try {
     const session = await getSessionData(brandSlug);
     if (!session) return errorResult("Sesi tidak valid.");
+
+    if (branchId) {
+      requireBranchAccess(session, branchId, "listPosSalesAction");
+    }
 
     const supabase = await createServerSupabase();
     const { data } = await repoListSales(supabase, session.brandId, branchId || session.defaultBranchId);

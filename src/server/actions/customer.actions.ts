@@ -3,7 +3,7 @@
  */
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 
 export interface CustomerListItem {
@@ -94,6 +94,10 @@ export async function listCustomersAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "customer.view");
+
+    if (branchId) {
+      requireBranchAccess(session, branchId, "listCustomersAction");
+    }
 
     const adminDb = createServiceRoleSupabaseClient();
 

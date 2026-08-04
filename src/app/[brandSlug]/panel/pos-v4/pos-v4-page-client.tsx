@@ -4,8 +4,8 @@ import * as React from "react";
 import { useParams } from "next/navigation";
 import {
   Search, Plus, Minus, X, Loader2, ShoppingCart, CreditCard,
-  Smartphone, Package,   ChevronDown, ChevronUp, ChevronLeft,
-  Receipt, Eye, AlertTriangle, History,
+  Smartphone, Package, ChevronDown, ChevronUp, ChevronLeft,
+  Receipt, Eye, AlertTriangle, History, Check,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -354,6 +354,9 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const [voidSaving, setVoidSaving] = React.useState(false);
   const canVoid = can(userRole as any, PERMISSIONS.POS_VOID);
 
+  /* ── Checkout Success ── */
+  const [successTx, setSuccessTx] = React.useState<{ id: string; number: string; total: number; paid: number; change: number } | null>(null);
+
   const refreshKeyRef = React.useRef(0);
   const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -633,6 +636,13 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
         title: "Transaksi berhasil",
         type: "success",
         description: data.transactionNumber,
+      });
+      setSuccessTx({
+        id: data.transactionId,
+        number: data.transactionNumber,
+        total: data.totalAmount,
+        paid: data.paidAmount,
+        change: data.changeAmount,
       });
       clearCart();
       refreshAll();
@@ -1343,6 +1353,21 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   </Badge>
                 </div>
               )}
+              {detailTx?.status === "COMPLETED" && (
+                <>
+                  <Separator />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => window.open(`/${brandSlug}/pos-receipt/${detailTx.id}?print=true`, "_blank")}
+                  >
+                    <Receipt className="mr-1 size-3" />
+                    Cetak Resi
+                  </Button>
+                </>
+              )}
               {canVoid && detailTx?.status === "COMPLETED" && (
                 <>
                   <Separator />
@@ -1445,6 +1470,62 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                   Ya, Batalkan
                 </>
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════ Checkout Success Dialog ═══════════════ */}
+      <Dialog open={!!successTx} onOpenChange={() => setSuccessTx(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Check className="size-4 text-emerald-500" />
+              Transaksi Berhasil
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {successTx?.number ?? ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total</span>
+              <span className="font-semibold">{formatPrice(successTx?.total ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Dibayar</span>
+              <span>{formatPrice(successTx?.paid ?? 0)}</span>
+            </div>
+            {(successTx?.change ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kembali</span>
+                <span>{formatPrice(successTx?.change ?? 0)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => setSuccessTx(null)}
+            >
+              Tutup
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => {
+                window.open(`/${brandSlug}/pos-receipt/${successTx?.id}?print=true`, "_blank");
+                setSuccessTx(null);
+              }}
+            >
+              <Receipt className="mr-1 size-3" />
+              Cetak Resi
             </Button>
           </div>
         </DialogContent>

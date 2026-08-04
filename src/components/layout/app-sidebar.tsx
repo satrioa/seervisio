@@ -231,6 +231,8 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
       { href: "settings?section=target-goal", label: "Target & Goal" },
       { href: "settings?section=system", label: "System Settings" },
       { href: "settings?section=ai", label: "AI & Insight Engine" },
+      { href: "settings?section=receipt", label: "Pengaturan Nota" },
+      { href: "settings?section=printer", label: "Pengaturan Printer" },
     ],
   },
 ];
@@ -536,6 +538,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     Operation
                   </span>
                 </li>
+                {hasPermission(role as Role, "service.view") && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={isActive("services")}
@@ -553,6 +556,8 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                )}
+                {hasPermission(role as Role, "pos.view") && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={isActive("pos-v4")}
@@ -570,6 +575,8 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                )}
+                {hasPermission(role as Role, "store_shift.view") && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={isActive("store-shift")}
@@ -587,6 +594,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                )}
 
                 <li className="mx-4 my-1.5 border-t border-sidebar-border/50" />
 
@@ -634,7 +642,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                                 exit="closed"
                                 className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 overflow-hidden border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
                               >
-                                {group.items.map((item) => (
+                                {group.items.filter(item => aiCommandCenterEnabled || item.href !== "settings?section=ai").map((item) => (
                                   <motion.li
                                     key={item.href}
                                     variants={submenuItemVariants}
@@ -672,7 +680,7 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
                             data-sidebar="menu-sub"
                             className="mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5 group-data-[collapsible=icon]:hidden"
                           >
-                            {group.items.map((item) => (
+                            {group.items.filter(item => aiCommandCenterEnabled || item.href !== "settings?section=ai").map((item) => (
                               <li key={item.href}>
                                 <SidebarMenuSubButton
                                   isActive={isActive(item.href)}

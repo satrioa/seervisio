@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, handleActionError, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, handleActionError, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 import * as repo from "@/repositories/branch.repository";
 import type { BranchDetail, BranchStats, BranchSubscription, BranchCreateInput, BranchUpdateInput } from "@/repositories/branch.repository";
@@ -31,6 +31,7 @@ export async function getBranchDetailAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "branch.manage");
+    requireBranchAccess(session, branchId, "getBranchDetailAction");
 
     const adminDb = createServiceRoleSupabaseClient();
     const detail = await repo.getBranchDetail(adminDb as any, branchId);
@@ -150,6 +151,7 @@ export async function updateBranchAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "branch.manage");
+    requireBranchAccess(session, branchId, "updateBranchAction");
 
     if (input.name !== undefined && input.name.trim().length === 0) {
       return errorResult("Nama cabang tidak boleh kosong.");
@@ -195,6 +197,7 @@ export async function toggleBranchActiveAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "branch.manage");
+    requireBranchAccess(session, branchId, "toggleBranchActiveAction");
 
     const adminDb = createServiceRoleSupabaseClient();
 
@@ -230,6 +233,7 @@ export async function getBranchUsersAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "branch.manage");
+    requireBranchAccess(session, branchId, "getBranchUsersAction");
 
     const adminDb = createServiceRoleSupabaseClient();
     const users = await repo.getBranchUsers(adminDb as any, branchId);

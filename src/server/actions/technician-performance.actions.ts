@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionData, successResult, errorResult, requireActionPermission, type ActionResult } from "./action-helper";
+import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, type ActionResult } from "./action-helper";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
 
 export type PeriodFilter = "TODAY" | "7_DAYS" | "THIS_MONTH" | "CUSTOM";
@@ -17,6 +17,31 @@ export interface TrendDay {
   date: string;
   completed: number;
   revenue: number;
+}
+
+export interface PerformanceScoreData {
+  score: number;
+  previousScore: number | null;
+  quality: number;
+  sla: number;
+  utilization: number;
+}
+
+export interface TeamCapacityData {
+  activeService: number;
+  busyTechnicians: number;
+  availableTechnicians: number;
+  capacityPercentage: number;
+  maxCapacity: number;
+}
+
+export interface ServiceDistributionData {
+  masuk: number;
+  diagnosa: number;
+  repair: number;
+  qc: number;
+  pickup: number;
+  total: number;
 }
 
 export interface TechnicianStat {
@@ -54,6 +79,10 @@ export interface TechPerfData {
   teamSummary: TeamSummary;
   alerts: AlertItem[];
   trendOverall: TrendDay[];
+  performanceScore: PerformanceScoreData;
+  teamCapacity: TeamCapacityData;
+  serviceDistribution: ServiceDistributionData;
+  capacityPerTechnician: number; // configurable, default 5
 }
 
 function getPeriodDates(period: PeriodFilter, customStart?: string | null, customEnd?: string | null) {
@@ -90,6 +119,11 @@ export async function getTechnicianPerformanceAction(
   try {
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "service.view");
+
+    if (filters.branchId) {
+      requireBranchAccess(session, filters.branchId, "getTechnicianPerformanceAction");
+    }
+
     const adminDb = createServiceRoleSupabaseClient();
 
     const { start, end } = getPeriodDates(filters.period, filters.customStart, filters.customEnd);
@@ -119,29 +153,33 @@ export async function getTechnicianPerformanceAction(
     const techProfileIds = (memberships ?? []).map((m: any) => m.profile_id);
 
     /* ── 2. Fetch services for these technicians in the period ── */
-    const serviceQuery = (adminDb as any)
-      .from("services")
-      .select(`
-        id,
-        service_number,
-        assigned_technician_id,
-        current_status,
-        final_cost,
-        estimated_cost,
-        intake_at,
-        done_at,
-        created_at,
-        branch_id,
-        customer_id
-      `)
-      .eq("brand_id", session.brandId)
-      .in("assigned_technician_id", techProfileIds.length > 0 ? techProfileIds : ["__NONE__"])
-      .gte("intake_at", start)
-      .lte("intake_at", end)
-      .is("deleted_at", null);
+    let assignedServices: any[] = [];
+    if (techProfileIds.length > 0) {
+      const serviceQuery = (adminDb as any)
+        .from("services")
+        .select(`
+          id,
+          service_number,
+          assigned_technician_id,
+          current_status,
+          final_cost,
+          estimated_cost,
+          intake_at,
+          done_at,
+          created_at,
+          branch_id,
+          customer_id
+        `)
+        .eq("brand_id", session.brandId)
+        .in("assigned_technician_id", techProfileIds)
+        .gte("intake_at", start)
+        .lte("intake_at", end)
+        .is("deleted_at", null);
 
-    const { data: assignedServices, error: svcErr } = await serviceQuery;
-    if (svcErr) throw svcErr;
+      const { data: svcData, error: svcErr } = await serviceQuery;
+      if (svcErr) throw svcErr;
+      assignedServices = svcData ?? [];
+    }
 
     /* ── 3. Fetch unassigned services ── */
     const unassignedQuery = (adminDb as any)
@@ -312,6 +350,75 @@ export async function getTechnicianPerformanceAction(
         revenue: t.revenue,
       }));
 
+    /* ── 8. Service distribution (all active services in period) ── */
+    let distributionQuery = (adminDb as any)
+      .from("services")
+      .select("current_status", { count: "exact", head: false })
+      .eq("brand_id", session.brandId)
+      .not("current_status", "in", '("DONE","CANCELLED")')
+      .is("deleted_at", null);
+
+    if (filters.branchId) {
+      distributionQuery = distributionQuery.eq("branch_id", filters.branchId);
+    }
+
+    const { data: distributionRows } = await distributionQuery;
+
+    const statusGroups: Record<string, number> = {};
+    for (const row of (distributionRows ?? [])) {
+      const status = (row as any).current_status ?? "UNKNOWN";
+      statusGroups[status] = (statusGroups[status] ?? 0) + 1;
+    }
+
+    const serviceDistribution: ServiceDistributionData = {
+      masuk: statusGroups["INTAKE"] ?? 0,
+      diagnosa: (statusGroups["DIAGNOSING"] ?? 0) + (statusGroups["AWAITING_DIAGNOSIS"] ?? 0),
+      repair: (statusGroups["REPAIRING"] ?? 0) + (statusGroups["AWAITING_SPAREPART"] ?? 0) + (statusGroups["AWAITING_CUSTOMER"] ?? 0),
+      qc: statusGroups["QC"] ?? 0,
+      pickup: statusGroups["READY_PICKUP"] ?? 0,
+      total: (distributionRows ?? []).length,
+    };
+
+    /* ── 9. Team capacity ── */
+    const CAPACITY_PER_TECHNICIAN = 5;
+    const totalTechCount = (memberships ?? []).length;
+    const maxCapacity = totalTechCount * CAPACITY_PER_TECHNICIAN;
+    const activeService = allActive.length + (unassignedServices ?? []).length;
+    const capacityPercentage = maxCapacity > 0 ? Math.round((activeService / maxCapacity) * 100) : 0;
+
+    // Determine busy vs available technicians based on active assignments
+    const busyTechIds = new Set<string>();
+    for (const s of allActive) {
+      if (s.assigned_technician_id) busyTechIds.add(s.assigned_technician_id);
+    }
+    const busyTechnicians = busyTechIds.size;
+    const availableTechnicians = Math.max(0, totalTechCount - busyTechnicians);
+
+    const teamCapacity: TeamCapacityData = {
+      activeService,
+      busyTechnicians,
+      availableTechnicians,
+      capacityPercentage,
+      maxCapacity,
+    };
+
+    /* ── 10. Performance score (placeholder — single composite score from backend) ── */
+    // TODO: calculate composite score from:
+    //   - Service Completed
+    //   - SLA Compliance
+    //   - Quality Score
+    //   - Customer Rating
+    //   - Productivity
+    //   - Utilization
+    // For now, use a simple completion-based heuristic.
+    const performanceScore: PerformanceScoreData = {
+      score: totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0,
+      previousScore: null, // TODO: compare against previous period
+      quality: totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0,
+      sla: totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0,
+      utilization: totalTechCount > 0 ? Math.round((busyTechnicians / totalTechCount) * 100) : 0,
+    };
+
     const result: TechPerfData = {
       technicians,
       teamSummary: {
@@ -325,13 +432,15 @@ export async function getTechnicianPerformanceAction(
       },
       alerts,
       trendOverall: trendDays,
+      performanceScore,
+      teamCapacity,
+      serviceDistribution,
+      capacityPerTechnician: CAPACITY_PER_TECHNICIAN,
     };
 
     console.log("[technician-performance]", {
       brandId: session.brandId,
       period: filters.period,
-      branchFilter: filters.branchId ?? null,
-      technicianFilter: filters.technicianProfileId ?? null,
       techniciansCount: technicians.length,
       totalServices: (assignedServices ?? []).length,
       teamSummary: result.teamSummary,
