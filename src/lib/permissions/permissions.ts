@@ -20,6 +20,7 @@ export const PERMISSIONS = {
   SERVICE_REOPEN: "service.reopen",
   SERVICE_ADD_SPAREPART: "service.add_sparepart",
   SERVICE_PAYMENT_CREATE: "service.payment.create",
+  SERVICE_BILLING_SET: "service.billing.set",
   SERVICE_VERIFY_PICKUP: "service.verify_pickup",
   SERVICE_DELETE: "service.delete",
 

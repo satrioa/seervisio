@@ -83,52 +83,23 @@ export function TourProvider({ children, profileId }: { children: React.ReactNod
   );
 
   const startTour = useCallback(
-    async (name: string, fromStep = 0) => {
-      const tour = getTour(name);
-      if (!tour) return;
-      // Guard: don't restart if the same tour is already active/running.
-      // Prevents flicker when the auto-start effect fires more than once.
-      if (status === "touring" && activeTour?.id === tour.id) return;
-      if (finishedRef.current.has(tour.id)) return;
-      setActiveTour(tour);
-      setStatus("touring");
-      setState((s) => ({
-        ...s,
-        status: "touring",
-        tourName: tour.id,
-        totalSteps: tour.steps.length,
-        currentStep: fromStep,
-        waiting: false,
-      }));
-      await TourManager.start(tour, fromStep);
-      await persist(tour, fromStep);
+    async (_name: string, _fromStep = 0) => {
+      // Tour temporarily disabled.
+      return;
     },
-    [persist, status, activeTour],
+    [],
   );
 
   const resumeTour = useCallback(async () => {
-    try {
-      const { getTourProgressAction } = await import(
-        "@/server/actions/tour-progress.actions"
-      );
-      // Resume the first incomplete tour we know about.
-      const candidates = ["dashboard-v1", "checkout-v1", "inventory-v1", "finance-v1"];
-      for (const name of candidates) {
-        const res = await getTourProgressAction(name);
-        if (res.success && res.data && !res.data.completed && !res.data.skipped) {
-          await startTour(name, res.data.current_step);
-          return;
-        }
-      }
-    } catch {
-      /* nothing to resume */
-    }
-  }, [startTour]);
+      // Tour temporarily disabled.
+    }, []);
 
   const next = useCallback(() => TourManager.next(), []);
   const previous = useCallback(() => TourManager.previous(), []);
   const skip = useCallback(() => TourManager.skip(), []);
-  const resumeCurrent = useCallback(() => { void TourManager.resumeCurrent(); }, []);
+  const resumeCurrent = useCallback(() => {
+      // Tour temporarily disabled.
+    }, []);
 
   const complete = useCallback(() => {
     if (activeTour) {
