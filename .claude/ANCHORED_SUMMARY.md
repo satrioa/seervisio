@@ -49,33 +49,42 @@ Merged in commit `21d22de`. See `docs/PROJECT_CONTEXT.md` (Licensing section).
 - Inventory V4 is the production inventory+POS subsystem (`inventory-v4.*`).
   Product → Variants model (sku/stock/cost/price/minStock per variant).
 
-## Recent work (navigation + license page refresh)
-- Removed "License Center" (`/[brandSlug]/panel/licenses`) from the tenant
-  **sidebar** (`app-sidebar.tsx` System group). Billing/License is now reachable
-  only from the **landing profile menu** (navbar avatar popover in
-  `public-header.tsx`, item "Billing & License" → `/license`).
-- `/license` page restyled as a tabbed **Billing & License** portal: Overview /
-  Renewal / History / Invoice. Reuses `src/app/license/_components/*`. No new
-  backend calls (uses `initialStatus` + `initialPackages`). Pricing grid kept for
-  no-license/no-payment state. `tsc` + `next build` pass.
-- Platform console (`platform-sidebar.tsx` "Licenses") untouched.
-- Login page: removed OAuth buttons (Google/Apple/GitHub) + `AuthDivider`.
-- `SidebarMenu` gap set to `gap-px` (1px) in `src/components/ui/sidebar.tsx`.
+## Goal of last major work (completed)
+Committed the entire large uncommitted feature set (~110 files) as 13 logical
+commits (`main`). See recent-commits list below for grouping.
 
-## Next planned feature
-Spreadsheet Bulk Editor (Inventory → Products): Airtable-like grid with
-inline edit, Excel paste (TSV), live validation, dirty-state, preview,
-transactional save (one audit batch + activity log), virtualization for 10k+
-rows, mobile read-only. To be brainstormed → spec in `docs/superpowers/specs/`.
+## Recent work (all committed; `npx tsc --noEmit` clean)
+- **Auto-close shifts + reconciliation**: cron `api/cron/auto-close-shifts`,
+  `ShiftReconciliationModal`, `reconciliationStatus` on `StoreShift`,
+  migration `137_auto_close_reconciliation.sql`.
+- **Service billing editor + receipts**: `service-billing-editor`,
+  `thermal-receipt`, injected `/invoice/[serviceId]` + `/pos-receipt/[transactionId]`
+  routes, printer service (`src/services/printer/*`), printer/receipt settings
+  pages, `barcode.ts`, `receipt-sections.ts`, migration `138_service_billing_items`.
+- **Cancel service with payment** dialog + design doc.
+- **Inventory dashboard rewrite**: `InventoryOverviewTab` → 2×2 KPI grid,
+  stock movements + top spareparts; `dashboard.actions.ts`; overview v2.
+- **Service overview v2** dashboard: Action-required + Pickup-queue cards,
+  `getServiceOverviewV2Action` (needs root `requireAuth` — currently scope-visible).
+- **Inventory-v4 sparepart add/remove**: `b-autocomplete` (new), return-to-stock
+  migration `139_inv_return_sparepart_from_service`.
+- **Service workflow**: kanban/list views, `ServiceActivityTimeline` (replaces
+  deleted `service-detail-timeline.tsx`), technician-assign banner, `b-combobox` +
+  `r-switch` (new), auto-assign tech on create for TECHNICIAN role.
+- **Right sidebar**: hidden in Kanban (uses detail Sheet), click-outside close
+  removed (Close button + Escape only).
+- **Layout/app**: content-layout default → `full-width`; language pref default
+  unchanged; tour disabled in `TourContext`; branch-access added across actions.
+- **Landing/onboarding**: CTA logic (`#pricing` vs dashboard); onboarding polish.
+- **Panel**: branch-scoped payment accounts, POS V4, technician-performance.
+- **Deps/UI**: `@base-ui/react`, `@types/web-bluetooth`; matos-ui components,
+  texture-overlay, examples; dynamic island + ui/* updates.
+
+## Next move
+- (none pending — repo stable, typecheck clean. Await next task.)
 
 ## Relevant files
-- `docs/PROJECT_CONTEXT.md` — full agent reference
-- `src/server/actions/action-helper.ts` — `ActionResult`, `requireActionPermission`
-- `src/server/actions/license.actions.ts` — billing actions + cron orchestration
-- `src/server/actions/welcome.actions.ts` — brand creation + trial assign
-- `src/app/api/cron/billing/route.ts` — billing cron
-- `src/server/domain/inventory-v4.types.ts`, `inventory-v4.repository.ts`,
-  `inventory-v4.actions.ts` — inventory subsystem
-- `supabase/migrations/130`–`136` — billing schema + cron RPCs
-- `vercel.json` — cron schedule
-- `src/lib/supabase/admin.ts` — service-role client
+- `src/server/actions/*.actions.ts`, `src/server/actions/service.actions.ts`
+- `src/components/services/*`, `src/components/dashboard/*`
+- `src/services/printer/*`, `src/app/[brandSlug]/invoice|pos-receipt/*`
+- `supabase/migrations/137_…,138_…,139_…`
