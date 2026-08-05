@@ -468,7 +468,7 @@ export function BranchesPageClient() {
 
       {/* Add/Edit Modal */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="!z-[10010] sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Cabang" : "Tambah Cabang"}</DialogTitle>
             <DialogDescription>

@@ -10,10 +10,8 @@ Single source of truth — **no Google Sheets integration** (an in-app
 Spreadsheet Bulk Editor is planned to replace spreadsheet workflows).
 
 ## Goal of last major work (completed)
-Billing & Subscription spec (Phases 1–5): trial auto-assign, downgrade
-scheduling, renewal preference, rejected-order handling, lifetime variant, full
-license status set, and a daily billing cron with in-app + email notifications.
-Merged in commit `21d22de`. See `docs/PROJECT_CONTEXT.md` (Licensing section).
+Customer portal polish + panel performance optimization + ESC/POS thermal
+printing, committed as `394219f`. See Recent work below.
 
 ## Stack & non-negotiables
 - Next.js 15 App Router, React 19, TS 5.7, Tailwind v4, Framer Motion.
@@ -54,31 +52,56 @@ Committed the entire large uncommitted feature set (~110 files) as 13 logical
 commits (`main`). See recent-commits list below for grouping.
 
 ## Recent work (all committed; `npx tsc --noEmit` clean)
-- **Auto-close shifts + reconciliation**: cron `api/cron/auto-close-shifts`,
-  `ShiftReconciliationModal`, `reconciliationStatus` on `StoreShift`,
-  migration `137_auto_close_reconciliation.sql`.
-- **Service billing editor + receipts**: `service-billing-editor`,
-  `thermal-receipt`, injected `/invoice/[serviceId]` + `/pos-receipt/[transactionId]`
-  routes, printer service (`src/services/printer/*`), printer/receipt settings
-  pages, `barcode.ts`, `receipt-sections.ts`, migration `138_service_billing_items`.
-- **Cancel service with payment** dialog + design doc.
-- **Inventory dashboard rewrite**: `InventoryOverviewTab` → 2×2 KPI grid,
-  stock movements + top spareparts; `dashboard.actions.ts`; overview v2.
-- **Service overview v2** dashboard: Action-required + Pickup-queue cards,
-  `getServiceOverviewV2Action` (needs root `requireAuth` — currently scope-visible).
-- **Inventory-v4 sparepart add/remove**: `b-autocomplete` (new), return-to-stock
-  migration `139_inv_return_sparepart_from_service`.
-- **Service workflow**: kanban/list views, `ServiceActivityTimeline` (replaces
-  deleted `service-detail-timeline.tsx`), technician-assign banner, `b-combobox` +
-  `r-switch` (new), auto-assign tech on create for TECHNICIAN role.
-- **Right sidebar**: hidden in Kanban (uses detail Sheet), click-outside close
-  removed (Close button + Escape only).
-- **Layout/app**: content-layout default → `full-width`; language pref default
-  unchanged; tour disabled in `TourContext`; branch-access added across actions.
-- **Landing/onboarding**: CTA logic (`#pricing` vs dashboard); onboarding polish.
-- **Panel**: branch-scoped payment accounts, POS V4, technician-performance.
-- **Deps/UI**: `@base-ui/react`, `@types/web-bluetooth`; matos-ui components,
-  texture-overlay, examples; dynamic island + ui/* updates.
+- **Customer portal** (`/t/[token]`, `portal-client.tsx`): HelpSection
+  "Butuh Bantuan?" (wa.me prefilled, tel: fallback) replaces Share card;
+  horizontal ProgressTimeline stepper; panel-style activity timeline via the
+  exact `ServiceActivityTimeline` component with `LIGHT_TIMELINE_THEME` scoped
+  raw-var override. Portal dark-theme gotcha: app default is dark and
+  `@theme inline` inlines raw vars, so override raw CSS vars
+  (`--card`, `--background`, `--foreground`, `--muted`, `--muted-foreground`,
+  `--border`) with light oklch, not `--color-*`.
+- **Portal timeline fix**: `customer-portal.repository.ts` `statusTimeline`
+  was selecting phantom columns — `service_status_history` has NO
+  `status`/`created_at` (only `from_status, to_status, reason, metadata,
+  changed_by, changed_at`). Now selects real cols + `changed_by_profile`
+  join; `status=to_status??from_status`, `timestamp=changed_at`. Portal event
+  mapping mirrors `deriveEventType`/`mapTimelineRowToEvent`
+  (`service.actions.ts:884-1012`).
+- **Panel performance (3 phases)**: `middleware.ts` parallelized — profile
+  + brand (by slug) in batch 1, then membership + license in batch 2
+  (was 4 sequential). Keep license query `OR(profile_id.eq.X,brand_id.eq.Y)`
+  and membership `brand_id`-scoped (multi-brand users break `.single()`
+  otherwise). Added `loading.tsx` skeletons for services/customers/dashboard/
+  inventory-v4. Services page: `useTransition`/`isPending` instead of
+  `isLoading`, dynamic imports (`next/dynamic`) for KanbanView/DetailSheet/
+  CreateOverlay/PaymentPanel/SparepartPanel. `getServiceDetailAction`
+  parallelized. Revalidation (`revalidatePath` + `revalidateTag
+  services:${brandId}`) on create/status/cancel. Phase 3.4 optimistic updates
+  **deliberately skipped** — all status flows are confirm dialogs with
+  spinners; kanban already documents "no optimistic update" for note dialog.
+- **Printing**: `escpos-invoice.ts` ESC/POS thermal encoder +
+  `printer-encoder.test.ts` (vitest), `print-iframe.ts` print service,
+  `invoice-print-popover.tsx`, `thermal-print-mode` body class in
+  `globals.css` @media print (hides only `.no-print`), dynamic island fixed
+  positioning desktop + mobile.
+- **Docs sidebar link**: Documentation now `<a href="/docs" target="_blank">`
+  instead of internal route.
+- **POS type + category filters**: POS v4 items panel now has a client-side type
+  filter row (`Semua | Produk | Unit`) above the existing category tabs.
+  `activeType` state + `filteredProducts` memo filter on
+  `PosProductV4Row.productKind` (`PRODUCT`/`UNIT`); category remains server-side
+  via `fetchProducts(catId, search)`. New "Tidak ada item untuk filter ini"
+  empty state when type filter excludes everything.
+- **Per-type categories (POS + inventory)**: Categories were already typed in
+  DB (`inventory_categories.item_type`: SPAREPART/PRODUCT/DEVICE_UNIT). POS
+  now adapts its category tabs to the active type (Produk→item_type PRODUCT,
+  Unit→DEVICE_UNIT, Semua→all; `visibleCategories` memo + `handleTypeChange`
+  resets category if it no longer belongs). `listPosCategoriesV4` already
+  excludes SPAREPART. CategoryManagerDialog now has an explicit type selector
+  (Sparepart/Produk/Unit) with type-scoped title ("Kelola Kategori — X") and
+  scoped create/list. Product/UnitSecond/Edit forms label the Kategori field as
+  "Kategori · {type}" to signal scoping. Mirrored in both `[brandSlug]` and
+  `mockup/panel` copies.
 
 ## Next move
 - (none pending — repo stable, typecheck clean. Await next task.)
@@ -87,4 +110,6 @@ commits (`main`). See recent-commits list below for grouping.
 - `src/server/actions/*.actions.ts`, `src/server/actions/service.actions.ts`
 - `src/components/services/*`, `src/components/dashboard/*`
 - `src/services/printer/*`, `src/app/[brandSlug]/invoice|pos-receipt/*`
+- `src/app/t/[token]/portal-client.tsx`, `src/server/repositories/customer-portal.repository.ts`
+- `middleware.ts`, `src/app/[brandSlug]/panel/services/page.tsx` + `loading.tsx`
 - `supabase/migrations/137_…,138_…,139_…`

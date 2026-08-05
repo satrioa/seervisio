@@ -174,7 +174,7 @@ function AccountFormDialog({
 
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!z-[10010] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "Tambah User" : "Edit Akses"}</DialogTitle>
           <DialogDescription>
