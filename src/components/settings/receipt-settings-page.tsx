@@ -232,10 +232,11 @@ function SortableSectionCard({
 
 function PreviewStoreLogo({ section, brand }: { section: ReceiptSection; brand: Pick<BrandProfileData, "logoUrl"> }) {
   if (!section.enabled) return null;
+  const logoUrl = section.config?.logoUrl || brand.logoUrl;
   return (
     <div style={{ textAlign: "center", marginBottom: "6px" }}>
-      {brand.logoUrl ? (
-        <img src={brand.logoUrl} alt="Logo" style={{ display: "block", maxWidth: "120px", maxHeight: "40px", margin: "0 auto", objectFit: "contain" }} />
+      {logoUrl ? (
+        <img src={logoUrl} alt="Logo" style={{ display: "block", maxWidth: "120px", maxHeight: "40px", margin: "0 auto", objectFit: "contain" }} />
       ) : (
         <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 80, height: 40, background: "#f4f4f5", borderRadius: 4, margin: "0 auto" }}>
           <span style={{ fontSize: "7px", color: "#999" }}>No Logo</span>

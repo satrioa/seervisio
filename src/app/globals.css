@@ -472,9 +472,33 @@
 @media print {
   @page { size: Letter; margin: 0; }
   html, body { width: 8.5in !important; height: 11in !important; margin: 0 !important; overflow: hidden !important; }
-  body > *:not([data-print-root]) { display: none !important; }
+  body:not(.thermal-print-mode) > *:not([data-print-root]) { display: none !important; }
   [data-print-root] { display: block !important; width: 8.5in !important; height: 11in !important; margin: 0 !important; overflow: hidden !important; background: white !important; }
   [data-print-root] [data-print-paper] { width: 8.5in !important; height: 11in !important; margin: 0 !important; box-shadow: none !important; }
   [data-print-root] [data-print-paper],
   [data-print-root] [data-print-paper] * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body.thermal-print-mode {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  body.thermal-print-mode > * {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  body.thermal-print-mode .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  body.thermal-print-mode script,
+  body.thermal-print-mode style,
+  body.thermal-print-mode noscript,
+  body.thermal-print-mode [hidden] {
+    display: none !important;
+  }
 }

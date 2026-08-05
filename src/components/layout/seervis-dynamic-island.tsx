@@ -354,7 +354,7 @@ function SeervisIslandContent({
               : mode === "idle" && hasActiveShift && showEyes
                 ? { width: "auto", height: 31 }
                   : mode === "idle" && !hasActiveShift
-                    ? { width: "auto", height: 31 }
+                    ? { width: isMobile ? 258 : 304, height: 31 }
                     : { width: 150, height: 32 };
   const initialDims = dims;
 
@@ -383,7 +383,11 @@ function SeervisIslandContent({
             ? ["rgba(255,255,255,0.1)", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.1)"]
             : "rgba(255,255,255,0.1)",
         }}
-        style={{ borderRadius: islandBorderRadius, boxShadow: islandShadow, maxWidth: "min(calc(100vw - 2rem), 560px)" }}
+         style={{
+           borderRadius: islandBorderRadius,
+           boxShadow: islandShadow,
+           maxWidth: "min(calc(100vw - 2rem), 560px)",
+         }}
       transition={{
         ...spring,
         x: errorShake ? { duration: 0.4 } : spring,

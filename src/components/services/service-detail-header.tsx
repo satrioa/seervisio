@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Share2, Phone, Copy, Check, ExternalLink, QrCode, Printer, FileText } from "lucide-react";
+import { X, Share2, Phone, Copy, Check, ExternalLink, QrCode, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
@@ -9,6 +9,8 @@ import { ServiceDeviceIcon } from "@/components/services/service-device-icon";
 import { STATUS_CONFIG } from "@/components/services/service-data";
 import type { ServiceRecord, ServiceStatus } from "@/components/services/service-data";
 import { getServicePortalShareDataAction } from "@/server/actions/customer-portal.actions";
+import { getInvoiceDataAction } from "@/server/actions/invoice-data.actions";
+import { InvoicePrintPopover } from "@/components/services/invoice-print-popover";
 
 interface ServiceDetailHeaderProps {
   service: ServiceRecord;
@@ -163,14 +165,11 @@ function SharePopover({ service }: { service: ServiceRecord }) {
               </button>
             )}
             <Separator className="my-1" />
-            <button
-              type="button"
-              onClick={() => window.open(`${invoiceUrl}?print=true`, "_blank")}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              <Printer className="size-3.5" />
-              Print Invoice
-            </button>
+            {data?.brandSlug && (
+              <InvoicePrintPopover
+                loadInvoice={() => getInvoiceDataAction(data.brandSlug, service.id)}
+              />
+            )}
             <button
               type="button"
               onClick={() => copyToClipboard("summary")}

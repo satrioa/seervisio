@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Suspense, useCallback } from "react";
+import { Suspense, useCallback, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   Search,
   LayoutList,
@@ -19,9 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CreateServiceOverlay } from "@/components/services/create-service-overlay";
-import { ServicePaymentPanel } from "@/components/services/service-payment-panel";
-import { ServiceSparepartPanel } from "@/components/services/service-sparepart-panel";
 
 import {
   type ServiceStatus,
@@ -30,11 +28,35 @@ import {
 } from "@/components/services/service-data";
 import type { ServiceRecord } from "@/components/services/service-data";
 import { ServiceListView } from "@/components/services/service-list-view";
-import { ServiceKanbanView } from "@/components/services/service-kanban-view";
-import { ServiceDetailSheet } from "@/components/services/service-detail-sheet";
 import { useRightSidebar } from "@/components/layout/right-sidebar-context";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { listServicesAction, getServiceDetailAction, getSessionRoleAction } from "@/server/actions/service.actions";
+
+// Lazy-loaded: only fetched when the user actually opens these views/panels.
+const ServiceKanbanView = dynamic(
+  () => import("@/components/services/service-kanban-view").then((m) => m.ServiceKanbanView),
+  { ssr: false, loading: () => <div className="p-6 text-center text-xs text-muted-foreground">Memuat papan kerja...</div> }
+);
+
+const ServiceDetailSheet = dynamic(
+  () => import("@/components/services/service-detail-sheet").then((m) => m.ServiceDetailSheet),
+  { ssr: false, loading: () => null }
+);
+
+const CreateServiceOverlay = dynamic(
+  () => import("@/components/services/create-service-overlay").then((m) => m.CreateServiceOverlay),
+  { ssr: false, loading: () => null }
+);
+
+const ServicePaymentPanel = dynamic(
+  () => import("@/components/services/service-payment-panel").then((m) => m.ServicePaymentPanel),
+  { ssr: false, loading: () => null }
+);
+
+const ServiceSparepartPanel = dynamic(
+  () => import("@/components/services/service-sparepart-panel").then((m) => m.ServiceSparepartPanel),
+  { ssr: false, loading: () => null }
+);
 
 type ViewMode = "list" | "kanban";
 
@@ -156,7 +178,7 @@ function ServicesPageContent() {
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
   const urlRestoredRef = React.useRef(false);
   const [services, setServices] = React.useState<ServiceRecord[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isPending, startTransition] = useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [userRole, setUserRole] = React.useState<string | null>(null);
   const [paymentServiceId, setPaymentServiceId] = React.useState<string | null>(null);
@@ -180,33 +202,32 @@ function ServicesPageContent() {
     setSparepartServiceId(serviceId);
   }, []);
 
-  const fetchServices = React.useCallback(async () => {
+  const fetchServices = React.useCallback(() => {
     const normalizedBranchId = activeBranchId && activeBranchId !== "ALL_BRANCHES"
       ? activeBranchId
       : null;
-    setIsLoading(true);
     setError(null);
-    try {
-      const [servicesResult, roleResult] = await Promise.all([
-        listServicesAction({ brandSlug, branchId: normalizedBranchId }),
-        getSessionRoleAction(brandSlug),
-      ]);
-      if (!servicesResult.ok) {
+    startTransition(async () => {
+      try {
+        const [servicesResult, roleResult] = await Promise.all([
+          listServicesAction({ brandSlug, branchId: normalizedBranchId }),
+          getSessionRoleAction(brandSlug),
+        ]);
+        if (!servicesResult.ok) {
+          setServices([]);
+          setError(servicesResult.error ?? "Gagal memuat data servis");
+          return;
+        }
+        setServices(servicesResult.data);
+        if (roleResult.success) {
+          setUserRole(roleResult.data.role);
+        }
+      } catch (err) {
+        console.error("[services:page] fetch exception", err);
         setServices([]);
-        setError(servicesResult.error ?? "Gagal memuat data servis");
-        return;
+        setError("Gagal memuat data servis");
       }
-      setServices(servicesResult.data);
-      if (roleResult.success) {
-        setUserRole(roleResult.data.role);
-      }
-    } catch (err) {
-      console.error("[services:page] fetch exception", err);
-      setServices([]);
-      setError("Gagal memuat data servis");
-    } finally {
-      setIsLoading(false);
-    }
+    });
   }, [brandSlug, activeBranchId]);
 
   React.useEffect(() => {
@@ -321,14 +342,13 @@ function ServicesPageContent() {
         if (sidebarDataRef.current?.id === sid || selectedServiceIdRef.current === sid) {
           showDetail(fresh);
         }
-        fetchServices().then(() => {
-          setServices(prev => prev.map(s => s.id === sid ? fresh : s));
-          router.refresh();
-        });
+        fetchServices();
+        router.refresh();
         return;
       }
     }
-    fetchServices().then(() => router.refresh());
+    fetchServices();
+    router.refresh();
   }, [brandSlug, fetchServices, showDetail, router]);
 
   // Reset create-service overlay state on mount and when leaving the page.
@@ -586,7 +606,7 @@ function ServicesPageContent() {
               >
                 <ServiceListView
                   services={services}
-                  isLoading={isLoading}
+                  isLoading={isPending}
                   error={error}
                   search={search}
                   statusFilter={statusFilter}
@@ -614,7 +634,7 @@ function ServicesPageContent() {
                 <ServiceKanbanView
                   services={services}
                   brandSlug={brandSlug}
-                  isLoading={isLoading}
+                  isLoading={isPending}
                   error={error}
                   search={search}
                   statusFilter={statusFilter}

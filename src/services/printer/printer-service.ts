@@ -9,6 +9,8 @@ import {
 } from "./printer-types";
 import { BluetoothAdapter } from "./bluetooth-adapter";
 import { loadPrinterSettings, savePrinterSettings } from "./printer-storage";
+import { buildEscPosInvoice } from "./escpos-invoice";
+import type { InvoiceData } from "@/server/actions/invoice-data.actions";
 
 type PrinterEventCallback = {
   onStatusChange?: (status: ConnectionStatus) => void;
@@ -125,6 +127,22 @@ class PrinterService {
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Test cetak gagal";
+      this.emitError(msg);
+      throw err;
+    }
+  }
+
+  async printInvoice(data: InvoiceData, baseUrl?: string): Promise<void> {
+    if (!this._adapter || !this.connected) {
+      const msg = "Printer tidak terhubung";
+      this.emitError(msg);
+      throw new Error(msg);
+    }
+    try {
+      const bytes = buildEscPosInvoice(data, this._settings, baseUrl);
+      await this._adapter.print(bytes);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Cetak invoice gagal";
       this.emitError(msg);
       throw err;
     }

@@ -706,22 +706,17 @@ export function AppSidebar({ brandSlug, brandName, brandLogoUrl, role, canAccess
 
               <div className="mx-4 my-2 border-t border-sidebar-border/50" />
 
-                {/* Documentation */}
+                {/* Documentation - opens in new tab */}
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    isActive={isActive("documentation")}
                     tooltip="Documentation"
-                    className={
-                      isActive("documentation")
-                        ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground group-data-[collapsible=icon]:bg-background group-data-[collapsible=icon]:shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }
+                    className="text-muted-foreground hover:text-foreground"
                     asChild
                   >
-                    <Link href={panelPath('/documentation')} onClick={handleNavClick}>
+                    <a href="/docs" target="_blank" rel="noreferrer">
                       <BookOpen />
                       <span>Documentation</span>
-                    </Link>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 

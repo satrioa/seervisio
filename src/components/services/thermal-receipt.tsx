@@ -2,9 +2,12 @@
 
 import * as React from "react";
 import QRCode from "qrcode";
+import { Printer, Loader2, Check } from "lucide-react";
 import { generateBarcodeSvg, barcodeSvgToDataUrl } from "@/lib/barcode";
 import type { InvoiceData } from "@/server/actions/invoice-data.actions";
 import type { ReceiptSection } from "@/lib/receipt-sections";
+import { printerService } from "@/services/printer/printer-service";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "-";
@@ -21,11 +24,12 @@ interface ThermalReceiptProps {
   data: InvoiceData;
   baseUrl: string;
   autoPrint?: boolean;
+  embeddedPreview?: boolean;
 }
 
 function SectionStoreLogo({ section, brand }: { section: ReceiptSection; brand: InvoiceData["brand"] }) {
   if (!section.enabled) return null;
-  const logoUrl = brand.settings?.logoUrl;
+  const logoUrl = section.config?.logoUrl || brand.settings?.logoUrl;
   return (
     <div style={{ textAlign: "center", marginBottom: "6px" }}>
       {logoUrl ? (
@@ -68,15 +72,15 @@ function SectionOrderPricing({ section, service, paymentSummary, showPrices }: {
     <>
       <table style={{ width: "100%", fontSize: "9px" }}>
         <tbody>
-          <tr><td style={{ color: "#666", width: "30%", verticalAlign: "top" }}>No. Invoice</td><td style={{ fontWeight: 600 }}>{service.serviceNumber}</td></tr>
-          <tr><td style={{ color: "#666", verticalAlign: "top" }}>Tanggal</td><td>{formatDate(service.intakeAt)}</td></tr>
-          <tr><td style={{ color: "#666", verticalAlign: "top" }}>Pelanggan</td><td>{service.customerName}</td></tr>
-          <tr><td style={{ color: "#666", verticalAlign: "top" }}>Perangkat</td><td>{[service.deviceBrand, service.deviceType, service.deviceModel].filter(Boolean).join(" ") || "-"}</td></tr>
-          {service.deviceImei && <tr><td style={{ color: "#666", verticalAlign: "top" }}>IMEI/SN</td><td>{service.deviceImei}</td></tr>}
-          <tr><td style={{ color: "#666", verticalAlign: "top" }}>Keluhan</td><td>{service.reportedIssue}</td></tr>
-          {service.diagnosisResult && <tr><td style={{ color: "#666", verticalAlign: "top" }}>Diagnosa</td><td>{service.diagnosisResult}</td></tr>}
-          {service.branchName && <tr><td style={{ color: "#666", verticalAlign: "top" }}>Cabang</td><td>{service.branchName}</td></tr>}
-          {service.technicianName && <tr><td style={{ color: "#666", verticalAlign: "top" }}>Teknisi</td><td>{service.technicianName}</td></tr>}
+          <tr><td style={{ color: "#444", width: "30%", verticalAlign: "top" }}>No. Invoice</td><td style={{ fontWeight: 600 }}>{service.serviceNumber}</td></tr>
+          <tr><td style={{ color: "#444", verticalAlign: "top" }}>Tanggal</td><td>{formatDate(service.intakeAt)}</td></tr>
+          <tr><td style={{ color: "#444", verticalAlign: "top" }}>Pelanggan</td><td>{service.customerName}</td></tr>
+          <tr><td style={{ color: "#444", verticalAlign: "top" }}>Perangkat</td><td>{[service.deviceBrand, service.deviceType, service.deviceModel].filter(Boolean).join(" ") || "-"}</td></tr>
+          {service.deviceImei && <tr><td style={{ color: "#444", verticalAlign: "top" }}>IMEI/SN</td><td>{service.deviceImei}</td></tr>}
+          <tr><td style={{ color: "#444", verticalAlign: "top" }}>Keluhan</td><td>{service.reportedIssue}</td></tr>
+          {service.diagnosisResult && <tr><td style={{ color: "#444", verticalAlign: "top" }}>Diagnosa</td><td>{service.diagnosisResult}</td></tr>}
+          {service.branchName && <tr><td style={{ color: "#444", verticalAlign: "top" }}>Cabang</td><td>{service.branchName}</td></tr>}
+          {service.technicianName && <tr><td style={{ color: "#444", verticalAlign: "top" }}>Teknisi</td><td>{service.technicianName}</td></tr>}
         </tbody>
       </table>
       {hasItems && (
@@ -116,7 +120,7 @@ function SectionOrderPricing({ section, service, paymentSummary, showPrices }: {
                 return (
                   <>
                     {totalBill > 0 && <tr><td style={{ fontWeight: 600 }}>Total Biaya</td><td style={{ textAlign: "right", fontWeight: 600 }}>{formatCurrency(totalBill)}</td></tr>}
-                    {paidAmount > 0 && <tr><td style={{ color: "#666" }}>Terbayar</td><td style={{ textAlign: "right", color: "#666" }}>{formatCurrency(paidAmount)}</td></tr>}
+                    {paidAmount > 0 && <tr><td style={{ color: "#444" }}>Terbayar</td><td style={{ textAlign: "right", color: "#444" }}>{formatCurrency(paidAmount)}</td></tr>}
                     {remaining > 0 && <tr><td style={{ fontWeight: 600, color: "#333" }}>Sisa Tagihan</td><td style={{ textAlign: "right", fontWeight: 600, color: "#333" }}>{formatCurrency(remaining)}</td></tr>}
                     {paidAmount > 0 && remaining <= 0 && <tr><td style={{ fontWeight: 600, color: "#333" }}>Status</td><td style={{ textAlign: "right", fontWeight: 600, color: "#333" }}>LUNAS</td></tr>}
                   </>
@@ -134,7 +138,7 @@ function SectionPaymentHistory({ section, payments }: { section: ReceiptSection;
   if (!section.enabled || payments.length === 0) return null;
   return (
     <>
-      <p style={{ fontSize: "8px", fontWeight: 600, margin: "2px 0", textTransform: "uppercase", color: "#666" }}>Riwayat Pembayaran</p>
+      <p style={{ fontSize: "8px", fontWeight: 600, margin: "2px 0", textTransform: "uppercase", color: "#333" }}>Riwayat Pembayaran</p>
       {payments.map((p, i) => (
         <p key={i} style={{ fontSize: "8px", margin: "1px 0" }}>
           {formatDate(p.paidAt)} - {formatCurrency(p.grossAmount)}
@@ -167,20 +171,24 @@ function SectionBarcode({ section, barcodeDataUrl, serviceNumber }: { section: R
 
 function SectionWarranty({ section, warrantyUntil }: { section: ReceiptSection; warrantyUntil: string | null }) {
   if (!section.enabled || !warrantyUntil) return null;
-  return <p style={{ fontSize: "8px", textAlign: "center", color: "#666", margin: "2px 0" }}>Garansi sampai: {formatDate(warrantyUntil)}</p>;
+  return <p style={{ fontSize: "8px", textAlign: "center", color: "#333", margin: "2px 0" }}>Garansi sampai: {formatDate(warrantyUntil)}</p>;
 }
 
 function SectionFooter({ section, receiptFooter }: { section: ReceiptSection; receiptFooter: string | null | undefined }) {
   if (!section.enabled) return null;
   const text = section.config?.text || receiptFooter;
   if (!text) return null;
-  return <p style={{ fontSize: "8px", textAlign: "center", color: "#666", margin: "2px 0", whiteSpace: "pre-wrap" }}>{text}</p>;
+  return <p style={{ fontSize: "8px", textAlign: "center", color: "#333", margin: "2px 0", whiteSpace: "pre-wrap" }}>{text}</p>;
 }
 
-export function ThermalReceipt({ data, baseUrl, autoPrint }: ThermalReceiptProps) {
+export function ThermalReceipt({ data, baseUrl, autoPrint, embeddedPreview = false }: ThermalReceiptProps) {
   const { service, brand, payments, paymentSummary, receiptSettings, sections } = data;
   const [qrDataUrl, setQrDataUrl] = React.useState<string>("");
   const [barcodeDataUrl, setBarcodeDataUrl] = React.useState<string>("");
+  const [printerState, setPrinterState] = React.useState<"checking" | "connected" | "disconnected">("checking");
+  const [printing, setPrinting] = React.useState(false);
+  const [printed, setPrinted] = React.useState(false);
+  const [printError, setPrintError] = React.useState<string | null>(null);
 
   const trackingUrl = service.trackingToken
     ? `${baseUrl}/t/${service.trackingToken}`
@@ -201,15 +209,42 @@ export function ThermalReceipt({ data, baseUrl, autoPrint }: ThermalReceiptProps
   }, [trackingUrl, service.serviceNumber]);
 
   React.useEffect(() => {
-    if (autoPrint) {
-      const timer = setTimeout(() => window.print(), 500);
-      return () => clearTimeout(timer);
+    document.body.classList.add("thermal-print-mode");
+    return () => document.body.classList.remove("thermal-print-mode");
+  }, []);
+
+  React.useEffect(() => {
+    const syncStatus = () => setPrinterState(printerService.connected ? "connected" : "disconnected");
+    printerService.on({ onStatusChange: syncStatus });
+    syncStatus();
+    return () => printerService.off();
+  }, []);
+
+  React.useEffect(() => {
+    if (!autoPrint || printerState !== "disconnected") return;
+    const timer = setTimeout(() => window.print(), 800);
+    return () => clearTimeout(timer);
+  }, [autoPrint, printerState]);
+
+  const handleDirectPrint = async () => {
+    setPrinting(true);
+    setPrinted(false);
+    setPrintError(null);
+    try {
+      await printerService.printInvoice(data, baseUrl);
+      setPrinted(true);
+      setTimeout(() => setPrinted(false), 2500);
+    } catch (error) {
+      setPrintError(error instanceof Error ? error.message : "Cetak invoice gagal");
+    } finally {
+      setPrinting(false);
     }
-  }, [autoPrint]);
+  };
 
   const receiptFooter = brand.settings?.receiptFooter;
 
   const showPrices = receiptSettings.showPrices;
+  const paperWidth = receiptSettings.paperWidth === "58mm" ? "58mm" : "80mm";
 
   const renderSection = (section: ReceiptSection) => {
     switch (section.type) {
@@ -240,50 +275,121 @@ export function ThermalReceipt({ data, baseUrl, autoPrint }: ThermalReceiptProps
 
   const enabledSections = sections.filter(s => s.enabled);
 
+  const receiptMarkup = (
+    <div className="receipt thermal-receipt-root mx-auto" style={{
+      width: paperWidth,
+      maxWidth: paperWidth,
+      background: "#fff",
+      fontFamily: "'Courier New', Courier, monospace",
+      fontSize: "10px",
+      lineHeight: 1.4,
+      padding: "8px 12px",
+    }}>
+      <div className="receipt-page">
+        <div style={{ textAlign: "center", marginBottom: "6px" }}>
+          <p style={{ fontSize: "12px", fontWeight: 700, margin: "4px 0" }}>INVOICE</p>
+        </div>
+        {enabledSections.map(renderSection)}
+        <div style={{ borderTop: "1px dashed #333", margin: "6px 0" }} />
+        <p style={{ fontSize: "7px", textAlign: "center", color: "#444", margin: "2px 0" }}>
+          Invoice ini adalah bukti resmi penerimaan servis.
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <style>{`
         @page {
-          size: ${receiptSettings.paperWidth} auto;
+          size: ${paperWidth} auto;
           margin: 0;
         }
+        html, body {
+          margin: 0;
+          padding: 0;
+        }
         @media print {
-          body { margin: 0; padding: 0; }
+          html, body {
+            width: ${paperWidth} !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            color: #111 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          script, style, noscript, [hidden] { display: none !important; }
           .no-print { display: none !important; }
-          .receipt { padding: 8px 12px !important; box-shadow: none !important; border: none !important; }
+          .receipt {
+            display: block !important;
+            visibility: visible !important;
+            width: ${paperWidth} !important;
+            max-width: ${paperWidth} !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 8px 12px !important;
+            box-sizing: border-box !important;
+            background: #fff !important;
+            color: #111 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
           .receipt-page { break-inside: avoid; }
         }
-        body { background: #f0f0f0; margin: 0; }
+        body { background: #f0f0f0; color: #111; }
       `}</style>
 
-      {autoPrint && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="rounded-lg bg-white px-8 py-6 text-center shadow-lg">
-            <p className="text-sm font-medium">Mencetak invoice...</p>
-            <p className="mt-1 text-xs text-muted-foreground">Tutup tab ini jika cetak tidak muncul.</p>
+      {printerState === "connected" && (
+        embeddedPreview ? (
+          <div className="no-print mx-auto max-w-[420px] p-3">
+            {receiptMarkup}
+            <button
+              type="button"
+              onClick={handleDirectPrint}
+              disabled={printing}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+            >
+              {printing ? <Loader2 className="size-3.5 animate-spin" /> : printed ? <Check className="size-3.5" /> : <Printer className="size-3.5" />}
+              {printing ? "Mencetak..." : printed ? "Terkirim" : "Cetak ke Printer"}
+            </button>
+            {printError && <p className="mt-2 text-center text-xs text-destructive">{printError}</p>}
           </div>
+        ) : <Popover>
+          <div className="no-print flex items-center justify-center border-b bg-background/95 px-4 py-3 backdrop-blur">
+            <PopoverTrigger asChild>
+              <button type="button" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+                <Printer className="size-3.5" />
+                Preview & Cetak
+              </button>
+            </PopoverTrigger>
+          </div>
+          <PopoverContent className="w-[min(92vw,420px)] p-3" align="center">
+            <p className="mb-2 text-xs font-semibold">Preview Invoice</p>
+            <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/20 p-2">
+              {receiptMarkup}
+            </div>
+            <button
+              type="button"
+              onClick={handleDirectPrint}
+              disabled={printing}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+            >
+              {printing ? <Loader2 className="size-3.5 animate-spin" /> : printed ? <Check className="size-3.5" /> : <Printer className="size-3.5" />}
+              {printing ? "Mencetak..." : printed ? "Terkirim" : "Cetak ke Printer"}
+            </button>
+            {printError && <p className="mt-2 text-center text-xs text-destructive">{printError}</p>}
+          </PopoverContent>
+        </Popover>
+      )}
+      {printError && printerState === "connected" && (
+        <div className="no-print mx-auto max-w-md px-4 pt-3 text-center text-xs text-destructive">
+          {printError}. Gunakan Ctrl/Cmd+P untuk mencetak melalui browser.
         </div>
       )}
 
-      <div className="receipt mx-auto min-h-screen" style={{
-        maxWidth: receiptSettings.paperWidth,
-        background: "#fff",
-        fontFamily: "'Courier New', Courier, monospace",
-        fontSize: "10px",
-        lineHeight: 1.4,
-        padding: "8px 12px",
-      }}>
-        <div className="receipt-page">
-          <div style={{ textAlign: "center", marginBottom: "6px" }}>
-            <p style={{ fontSize: "12px", fontWeight: 700, margin: "4px 0" }}>INVOICE</p>
-          </div>
-          {enabledSections.map(renderSection)}
-          <div style={{ borderTop: "1px dashed #333", margin: "6px 0" }} />
-          <p style={{ fontSize: "7px", textAlign: "center", color: "#999", margin: "2px 0" }}>
-            Invoice ini adalah bukti resmi penerimaan servis.
-          </p>
-        </div>
-      </div>
+      {printerState !== "connected" && receiptMarkup}
     </>
   );
 }

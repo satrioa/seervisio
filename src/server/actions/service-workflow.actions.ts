@@ -3,6 +3,7 @@
  */
 "use server";
 
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, requireActiveStoreSession, handleActionError, OperationalGuardError, type ActionResult } from "./action-helper";
 import { hasPermission } from "@/lib/permissions/require-permission";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
@@ -402,6 +403,11 @@ export async function updateServiceStatusAction(
       details: { from_status: service.current_status, to_status: dbNextStatus, reason: input.note ?? null },
     });
 
+    // Cache revalidation
+    revalidatePath(`/[brandSlug]/panel/services`);
+    revalidatePath(`/[brandSlug]/panel/dashboard`);
+    revalidateTag(`services:${session.brandId}`);
+
     return successResult({
       fromStatus: currentStatus,
       toStatus: nextStatus,
@@ -503,6 +509,11 @@ export async function cancelServiceAction(
       description: `Servis dibatalkan: ${input.reason}`,
       details: { reason: input.reason, return_stock: input.returnStock, payment_action: input.paymentAction, previous_status: service.current_status },
     });
+
+    // Cache revalidation
+    revalidatePath(`/[brandSlug]/panel/services`);
+    revalidatePath(`/[brandSlug]/panel/dashboard`);
+    revalidateTag(`services:${session.brandId}`);
 
     return successResult(undefined);
   } catch (err: any) {

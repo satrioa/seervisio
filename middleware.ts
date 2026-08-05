@@ -148,16 +148,25 @@ export async function middleware(request: NextRequest) {
   }
 
   // ====================== AUTHENTICATED USERS ======================
-  // Load profile + account_type + onboarding state for all protected routes
-  const profileResult = await (
+  // Load profile + account_type + onboarding state for all protected routes.
+  // For panel routes, fetch the brand (by slug) in parallel with the profile.
+  const brandSlug = isPanelRoute ? pathname.split("/")[1] : null;
+  const [profileResult, brandResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, is_active, account_type, onboarding_completed")
       .eq("auth_user_id", user.id)
       .single() as unknown as Promise<{
       data: { id: string; is_active: boolean; account_type: string; onboarding_completed: boolean } | null;
-    }>
-  );
+    }>,
+    brandSlug
+      ? (supabase
+          .from("brands")
+          .select("id")
+          .eq("slug", brandSlug)
+          .single() as unknown as Promise<{ data: { id: number } | null }>)
+      : Promise.resolve({ data: null as { id: number } | null }),
+  ]);
 
   const profile = profileResult.data;
 
@@ -190,41 +199,18 @@ export async function middleware(request: NextRequest) {
     }
 
     // Verify user has access to this brand
-    const brandSlug = pathname.split("/")[1];
-    const brandResult = await (
-      supabase
-        .from("brands")
-        .select("id")
-        .eq("slug", brandSlug)
-        .single() as unknown as Promise<{ data: { id: number } | null }>
-    );
-
     const brand = brandResult.data;
 
     if (brand) {
-      const membershipResult = await (
+      // OPTIMIZED: membership + license checked in parallel
+      const [membershipResult, licResult] = await Promise.all([
         supabase
           .from("user_brand_memberships")
           .select("id")
           .eq("profile_id", profile.id)
           .eq("brand_id", brand.id)
           .eq("is_active", true)
-          .single() as unknown as Promise<{ data: { id: string } | null }>
-      );
-
-      const membership = membershipResult.data;
-
-      if (!membership) {
-        url.pathname = "/login";
-        url.searchParams.set("error", "no_brand_access");
-        return NextResponse.redirect(url);
-      }
-
-      // ── License & onboarding gate ─────────────────────────────
-      // Customers must have an active license before they can reach
-      // the panel. The standalone /license page handles all pre-panel
-      // states (no license, pending payment, etc.).
-      const licResult = await (
+          .single() as unknown as Promise<{ data: { id: string } | null }>,
         (supabase as any)
           .from("licenses")
           .select("id, status, expires_at")
@@ -234,11 +220,19 @@ export async function middleware(request: NextRequest) {
           .limit(1)
           .maybeSingle() as unknown as Promise<{
           data: { id: string; status: string; expires_at: string | null } | null;
-        }>
-      );
+        }>,
+      ]);
 
+      const membership = membershipResult.data;
       const hasActiveLicense = licResult.data !== null;
 
+      if (!membership) {
+        url.pathname = "/login";
+        url.searchParams.set("error", "no_brand_access");
+        return NextResponse.redirect(url);
+      }
+
+      // ── License & onboarding gate ─────────────────────────────
       if (!hasActiveLicense) {
         url.pathname = "/license";
         return NextResponse.redirect(url);

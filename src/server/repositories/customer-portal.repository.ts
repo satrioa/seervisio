@@ -28,7 +28,14 @@ export interface PortalServiceData {
     price: number;
     totalPrice: number;
   }[];
-  statusTimeline: { status: string; timestamp: string | null }[];
+  statusTimeline: {
+    status: string;
+    timestamp: string | null;
+    fromStatus: string | null;
+    toStatus: string | null;
+    reason: string | null;
+    actor: string | null;
+  }[];
 }
 
 export interface PortalPaymentData {
@@ -117,9 +124,12 @@ export async function getServiceByTrackingToken(token: string): Promise<PortalSe
       .eq("service_id", service.id),
     adminDb
       .from("service_status_history")
-      .select("status, created_at")
+      .select(`
+        from_status, to_status, reason, changed_at,
+        changed_by_profile:profiles(id, name)
+      `)
       .eq("service_id", service.id)
-      .order("created_at", { ascending: true }),
+      .order("changed_at", { ascending: true }),
   ]);
 
   const branchName = branchRes?.data?.name ?? null;
@@ -134,8 +144,12 @@ export async function getServiceByTrackingToken(token: string): Promise<PortalSe
   }));
 
   const statusTimeline = (timelineRes?.data ?? []).map((entry: any) => ({
-    status: entry.status,
-    timestamp: entry.created_at,
+    status: entry.to_status ?? entry.from_status,
+    timestamp: entry.changed_at,
+    fromStatus: entry.from_status ?? null,
+    toStatus: entry.to_status ?? null,
+    reason: entry.reason ?? null,
+    actor: entry.changed_by_profile?.name ?? null,
   }));
 
   return {

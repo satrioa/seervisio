@@ -3,6 +3,7 @@
  */
 "use server";
 
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionData, successResult, errorResult, requireActionPermission, requireBranchAccess, requireActiveStoreSession, handleActionError, type ActionResult } from "./action-helper";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
@@ -667,12 +668,15 @@ export async function getServiceDetailAction(
     const session = await getSessionData(brandSlug);
     requireActionPermission(session.role, "service.view");
     
-    const row = await getServiceById(serviceId);
+    // Parallelize: get service + create supabase client
+    const [row, supabase] = await Promise.all([
+      getServiceById(serviceId),
+      createServerSupabase(),
+    ]);
     if (!row) return errorResult("Servis tidak ditemukan.");
     
-    // 2. Fetch all relations in parallel
-    const supabase = await createServerSupabase();
-    const [payments, spareparts, v4Spareparts, timeline] = await Promise.all([
+    // Fetch all relations + payment summary in parallel
+    const [payments, spareparts, v4Spareparts, timeline, paymentSummaryResult] = await Promise.all([
       getServicePayments(serviceId),
       getServiceSparepartUsages(serviceId),
       (supabase as any)
@@ -681,24 +685,20 @@ export async function getServiceDetailAction(
         .eq("service_id", serviceId)
         .order("created_at", { ascending: true }),
       getServiceStatusHistory(serviceId),
+      callCalculateServicePaymentSummary(serviceId).catch(() => null),
     ]);
     console.log("[TRACE:Action] getServiceDetailAction timeline raw length:", timeline?.length ?? 0, "for serviceId:", serviceId);
 
-    // 3. Calculate payment summary
+    // Map payment summary
     let paymentSummary: ServicePaymentSummary | null = null;
-    try {
-      const summary = await callCalculateServicePaymentSummary(serviceId);
-      if (summary) {
-        paymentSummary = {
-          totalCharged: Number(summary.cost) || 0,
-          totalPaid: Number(summary.total_paid) || 0,
-          remainingBalance: Number(summary.remaining_balance) || 0,
-          dpAmount: 0,
-          paymentStatus: (summary.payment_state as ServicePaymentSummary["paymentStatus"]) || "UNPAID",
-        };
-      }
-    } catch {
-      // Payment summary is optional; continue without it
+    if (paymentSummaryResult) {
+      paymentSummary = {
+        totalCharged: Number(paymentSummaryResult.cost) || 0,
+        totalPaid: Number(paymentSummaryResult.total_paid) || 0,
+        remainingBalance: Number(paymentSummaryResult.remaining_balance) || 0,
+        dpAmount: 0,
+        paymentStatus: (paymentSummaryResult.payment_state as ServicePaymentSummary["paymentStatus"]) || "UNPAID",
+      };
     }
     
     // 4. Map payments to UI PaymentItem[]
@@ -1318,6 +1318,11 @@ export async function createServiceAction(
         console.warn("[service:create] failed to write DP audit log", auditErr);
       }
     }
+
+    // Cache revalidation
+    revalidatePath(`/[brandSlug]/panel/services`);
+    revalidatePath(`/[brandSlug]/panel/dashboard`);
+    revalidateTag(`services:${brandId}`);
 
     return successResult({ serviceId: service.id, serviceNumber });
   } catch (err: any) {

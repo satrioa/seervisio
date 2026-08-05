@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { InvoicePrintPopover } from "@/components/services/invoice-print-popover";
+import { getPosReceiptDataAction } from "@/server/actions/pos-receipt.actions";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -1356,16 +1358,11 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
               {detailTx?.status === "COMPLETED" && (
                 <>
                   <Separator />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => window.open(`/${brandSlug}/pos-receipt/${detailTx.id}?print=true`, "_blank")}
-                  >
-                    <Receipt className="mr-1 size-3" />
-                    Cetak Resi
-                  </Button>
+                    <InvoicePrintPopover
+                      label="Cetak Resi"
+                      loadInvoice={() => getPosReceiptDataAction(brandSlug, detailTx.id)}
+                      triggerClassName="flex h-8 w-full items-center justify-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs font-medium hover:bg-muted"
+                    />
                 </>
               )}
               {canVoid && detailTx?.status === "COMPLETED" && (
@@ -1515,18 +1512,13 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             >
               Tutup
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={() => {
-                window.open(`/${brandSlug}/pos-receipt/${successTx?.id}?print=true`, "_blank");
-                setSuccessTx(null);
-              }}
-            >
-              <Receipt className="mr-1 size-3" />
-              Cetak Resi
-            </Button>
+            {successTx && (
+              <InvoicePrintPopover
+                label="Cetak Resi"
+                loadInvoice={() => getPosReceiptDataAction(brandSlug, successTx.id)}
+                triggerClassName="flex h-8 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/80"
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>

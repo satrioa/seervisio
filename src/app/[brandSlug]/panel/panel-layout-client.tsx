@@ -463,7 +463,7 @@ function PanelLayoutShell({
 
                 {/* Dynamic Island — centered */}
                 <motion.div
-                  className="pointer-events-none absolute left-1/2 top-2 z-50 hidden md:block"
+                  className="pointer-events-none fixed left-1/2 top-3 z-[60] hidden md:block"
                   initial={false}
                   animate={{
                     x: "-50%",
@@ -496,9 +496,11 @@ function PanelLayoutShell({
             </header>
 
             {/* ── Mobile Dynamic Island row ── */}
-            <div className="relative z-50 flex justify-center px-3 pb-2 pt-0 md:hidden bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background)/0.92)_58%,hsl(var(--background)/0)_100%)]">
-              <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
-            </div>
+             <div className="pointer-events-none fixed left-1/2 top-3 z-[60] -translate-x-1/2 md:hidden">
+               <div className="pointer-events-auto">
+                 <SeervisDynamicIsland userName={userName} onOpenShift={handleOpenShift} activeLicense={activeLicense} />
+               </div>
+             </div>
 
             {/* Page content */}
           <main
