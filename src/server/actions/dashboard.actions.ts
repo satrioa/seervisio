@@ -10,7 +10,6 @@ import {
   type ActionResult,
 } from "./action-helper";
 import { getBranchesByBrandId } from "@/repositories/branch.repository";
-import { getBrandTarget } from "@/repositories/brand-target.repository";
 
 /* ── Types ── */
 
@@ -243,6 +242,7 @@ export async function getDashboardOverviewAction(
       customersResult,
       profilesResult,
       financeLedgerResult,
+      brandTargetResult,
     ] = await Promise.all([
       (supabase as any)
         .from("payment_account_movements")
@@ -305,7 +305,9 @@ export async function getDashboardOverviewAction(
 
       (supabase as any)
         .from("inventory_items")
-        .select("id, name, sku, item_type, cost_price, selling_price, min_stock, is_active, category_id"),
+        .select("id, name, sku, item_type, cost_price, selling_price, min_stock, is_active, category_id")
+        .eq("brand_id", session.brandId)
+        .limit(1000),
 
       (supabase as any)
         .from("payment_methods")
@@ -316,7 +318,8 @@ export async function getDashboardOverviewAction(
         .from("branch_inventory_stocks")
         .select("item_id, branch_id, current_stock")
         .in("branch_id", branchFilter)
-        .eq("brand_id", session.brandId),
+        .eq("brand_id", session.brandId)
+        .limit(2000),
 
       (supabase as any)
         .from("services")
@@ -332,7 +335,8 @@ export async function getDashboardOverviewAction(
         .eq("brand_id", session.brandId)
         .in("branch_id", branchFilter)
         .gte("created_at", dateFromStr)
-        .lte("created_at", dateToEndOfDay),
+        .lte("created_at", dateToEndOfDay)
+        .limit(10000),
 
       (supabase as any)
         .from("services")
@@ -355,21 +359,29 @@ export async function getDashboardOverviewAction(
       (supabase as any)
         .from("customers")
         .select("id, name")
-        .eq("brand_id", session.brandId),
+        .eq("brand_id", session.brandId)
+        .limit(500),
 
       (adminDb as any)
         .from("profiles")
-        .select("id, name"),
+        .select("id, name")
+        .limit(500),
 
-      /* Finance ledger */
-      (supabase as any)
-        .from("finance_ledger")
-        .select("entry_type, direction, amount, branch_id, ledger_date, category")
-        .eq("brand_id", session.brandId)
-        .in("branch_id", branchFilter)
-        .gte("ledger_date", dateFromStr)
-        .lte("ledger_date", dateToStr),
-    ]);
+       (supabase as any)
+         .from("finance_ledger")
+         .select("entry_type, direction, amount, branch_id, ledger_date, category")
+         .eq("brand_id", session.brandId)
+         .in("branch_id", branchFilter)
+         .gte("ledger_date", dateFromStr)
+         .lte("ledger_date", dateToStr),
+
+       /* Brand target */
+       (supabase as any)
+         .from("brand_targets")
+         .select("id, brand_id, branch_id, target_type, period, monthly_amount, yearly_amount")
+         .eq("brand_id", session.brandId)
+         .eq("target_type", "brand"),
+     ]);
     
     const movements = (movementsResult.data ?? []) as any[];
     const servicePayments = (servicePaymentsResult.data ?? []) as any[];
@@ -388,6 +400,7 @@ export async function getDashboardOverviewAction(
     const customers = (customersResult.data ?? []) as any[];
     const profiles = (profilesResult.data ?? []) as any[];
     const ledgerRows = (financeLedgerResult.data ?? []) as any[];
+    const brandTargets = (brandTargetResult.data ?? []) as any[];
 
     const customerMap = new Map(customers.map((c: any) => [c.id, c.name]));
     const profileMap = new Map(profiles.map((p: any) => [p.id, p.name]));
@@ -1006,7 +1019,7 @@ export async function getDashboardOverviewAction(
     const unpickedUnitsCount = serviceUncollectedCount;
     const unpaidInvoicesCount = serviceUnpaidCount;
 
-    const brandTarget = await getBrandTarget(supabase as any, session.brandId);
+    const brandTarget = brandTargets.find((t: any) => t.target_type === "monthly") ?? brandTargets[0] ?? null;
 
     const result: DashboardData = {
       general: {

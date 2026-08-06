@@ -377,7 +377,9 @@ export async function getServiceOverviewV2Action(
       .select(baseSelect)
       .eq("brand_id", session.brandId)
       .is("deleted_at", null)
-      .neq("current_status", "CANCELLED");
+      .neq("current_status", "CANCELLED")
+      .order("created_at", { ascending: false })
+      .limit(1000);
 
     if (resolvedBranchId) query = query.eq("branch_id", resolvedBranchId);
 
