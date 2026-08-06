@@ -147,6 +147,8 @@ export async function getShiftFinancialSummary(
         refunds += amount;
       } else if (m.movement_type === "OTHER_INCOME" && m.direction === "IN") {
         cashIn += amount;
+      } else if (m.movement_type === "OPERATING_EXPENSE" && m.direction === "OUT") {
+        cashOut += amount;
       } else if (m.movement_type === "CASH_IN") {
         cashIn += amount;
       } else if (m.movement_type === "CASH_OUT") {

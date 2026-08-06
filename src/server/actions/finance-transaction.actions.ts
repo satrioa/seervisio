@@ -316,8 +316,19 @@ export async function listFinanceTransactionsAction(
     const mappedLedger = ledgerRows.map((r: any) => mapLedgerRow(r, branchNameMap));
     const mappedMovements = movementRows.map(mapMovement);
 
-    // Deduplicate by id (ledger takes priority, but movements are separate table so no id collision)
-    const allRows: FinanceTransactionRow[] = [...mappedLedger, ...mappedMovements];
+    // Manual transactions are written to BOTH finance_ledger and payment_account_movements,
+    // so drop movement rows that already have a matching ledger entry (source of truth).
+    const uniqueMovements = mappedMovements.filter(
+      (m) =>
+        !mappedLedger.some(
+          (l) =>
+            l.amount === m.amount &&
+            l.direction === m.direction &&
+            Math.abs(new Date(l.createdAt).getTime() - new Date(m.createdAt).getTime()) < 60000,
+        ),
+    );
+
+    const allRows: FinanceTransactionRow[] = [...mappedLedger, ...uniqueMovements];
 
     // Apply direction filter (if not already filtered by source)
     if (input.direction && input.direction !== "ALL_DIRECTIONS" && sourceFilter !== "EXPENSE" && sourceFilter !== "MANUAL") {
@@ -407,6 +418,7 @@ export async function createOtherIncomeAction(
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
       p_brand_id: session.brandId,
+      p_branch_id: input.branchId,
       p_direction: "IN",
       p_amount: input.amount,
       p_movement_type: "OTHER_INCOME",
@@ -423,10 +435,10 @@ export async function createOtherIncomeAction(
     }
 
     // Also insert into finance_ledger via SECURITY DEFINER RPC
-    await (supabase as any).rpc("add_finance_ledger_entry", {
+    const { error: ledgerError } = await (supabase as any).rpc("add_finance_ledger_entry", {
       p_brand_id: session.brandId,
       p_branch_id: input.branchId,
-      p_entry_type: "MANUAL_INCOME",
+      p_entry_type: "OTHER_INCOME",
       p_direction: "CREDIT",
       p_amount: input.amount,
       p_category: input.category || "other",
@@ -436,6 +448,11 @@ export async function createOtherIncomeAction(
       p_ledger_date: input.date || new Date().toISOString().split("T")[0],
       p_created_by: session.profileId,
     });
+
+    if (ledgerError) {
+      console.error("[FinanceTransaction] create income ledger error:", ledgerError);
+      return errorResult(ledgerError.message || "Gagal mencatat ke pembukuan.");
+    }
 
     // Record in store_shift_cash_movements if shift is active
     if (activeShift) {
@@ -503,6 +520,7 @@ export async function createOperatingExpenseAction(
     const { error: movError, data: movementId } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: input.paymentAccountId,
       p_brand_id: session.brandId,
+      p_branch_id: input.branchId,
       p_direction: "OUT",
       p_amount: input.amount,
       p_movement_type: "OPERATING_EXPENSE",
@@ -537,10 +555,10 @@ export async function createOperatingExpenseAction(
     }
 
     // Also insert into finance_ledger via SECURITY DEFINER RPC
-    await (supabase as any).rpc("add_finance_ledger_entry", {
+    const { error: ledgerError } = await (supabase as any).rpc("add_finance_ledger_entry", {
       p_brand_id: session.brandId,
       p_branch_id: input.branchId,
-      p_entry_type: "MANUAL_EXPENSE",
+      p_entry_type: "OPERATING_EXPENSE",
       p_direction: "DEBIT",
       p_amount: input.amount,
       p_category: input.category || "other",
@@ -550,6 +568,11 @@ export async function createOperatingExpenseAction(
       p_ledger_date: input.date || new Date().toISOString().split("T")[0],
       p_created_by: session.profileId,
     });
+
+    if (ledgerError) {
+      console.error("[FinanceTransaction] create expense ledger error:", ledgerError);
+      return errorResult(ledgerError.message || "Gagal mencatat ke pembukuan.");
+    }
 
     const { data: created } = await (supabase as any)
       .from("payment_account_movements")
@@ -614,6 +637,7 @@ export async function voidFinanceTransactionAction(
     const { error: revError } = await (supabase as any).rpc("add_payment_account_movement", {
       p_payment_account_id: original.payment_account_id,
       p_brand_id: session.brandId,
+      p_branch_id: original.branch_id,
       p_direction: reverseDirection,
       p_amount: Number(original.amount),
       p_movement_type: "BALANCE_ADJUSTMENT",
@@ -631,10 +655,10 @@ export async function voidFinanceTransactionAction(
 
     // Add reversing finance_ledger entry
     const ledgerDirection = original.direction === "IN" ? "DEBIT" : "CREDIT";
-    await (supabase as any).rpc("add_finance_ledger_entry", {
+    const { error: ledgerError } = await (supabase as any).rpc("add_finance_ledger_entry", {
       p_brand_id: session.brandId,
       p_branch_id: original.branch_id,
-      p_entry_type: "VOID_ADJUSTMENT",
+      p_entry_type: "VOID_REVERSAL",
       p_direction: ledgerDirection,
       p_amount: Number(original.amount),
       p_category: "adjustment",
@@ -646,6 +670,11 @@ export async function voidFinanceTransactionAction(
       p_ledger_date: new Date().toISOString().split("T")[0],
       p_created_by: session.profileId,
     });
+
+    if (ledgerError) {
+      console.error("[FinanceTransaction] void ledger error:", ledgerError);
+      return errorResult(ledgerError.message || "Gagal mencatat pembatalan ke pembukuan.");
+    }
 
     await (supabase as any).from("audit_logs").insert({
       brand_id: session.brandId,
