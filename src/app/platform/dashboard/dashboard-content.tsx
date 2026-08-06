@@ -285,9 +285,9 @@ export function DashboardContent() {
                         <stop offset="100%" stopColor="hsl(var(--platform-primary))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => formatCompact(v)} width={56} />
+                    <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickFormatter={(v: number) => formatCompact(v)} width={56} />
                     <ChartTooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatIDR(Number(value))} indicator="dot" />} />
                     <Area type="monotone" dataKey="revenue" fill="url(#consoleRev)" stroke="hsl(var(--platform-primary))" strokeWidth={2} />
                   </AreaChart>
@@ -312,10 +312,10 @@ export function DashboardContent() {
                           d.status === "active"
                             ? "hsl(var(--platform-primary))"
                             : d.status === "trial"
-                              ? "hsl(var(--chart-3))"
+                              ? "var(--chart-3)"
                               : d.status === "expired" || d.status === "cancelled"
-                                ? "hsl(var(--destructive))"
-                                : "hsl(var(--chart-4))",
+                                ? "var(--destructive)"
+                                : "var(--chart-4)",
                         opacity: 0.4 + i * 0.12,
                       }}
                     />
@@ -332,10 +332,10 @@ export function DashboardContent() {
                               d.status === "active"
                                 ? "hsl(var(--platform-primary))"
                                 : d.status === "trial"
-                                  ? "hsl(var(--chart-3))"
+                                  ? "var(--chart-3)"
                                   : d.status === "expired" || d.status === "cancelled"
-                                    ? "hsl(var(--destructive))"
-                                    : "hsl(var(--chart-4))",
+                                    ? "var(--destructive)"
+                                    : "var(--chart-4)",
                           }}
                         />
                         {STATUS_LABEL[d.status] ?? d.status}
@@ -362,17 +362,17 @@ export function DashboardContent() {
                 <ChartContainer
                   config={{
                     total: { label: "Total", color: "hsl(var(--platform-primary))" },
-                    active: { label: "Active", color: "hsl(var(--muted-foreground))" },
+                    active: { label: "Active", color: "var(--muted-foreground)" },
                   } satisfies ChartConfig}
                   className="h-full w-full"
                 >
                   <BarChart data={data.customerGrowth}>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} width={32} />
+                    <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" allowDecimals={false} width={32} />
                     <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                     <Bar dataKey="total" fill="hsl(var(--platform-primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="active" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.5} />
+                    <Bar dataKey="active" fill="var(--muted-foreground)" radius={[4, 4, 0, 0]} opacity={0.5} />
                   </BarChart>
                 </ChartContainer>
               </div>

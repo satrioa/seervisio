@@ -40,16 +40,16 @@ interface FinanceOverviewTabProps {
 }
 
 const defaultChartConfig = {
-  cashIn: { label: "Cash In", color: "hsl(var(--chart-1))" },
-  cashOut: { label: "Cash Out", color: "hsl(var(--chart-2))" },
+  cashIn: { label: "Cash In", color: "var(--chart-1)" },
+  cashOut: { label: "Cash Out", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
 const BRANCH_COLORS = [
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-1))",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-3)",
+  "var(--chart-2)",
+  "var(--chart-1)",
 ];
 
 const RISK_ITEMS = [
@@ -211,25 +211,25 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
                 {cashFlowData.length > 0 ? (
                   <ChartContainer config={defaultChartConfig} className="h-full w-full">
                     <BarChart data={cashFlowData} barGap={4}>
-                      <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                      <CartesianGrid vertical={false} stroke="var(--border)" />
                       <XAxis
                         dataKey="period"
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
                         tick={{ fontSize: 10 }}
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="var(--muted-foreground)"
                       />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
                         tick={{ fontSize: 10 }}
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="var(--muted-foreground)"
                         tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
                       />
                       <ChartTooltip
-                        cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                        cursor={{ fill: "var(--muted)", opacity: 0.3 }}
                         content={<ChartTooltipContent formatter={(value: unknown) => formatRp(Number(value))} indicator="dot" />}
                       />
                       <ChartLegend content={<ChartLegendContent />} />
@@ -266,10 +266,10 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
                 {hasPaymentData ? (
                   <ChartContainer config={paymentChartConfig} className="mx-auto h-60 w-full max-w-[320px]">
                     <RadarChart data={paymentMethodRadar}>
-                      <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
+                      <PolarGrid radialLines={false} stroke="var(--border)" />
                       <PolarAngleAxis
                         dataKey="method"
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                         axisLine={false}
                       />
                       <ChartTooltip
@@ -303,10 +303,10 @@ export function FinanceOverviewTab({ data }: FinanceOverviewTabProps) {
                 {hasExpenseData ? (
                   <ChartContainer config={paymentChartConfig} className="mx-auto h-60 w-full max-w-[320px]">
                     <RadarChart data={expenseCategoryRadar}>
-                      <PolarGrid radialLines={false} stroke="hsl(var(--border))" />
+                      <PolarGrid radialLines={false} stroke="var(--border)" />
                       <PolarAngleAxis
                         dataKey="category"
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                         axisLine={false}
                       />
                       <ChartTooltip

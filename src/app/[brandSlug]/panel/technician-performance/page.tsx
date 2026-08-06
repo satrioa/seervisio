@@ -231,11 +231,11 @@ function TechnicianDetailModal({
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={dayLabel} />
                 <YAxis hide />
                 <Tooltip
-                  contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--popover))" }}
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid var(--border)", background: "var(--popover)" }}
                   formatter={(value: any) => [`${value} servis`, "Selesai"]}
                   labelFormatter={dayFull}
                 />
-                <Bar dataKey="completed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Bar dataKey="completed" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -274,7 +274,7 @@ function MiniProgressBar({ value, max }: { value: number; max: number }) {
 const trendChartConfig = {
   completed: {
     label: "Selesai",
-    color: "hsl(var(--primary))",
+    color: "var(--primary)",
   },
 };
 
@@ -664,8 +664,8 @@ function TrendSection({ data }: { data: TechPerfData }) {
             >
               <defs>
                 <linearGradient id="fillCompleted" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
 
@@ -705,7 +705,7 @@ function TrendSection({ data }: { data: TechPerfData }) {
                 yAxisId="area"
                 type="monotone"
                 dataKey="completed"
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 strokeWidth={1.5}
                 fill="url(#fillCompleted)"
                 dot={{ r: 2, strokeWidth: 0 }}
@@ -715,7 +715,7 @@ function TrendSection({ data }: { data: TechPerfData }) {
               <Bar
                 yAxisId="bars"
                 dataKey="completed"
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 fillOpacity={0.3}
                 stroke="none"
                 radius={[4, 4, 0, 0]}

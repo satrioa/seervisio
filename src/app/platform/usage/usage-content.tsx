@@ -183,7 +183,7 @@ export function UsageContent() {
   }
 
   const chartConfig: ChartConfig = {
-    transactions: { label: "Transactions", color: "hsl(var(--chart-1))" },
+    transactions: { label: "Transactions", color: "var(--chart-1)" },
   };
 
   return (
@@ -245,7 +245,7 @@ export function UsageContent() {
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="transactions"
-                  fill="hsl(var(--chart-1))"
+                  fill="var(--chart-1)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

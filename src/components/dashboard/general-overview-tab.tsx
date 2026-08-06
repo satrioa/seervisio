@@ -217,7 +217,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
     const config: ChartConfig = {};
     const branchIds = Array.from(new Map(data?.branchRevenueTrend?.map((p: BranchRevenueTrendPoint) => [p.branchId, p.branchName]) ?? []).entries());
     branchIds.forEach(([bid, name], idx) => {
-      config[bid] = { label: name, color: `hsl(var(--chart-${(idx % 8) + 1}))` };
+      config[bid] = { label: name, color: `var(--chart-${(idx % 8) + 1})` };
     });
     return config;
   }, [data?.branchRevenueTrend]);
@@ -457,24 +457,24 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                 </div>
               ) : (
                 <ChartContainer
-                  config={{ revenue: { label: "Revenue", color: "hsl(var(--chart-1))" } }}
+                  config={{ revenue: { label: "Revenue", color: "var(--chart-1)" } }}
                   className="h-full w-full"
                 >
                   <AreaChart data={revenueData}>
                     <defs>
                       <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis
                       dataKey={dataKey}
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       interval={granularity === "day" ? 1 : 0}
                     />
                     <YAxis
@@ -482,7 +482,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       tickFormatter={(value) => value >= 1_000_000 ? `${(value / 1_000_000).toFixed(0)}jt` : value >= 1_000 ? `${(value / 1_000).toFixed(0)}rb` : value}
                     />
                     <ChartTooltip
@@ -493,7 +493,7 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                       type="monotone"
                       dataKey="revenue"
                       fill="url(#revGrad)"
-                      stroke="hsl(var(--chart-1))"
+                      stroke="var(--chart-1)"
                       strokeWidth={2}
                     />
                   </AreaChart>
@@ -514,14 +514,14 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
             <div className="h-[220px] min-w-[500px] sm:min-w-0">
               <ChartContainer config={branchConfig} className="h-full w-full">
                 <AreaChart data={branchData}>
-                  <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                  <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis
                     dataKey={dataKey}
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                     tick={{ fontSize: 10 }}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     interval={granularity === "day" ? 1 : 0}
                   />
                   <ChartTooltip
@@ -533,9 +533,9 @@ export function GeneralOverviewTab({ brandSlug, dateRange, granularity, data, lo
                       key={bid}
                       dataKey={bid}
                       type="natural"
-                      fill={`hsl(var(--chart-${(index % 8) + 1}))`}
+                      fill={`var(--chart-${(index % 8) + 1})`}
                       fillOpacity={0.02}
-                      stroke={`hsl(var(--chart-${(index % 8) + 1}))`}
+                      stroke={`var(--chart-${(index % 8) + 1})`}
                       stackId="a"
                       strokeWidth={1.5}
                     />

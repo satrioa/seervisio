@@ -24,7 +24,7 @@ function trend(data: { value: number }[]): { icon: React.ReactNode; text: string
   return { icon: <TrendingDown className="size-3.5" />, text: `${pct.toFixed(1)}%`, color: "text-red-500" };
 }
 
-export function SparklineCard({ title, description, data, color = "hsl(var(--chart-1))", valueFormatter, className }: SparklineCardProps) {
+export function SparklineCard({ title, description, data, color = "var(--chart-1)", valueFormatter, className }: SparklineCardProps) {
   const fmt = valueFormatter ?? ((v: number) => v.toLocaleString());
   const t = trend(data);
   const maxVal = Math.max(...data.map((d) => d.value), 1);
@@ -86,7 +86,7 @@ export function SparklineCard({ title, description, data, color = "hsl(var(--cha
             cy={pts[pts.length - 1]?.y ?? 0}
             r={3.5}
             fill={color}
-            stroke="hsl(var(--card))"
+            stroke="var(--card)"
             strokeWidth={2}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}

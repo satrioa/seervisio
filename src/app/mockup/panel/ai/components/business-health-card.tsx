@@ -103,7 +103,7 @@ export function BusinessHealthCard({ data, onDetail }: BusinessHealthCardProps) 
                 cy="60"
                 r="54"
                 fill="none"
-                stroke="hsl(var(--muted))"
+                stroke="var(--muted)"
                 strokeWidth="6"
                 opacity={0.3}
               />

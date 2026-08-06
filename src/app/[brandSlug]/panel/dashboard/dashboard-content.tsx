@@ -134,10 +134,6 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
       {/* ── Page Header ── */}
       <PageHeader
         title="Dashboard"
-        breadcrumbs={[
-          { label: "Panel", href: `/${brandSlug}/panel` },
-          { label: "Dashboard" },
-        ]}
         actions={
           <DateRangePicker
             value={{

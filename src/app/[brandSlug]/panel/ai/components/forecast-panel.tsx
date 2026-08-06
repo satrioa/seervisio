@@ -22,7 +22,7 @@ function formatRp(n: number) {
 
 export function ForecastPanel({ data }: ForecastPanelProps) {
   const chartConfig = {
-    forecast: { label: "Forecast", color: "hsl(var(--chart-2))" },
+    forecast: { label: "Forecast", color: "var(--chart-2)" },
   };
 
   const maxValue = Math.max(...data.next7Days.map((d) => d.value));
@@ -68,13 +68,13 @@ export function ForecastPanel({ data }: ForecastPanelProps) {
         <div className="h-32">
           <ChartContainer config={chartConfig} className="h-full w-full">
             <BarChart data={data.next7Days}>
-              <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+              <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 10 }}
-                stroke="hsl(var(--muted-foreground))"
+                stroke="var(--muted-foreground)"
               />
               <ChartTooltip
                 cursor={false}
@@ -87,7 +87,7 @@ export function ForecastPanel({ data }: ForecastPanelProps) {
               />
               <Bar
                 dataKey="value"
-                fill="hsl(var(--chart-2))"
+                fill="var(--chart-2)"
                 radius={[3, 3, 0, 0]}
                 opacity={0.8}
               />

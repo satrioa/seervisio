@@ -74,8 +74,8 @@ export function SimpleRadarChart<T extends Record<string, any>>({
               <Radar
                 name={title}
                 dataKey={dataKey as string}
-                stroke="hsl(var(--chart-1))"
-                fill="hsl(var(--chart-1))"
+                stroke="var(--chart-1)"
+                fill="var(--chart-1)"
                 fillOpacity={allZero ? 0.08 : 0.6}
               />
             </RadarChart>

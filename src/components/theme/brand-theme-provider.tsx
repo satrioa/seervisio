@@ -66,17 +66,23 @@ export function BrandThemeProvider({ children, brandSlug }: BrandThemeProviderPr
   const primaryColorRef = React.useRef("#F59E0B");
   const themeKey = `seervis-theme-${brandSlug}`;
 
+  // Sync the mode before paint so the toggle's initial state matches the theme
+  // the boot script already applied (falls back to stored value when present).
+  React.useLayoutEffect(() => {
+    const storedMode = window.localStorage.getItem(themeKey);
+    const domMode: "light" | "dark" =
+      document.documentElement.classList.contains("dark") ? "dark" : "light";
+    const initialMode: "light" | "dark" =
+      storedMode === "dark" || storedMode === "light" ? storedMode : domMode;
+    setMode(initialMode);
+    document.documentElement.classList.toggle("dark", initialMode === "dark");
+  }, [themeKey]);
+
   // Load theme from localStorage + Supabase on mount
   React.useEffect(() => {
     async function loadTheme() {
       try {
-        // 1. Load saved mode from localStorage first (instant)
-        const storedMode = window.localStorage.getItem(themeKey);
-        const initialMode = storedMode === "dark" ? "dark" : "light";
-        setMode(initialMode);
-        document.documentElement.classList.toggle("dark", initialMode === "dark");
-
-        // 2. Load brand theme from Supabase
+        // 1. Load brand theme from Supabase
         const result = await getBrandThemeAction(brandSlug);
         if (result.success && result.data) {
           const { primaryColor } = result.data;

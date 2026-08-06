@@ -109,8 +109,8 @@ function Cell({
             width: size,
             height: size,
             background: hasValue
-              ? `hsla(var(--primary) / ${0.08 + ratio * 0.72})`
-              : "hsl(var(--muted))",
+              ? `color-mix(in oklab, var(--primary) ${Math.round((0.08 + ratio * 0.72) * 100)}%, transparent)`
+              : "var(--muted)",
           }}
         />
       </TooltipTrigger>
@@ -306,7 +306,7 @@ export function OperationalHourHeatmap({
           <div
             className="h-1.5 w-28 rounded-full"
             style={{
-              background: "linear-gradient(to right, hsl(var(--muted)), hsl(var(--primary)))",
+              background: "linear-gradient(to right, var(--muted), var(--primary))",
             }}
           />
           <span>Ramai</span>

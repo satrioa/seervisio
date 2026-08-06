@@ -210,7 +210,7 @@ export default function InventoryV4Page() {
       <div className="flex min-h-full flex-col gap-4 rounded-[14px] bg-card p-4 text-card-foreground sm:p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Inventory V4</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Inventory</h1>
           <p className="text-xs text-muted-foreground">Stok dipisah berdasarkan Sparepart, Produk, dan Unit.</p>
         </div>
         <div className="flex items-center gap-2">

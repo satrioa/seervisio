@@ -214,7 +214,7 @@ export function ServiceHeatmapCard({ dateRange }: ServiceHeatmapCardProps) {
         {/* Color Legend: Sepi → Ramai */}
         <div
           className="mt-3 flex items-center gap-3 text-xs"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           <span>Sepi</span>
           <div

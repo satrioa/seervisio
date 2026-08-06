@@ -47,10 +47,10 @@ function Sparkline({ data, trend }: { data: number[]; trend: TrendDirection }) {
 
   const strokeColor =
     trend === "up"
-      ? "hsl(var(--chart-2))"
+      ? "var(--chart-2)"
       : trend === "down"
-        ? "hsl(var(--destructive))"
-        : "hsl(var(--muted-foreground))";
+        ? "var(--destructive)"
+        : "var(--muted-foreground)";
 
   return (
     <svg width={width} height={height} className="shrink-0" viewBox={`0 0 ${width} ${height}`}>

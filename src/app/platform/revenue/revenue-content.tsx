@@ -77,17 +77,17 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 const areaConfig = {
-  revenue: { label: "Revenue", color: "hsl(var(--chart-1))" },
-  total: { label: "Total", color: "hsl(var(--chart-1))" },
-  active: { label: "Active", color: "hsl(var(--chart-2))" },
+  revenue: { label: "Revenue", color: "var(--chart-1)" },
+  total: { label: "Total", color: "var(--chart-1)" },
+  active: { label: "Active", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
 const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 export function RevenueContent() {
@@ -192,25 +192,25 @@ export function RevenueContent() {
                 <AreaChart data={data.revenueTrend}>
                   <defs>
                     <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                  <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis
                     dataKey="month"
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                     tick={{ fontSize: 10 }}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                   />
                   <YAxis
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                     tick={{ fontSize: 10 }}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     tickFormatter={(v: number) => `${(v / 1000000).toFixed(1)}jt`}
                   />
                   <ChartTooltip
@@ -226,7 +226,7 @@ export function RevenueContent() {
                     type="monotone"
                     dataKey="revenue"
                     fill="url(#revGrad)"
-                    stroke="hsl(var(--chart-1))"
+                    stroke="var(--chart-1)"
                     strokeWidth={2}
                   />
                 </AreaChart>
@@ -255,25 +255,25 @@ export function RevenueContent() {
               <div className="h-52">
                 <ChartContainer config={barConfig} className="h-full w-full">
                   <BarChart data={data.revenueByPackage} barGap={4}>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis
                       dataKey="package"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                     />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       tickFormatter={(v: number) => `${(v / 1000000).toFixed(1)}jt`}
                     />
                     <ChartTooltip
-                      cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                      cursor={{ fill: "var(--muted)", opacity: 0.3 }}
                       content={
                         <ChartTooltipContent
                           formatter={(value, name) => [
@@ -288,7 +288,7 @@ export function RevenueContent() {
                     />
                     <Bar
                       dataKey="revenue"
-                      fill="hsl(var(--chart-1))"
+                      fill="var(--chart-1)"
                       radius={[3, 3, 0, 0]}
                       barSize={40}
                     />
@@ -318,29 +318,29 @@ export function RevenueContent() {
                   <AreaChart data={data.subscriptionGrowth}>
                     <defs>
                       <linearGradient id="subTotalGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.2} />
-                        <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="subActiveGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.2} />
-                        <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis
                       dataKey="month"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                     />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 10 }}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       allowDecimals={false}
                     />
                     <ChartTooltip
@@ -351,7 +351,7 @@ export function RevenueContent() {
                       type="monotone"
                       dataKey="total"
                       fill="url(#subTotalGrad)"
-                      stroke="hsl(var(--chart-1))"
+                      stroke="var(--chart-1)"
                       strokeWidth={2}
                       name="total"
                     />
@@ -359,7 +359,7 @@ export function RevenueContent() {
                       type="monotone"
                       dataKey="active"
                       fill="url(#subActiveGrad)"
-                      stroke="hsl(var(--chart-2))"
+                      stroke="var(--chart-2)"
                       strokeWidth={2}
                       name="active"
                     />

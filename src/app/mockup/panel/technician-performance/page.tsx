@@ -285,21 +285,21 @@ function TeamSummaryPanel({ data }: { data: TechPerfData }) {
           </h3>
           <ResponsiveContainer width="100%" height={132}>
             <BarChart data={data.trendOverall} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={dayLabel} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={20} />
               <Tooltip
                 contentStyle={{
                   fontSize: 12,
                   borderRadius: 8,
-                  border: "1px solid hsl(var(--border))",
-                  background: "hsl(var(--popover))",
-                  color: "hsl(var(--popover-foreground))",
+                  border: "1px solid var(--border)",
+                  background: "var(--popover)",
+                  color: "var(--popover-foreground)",
                 }}
                 formatter={(value: any) => [`${value} servis`, "Selesai"]}
                 labelFormatter={dayFull}
               />
-              <Bar dataKey="completed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="completed" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>

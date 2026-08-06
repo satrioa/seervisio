@@ -11,8 +11,8 @@ interface HealthGaugeProps {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 85) return "hsl(var(--chart-2))"; // green
-  if (score >= 70) return "hsl(var(--chart-1))"; // primary/blue
+  if (score >= 85) return "var(--chart-2)"; // green
+  if (score >= 70) return "var(--chart-1)"; // primary/blue
   if (score >= 50) return "hsl(35 92% 50%)"; // amber
   return "hsl(0 84% 60%)"; // red
 }
@@ -41,7 +41,7 @@ export function HealthGauge({ score, label, usageStatus = "Standby" }: HealthGau
             cy={70}
             r={radius}
             fill="none"
-            stroke="hsl(var(--muted))"
+            stroke="var(--muted)"
             strokeWidth={10}
           />
           <motion.circle
