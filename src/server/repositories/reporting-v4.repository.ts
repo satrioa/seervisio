@@ -10,6 +10,7 @@ import type {
   V4StockPurchaseSummaryRow,
   V4BranchBusinessSummaryRow,
   V4ReportFilter,
+  V4InventoryReportTotals,
 } from "@/server/domain/reporting-v4.types";
 
 type SupabaseClientLike = any;
@@ -20,12 +21,17 @@ function parsePgErr(error: any): string {
   return "Unknown database error";
 }
 
-function applyViewFilters<T extends Record<string, any>>(query: any, filters: V4ReportFilter, dateField: string = "created_at") {
+function applyViewFilters<T extends Record<string, any>>(
+  query: any,
+  filters: V4ReportFilter,
+  dateField: string | null = "created_at",
+  statusColumn: string | null = "status",
+) {
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
-  if (filters.dateFrom) query = query.gte(dateField, filters.dateFrom);
-  if (filters.dateTo) query = query.lte(dateField, filters.dateTo);
+  if (filters.dateFrom && dateField) query = query.gte(dateField, filters.dateFrom);
+  if (filters.dateTo && dateField) query = query.lte(dateField, filters.dateTo);
   if (filters.productKind) query = query.eq("product_kind", filters.productKind);
-  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.status && statusColumn) query = query.eq(statusColumn, filters.status);
   return query;
 }
 
@@ -120,8 +126,7 @@ export async function getV4InventoryStockSummary(
     .eq("brand_id", brandId)
     .order("product_name", { ascending: true });
 
-  query = applyViewFilters(query, filters);
-  if (filters.status) query = query.eq("stock_status", filters.status);
+  query = applyViewFilters(query, filters, null, "stock_status");
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
@@ -145,7 +150,7 @@ export async function getV4InventoryValuation(
     .eq("brand_id", brandId)
     .order("cost_value", { ascending: false });
 
-  query = applyViewFilters(query, filters);
+  query = applyViewFilters(query, filters, null, null);
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
@@ -194,8 +199,7 @@ export async function getV4MovementSummary(
     .eq("brand_id", brandId)
     .order("created_at", { ascending: false });
 
-  query = applyViewFilters(query, filters);
-  if (filters.status) query = query.eq("movement_type", filters.status);
+  query = applyViewFilters(query, filters, "created_at", "movement_type");
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
@@ -274,4 +278,104 @@ export async function getV4BranchBusinessSummary(
   if (error) throw new Error(parsePgErr(error));
 
   return { data: (data ?? []) as V4BranchBusinessSummaryRow[], total: count ?? 0 };
+}
+
+/* ─── Inventory Report Totals ─── */
+
+async function aggregateColumn(
+  supabase: SupabaseClientLike,
+  table: string,
+  brandId: number,
+  column: string,
+  scope: (q: any) => any,
+): Promise<number> {
+  // PostgREST aggregate functions are disabled on this project (PGRST123),
+  // and `sum:column` is an alias, not an aggregate. Fetch the column rows and
+  // sum in JS instead.
+  const { data, error } = await scope(
+    (supabase as any).from(table).select(column).eq("brand_id", brandId),
+  );
+  if (error) throw new Error(parsePgErr(error));
+  return (data ?? []).reduce(
+    (acc: number, row: any) => acc + (Number(row?.[column]) || 0),
+    0,
+  );
+}
+
+async function countRows(
+  supabase: SupabaseClientLike,
+  table: string,
+  brandId: number,
+  scope: (q: any) => any,
+): Promise<number> {
+  const { count, error } = await scope(
+    (supabase as any).from(table).select("*", { count: "exact", head: true }).eq("brand_id", brandId),
+  );
+  if (error) throw new Error(parsePgErr(error));
+  return count ?? 0;
+}
+
+export async function getV4InventoryReportTotals(
+  supabase: SupabaseClientLike,
+  brandId: number,
+  filters: V4ReportFilter,
+): Promise<V4InventoryReportTotals> {
+  const scopeStock = (q: any) => {
+    if (filters.branchId) q = q.eq("branch_id", filters.branchId);
+    if (filters.productKind) q = q.eq("product_kind", filters.productKind);
+    if (filters.status) q = q.eq("stock_status", filters.status);
+    return q;
+  };
+  const scopeUnit = (q: any) => {
+    if (filters.branchId) q = q.eq("branch_id", filters.branchId);
+    return q;
+  };
+
+  const [totalCurrentStock, totalReservedStock, totalAvailableStock, totalCostValue, totalPotentialSalesValue, totalPotentialGrossProfit, variantCount, lowStockCount, outOfStockCount, unitSecondReadyCount, unitSecondSoldCount] = await Promise.all([
+    aggregateColumn(supabase, "v4_inventory_stock_summary", brandId, "current_stock", scopeStock),
+    aggregateColumn(supabase, "v4_inventory_stock_summary", brandId, "reserved_stock", scopeStock),
+    aggregateColumn(supabase, "v4_inventory_stock_summary", brandId, "available_stock", scopeStock),
+    aggregateColumn(supabase, "v4_inventory_valuation", brandId, "cost_value", scopeStock),
+    aggregateColumn(supabase, "v4_inventory_valuation", brandId, "potential_sales_value", scopeStock),
+    aggregateColumn(supabase, "v4_inventory_valuation", brandId, "potential_gross_profit", scopeStock),
+    countRows(supabase, "v4_inventory_stock_summary", brandId, scopeStock),
+    countRows(
+      supabase,
+      "v4_inventory_stock_summary",
+      brandId,
+      (q) => scopeStock(q).eq("stock_status", "LOW_STOCK"),
+    ),
+    countRows(
+      supabase,
+      "v4_inventory_stock_summary",
+      brandId,
+      (q) => scopeStock(q).eq("stock_status", "OUT_OF_STOCK"),
+    ),
+    countRows(
+      supabase,
+      "v4_unit_second_summary",
+      brandId,
+      (q) => scopeUnit(q).eq("status", "READY_STOCK"),
+    ),
+    countRows(
+      supabase,
+      "v4_unit_second_summary",
+      brandId,
+      (q) => scopeUnit(q).eq("status", "SOLD"),
+    ),
+  ]);
+
+  return {
+    variantCount,
+    totalCurrentStock,
+    totalReservedStock,
+    totalAvailableStock,
+    lowStockCount,
+    outOfStockCount,
+    totalCostValue,
+    totalPotentialSalesValue,
+    totalPotentialGrossProfit,
+    unitSecondReadyCount,
+    unitSecondSoldCount,
+  };
 }

@@ -204,3 +204,17 @@ export type V4ReportFilter = {
   page?: number;
   pageSize?: number;
 };
+
+export interface V4InventoryReportTotals {
+  variantCount: number;
+  totalCurrentStock: number;
+  totalReservedStock: number;
+  totalAvailableStock: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  totalCostValue: number;
+  totalPotentialSalesValue: number;
+  totalPotentialGrossProfit: number;
+  unitSecondReadyCount: number;
+  unitSecondSoldCount: number;
+}
