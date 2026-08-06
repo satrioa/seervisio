@@ -9,6 +9,7 @@ import type {
   CreateProductV4Input,
   CreateUnitBaruV4Input,
   CreateUnitSecondV4Input,
+  CreateVariantV4Input,
   UpdateProductV4Input,
   UpdateVariantV4Input,
   UpdateUnitSecondV4Input,
@@ -66,6 +67,7 @@ import {
   listPosCategoriesV4 as repoListPosCategories,
   listPosPaymentMethodsV4 as repoListPosPaymentMethods,
   voidPosTransactionV4 as repoVoidPosTransaction,
+  createVariantV4 as repoCreateVariant,
 } from "@/server/repositories/inventory-v4.repository";
 import { PERMISSIONS } from "@/lib/permissions/permissions";
 
@@ -543,6 +545,54 @@ export async function updateProductV4Action(
   } catch (err: any) {
     console.error("[updateProductV4Action]", err);
     return handleActionError(err, "Gagal memperbarui item.");
+  }
+}
+
+/* ─── Create variant V4 ─── */
+
+export async function createVariantV4Action(
+  brandSlug: string,
+  input: CreateVariantV4Input,
+) {
+  try {
+    const session = await getSessionData(brandSlug);
+    if (!session) return errorResult("Sesi tidak valid.");
+    requireActionPermission(session.role, PERMISSIONS.INVENTORY_MANAGE);
+    if (!input.productId) return errorResult("Produk tidak valid.");
+    if (!input.name?.trim()) return errorResult("Nama varian wajib diisi.");
+    if ((input.minStock ?? 0) < 0) return errorResult("Minimum stok tidak boleh negatif.");
+    if ((input.costPrice ?? 0) < 0) return errorResult("Harga modal tidak boleh negatif.");
+    if ((input.sellingPrice ?? 0) < 0) return errorResult("Harga jual tidak boleh negatif.");
+    if ((input.initialStock ?? 0) < 0) return errorResult("Stok awal tidak boleh negatif.");
+
+    const supabase = await createServerSupabase();
+    const { data: product, error: productErr } = await (supabase as any)
+      .from("inv_products")
+      .select("id, brand_id, branch_id")
+      .eq("id", input.productId)
+      .maybeSingle();
+    if (productErr) throw productErr;
+    if (!product || product.brand_id !== session.brandId) return errorResult("Produk tidak ditemukan.");
+
+    await requireActiveStoreSession(supabase, session.brandId, product.branch_id);
+
+    const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
+    const { canAccessBranch } = await import("@/domain/access/branch-access");
+    if (!canAccessBranch(ctx, product.branch_id)) return errorResult("Anda tidak memiliki akses ke cabang ini.");
+
+    const variantId = await repoCreateVariant(supabase as any, {
+      ...input,
+      name: input.name.trim(),
+      sku: input.sku?.trim() || null,
+      barcode: input.barcode?.trim() || null,
+      unit: input.unit?.trim() || "pcs",
+      imageUrl: input.imageUrl?.trim() || null,
+    }, product.branch_id, session.brandId, session.profileId);
+
+    return successResult({ id: variantId });
+  } catch (err: any) {
+    console.error("[createVariantV4Action]", err);
+    return handleActionError(err, "Gagal membuat varian.");
   }
 }
 
@@ -1100,13 +1150,22 @@ export async function searchServicesV4Action(
     requireActionPermission(session.role, PERMISSIONS.INVENTORY_VIEW);
 
     const ctx = { role: session.role, accessibleBranchIds: session.accessibleBranchIds };
-    const { canAccessBranch } = await import("@/domain/access/branch-access");
-    if (!canAccessBranch(ctx, branchId)) {
-      return errorResult("Anda tidak memiliki akses ke cabang ini.");
+    const { canAccessBranch, canUseAllBranchesScope } = await import("@/domain/access/branch-access");
+    if (branchId) {
+      if (!canAccessBranch(ctx, branchId)) {
+        return errorResult("Anda tidak memiliki akses ke cabang ini.");
+      }
+    } else if (!canUseAllBranchesScope(ctx) && session.accessibleBranchIds.length === 0) {
+      return errorResult("Tidak ada cabang yang dapat diakses.");
     }
 
     const supabase = await createServerSupabase();
-    const result = await repoSearchServices(supabase as any, session.brandId, branchId, search);
+    const branchIds = branchId
+      ? [branchId]
+      : canUseAllBranchesScope(ctx)
+        ? null
+        : session.accessibleBranchIds;
+    const result = await repoSearchServices(supabase as any, session.brandId, branchIds, search);
     return successResult(result);
   } catch (err: any) {
     console.error("[searchServicesV4Action]", err);
@@ -1235,6 +1294,7 @@ export async function listPosTransactionsV4Action(
   brandSlug: string,
   branchId?: string | null,
   page?: number,
+  dateRange?: { from?: string; to?: string } | null,
 ) {
   try {
     const session = await getSessionData(brandSlug);
@@ -1250,7 +1310,7 @@ export async function listPosTransactionsV4Action(
     }
 
     const supabase = await createServerSupabase();
-    const result = await repoListPosTransactions(supabase as any, session.brandId, branchId, page);
+    const result = await repoListPosTransactions(supabase as any, session.brandId, branchId, page, undefined, dateRange);
     return successResult(result);
   } catch (err: any) {
     console.error("[listPosTransactionsV4Action]", err);

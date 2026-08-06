@@ -99,7 +99,7 @@ export function ServiceSparepartUsageV4Section({
   React.useEffect(() => {
     if (!open || step !== "service") return;
     const timer = setTimeout(() => {
-      if (serviceSearch) doSearchServices(serviceSearch);
+      doSearchServices(serviceSearch);
     }, 300);
     return () => clearTimeout(timer);
   }, [serviceSearch, step, open, doSearchServices]);
@@ -237,12 +237,16 @@ export function ServiceSparepartUsageV4Section({
 
               {!serviceLoading && services.length === 0 && !serviceSearch && (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Ketik untuk mencari servis dengan status Perbaikan atau QC.
+                  Tidak ada servis berstatus Perbaikan atau QC.
                 </p>
               )}
 
-              <div className="space-y-1.5">
-                {services.map((svc) => (
+              {!serviceLoading && services.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-medium text-muted-foreground">
+                    {serviceSearch ? "Hasil pencarian" : "Rekomendasi servis"}
+                  </h4>
+                  {services.map((svc) => (
                   <button
                     key={svc.serviceId}
                     type="button"
@@ -261,7 +265,8 @@ export function ServiceSparepartUsageV4Section({
                     </Badge>
                   </button>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -25,6 +25,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { ExpandableScreen, ExpandableScreenTrigger, ExpandableScreenContent, useExpandableScreen } from "@/components/ui/expandable-screen";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { ServiceSparepartUsageV4Section } from "@/components/inventory-v4/service-sparepart-usage-v4-section";
 import { can } from "@/lib/permissions/can";
@@ -47,6 +48,7 @@ import {
   createProductV4Action,
   createUnitBaruV4Action,
   createUnitSecondV4Action,
+  createVariantV4Action,
   searchUnitSecondModelsV4Action,
   listUnitSecondV4Action,
   listCategoriesV4Action,
@@ -78,6 +80,7 @@ import type {
   StockOpnameAdjustmentInput,
   UpdateProductV4Input,
   UpdateVariantV4Input,
+  CreateVariantV4Input,
   UpdateUnitSecondV4Input,
 } from "@/server/domain/inventory-v4.types";
 import { ConfirmActionDialog } from "@/components/inventory-v4/confirm-action-dialog";
@@ -121,11 +124,10 @@ export default function InventoryV4Page() {
   const [usStatusFilter, setUsStatusFilter] = React.useState<string>("ALL");
 
   const [catManagerOpen, setCatManagerOpen] = React.useState(false);
-  const [belanjaOpen, setBelanjaOpen] = React.useState(false);
   const [opnameOpen, setOpnameOpen] = React.useState(false);
   const [serviceSpUsageOpen, setServiceSpUsageOpen] = React.useState(false);
   const [categories, setCategories] = React.useState<CategoryV4Row[]>([]);
-  const [statusFilter, setStatusFilter] = React.useState<string>("ACTIVE");
+  const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
 
   const branchMap = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -202,7 +204,8 @@ export default function InventoryV4Page() {
   const usTotalPages = usData ? Math.max(1, Math.ceil(usData.total / MAX_PAGE)) : 1;
 
   return (
-    <div className="flex min-h-full flex-col gap-4 rounded-[14px] bg-card p-4 text-card-foreground sm:p-6">
+    <ExpandableScreen>
+      <div className="flex min-h-full flex-col gap-4 rounded-[14px] bg-card p-4 text-card-foreground sm:p-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Inventory V4</h1>
@@ -210,9 +213,11 @@ export default function InventoryV4Page() {
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setBelanjaOpen(true)}>
-              <ShoppingCart className="size-3.5" /> Belanja Stok
-            </Button>
+            <ExpandableScreenTrigger>
+              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+                <ShoppingCart className="size-3.5" /> Belanja Stok
+              </Button>
+            </ExpandableScreenTrigger>
           )}
           {canManage && (
             <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setOpnameOpen(true)}>
@@ -331,8 +336,6 @@ export default function InventoryV4Page() {
       />
 
       <BelanjaStokDialog
-        open={belanjaOpen}
-        onOpenChange={setBelanjaOpen}
         brandSlug={brandSlug}
         branchId={activeBranchId ?? ""}
         onSuccess={refresh}
@@ -352,7 +355,8 @@ export default function InventoryV4Page() {
         onOpenChange={setServiceSpUsageOpen}
         onSuccess={refresh}
       />
-    </div>
+      </div>
+    </ExpandableScreen>
   );
 }
 
@@ -426,6 +430,7 @@ function CategoryManagerDialog({
   open: boolean; onOpenChange: (o: boolean) => void;
   brandSlug: string; itemType: string; onSuccess: () => void;
 }) {
+  const [selectedType, setSelectedType] = React.useState<string>(itemType);
   const [list, setList] = React.useState<CategoryV4Row[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [newName, setNewName] = React.useState("");
@@ -433,19 +438,31 @@ function CategoryManagerDialog({
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editName, setEditName] = React.useState("");
 
+  const TYPE_OPTIONS: { id: string; label: string }[] = [
+    { id: "SPAREPART", label: "Sparepart" },
+    { id: "PRODUCT", label: "Produk" },
+    { id: "DEVICE_UNIT", label: "Unit" },
+  ];
+
+  const typeLabel = TYPE_OPTIONS.find((t) => t.id === selectedType)?.label ?? selectedType;
+
+  React.useEffect(() => {
+    setSelectedType(itemType);
+  }, [itemType]);
+
   const load = React.useCallback(async () => {
     setLoading(true);
-    const res = await listCategoriesV4Action(brandSlug, itemType);
+    const res = await listCategoriesV4Action(brandSlug, selectedType);
     if (res.success) setList(res.data ?? []);
     setLoading(false);
-  }, [brandSlug, itemType]);
+  }, [brandSlug, selectedType]);
 
   React.useEffect(() => { if (open) load(); }, [open, load]);
 
   const handleCreate = async () => {
     if (!newName.trim() || saving) return;
     setSaving(true);
-    const res = await createCategoryV4Action(brandSlug, { brandId: 0, name: newName.trim(), itemType });
+    const res = await createCategoryV4Action(brandSlug, { brandId: 0, name: newName.trim(), itemType: selectedType });
     setSaving(false);
     if (res.success) {
       triggerDynamicIslandFeedback({ title: "Kategori berhasil ditambahkan", type: "success" });
@@ -484,13 +501,30 @@ function CategoryManagerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Kelola Kategori</DialogTitle>
-          <DialogDescription>Tambahkan atau ubah kategori stok.</DialogDescription>
+          <DialogTitle>Kelola Kategori — {typeLabel}</DialogTitle>
+          <DialogDescription>Tambahkan atau ubah kategori stok untuk tipe {typeLabel.toLowerCase()}.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto rounded-lg border bg-muted/40 p-1">
+            {TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setSelectedType(opt.id)}
+                className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  selectedType === opt.id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-2">
             <Input value={newName} onChange={(e) => setNewName(e.target.value)}
-              className="h-9 text-xs" placeholder="Nama kategori baru" />
+              className="h-9 text-xs" placeholder={`Nama kategori ${typeLabel.toLowerCase()} baru`} />
             <Button size="sm" className="h-9 shrink-0 text-xs" onClick={handleCreate} disabled={saving || !newName.trim()}>
               {saving ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3.5" />}
             </Button>
@@ -652,11 +686,11 @@ function ProductTabContent({
               : "—";
           return (
             <div key={item.id}
-              className="relative grid grid-cols-[2fr_1fr_60px_70px_100px_70px_44px] gap-2 border-b px-3 py-2.5 text-xs transition-colors last:border-0 hover:bg-muted/20"
+              className={`relative grid grid-cols-[2fr_1fr_60px_70px_100px_70px_44px] gap-2 border-b px-3 py-2.5 text-xs transition-colors last:border-0 hover:bg-muted/20 ${!item.isActive ? "bg-muted/30 opacity-70" : ""}`}
             >
               <button className="flex min-w-0 items-center gap-2 text-left transition-colors hover:text-info" onClick={() => openDetail(item.id)}>
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <Package className="size-3.5 text-primary" />
+                <div className={`flex size-7 shrink-0 items-center justify-center rounded-full ${item.isActive ? "bg-primary/10" : "bg-muted"}`}>
+                  <Package className={`size-3.5 ${item.isActive ? "text-primary" : "text-muted-foreground"}`} />
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-medium">{item.name}</p>
@@ -752,6 +786,7 @@ function VariantDetailDialog({
   }>({ open: false, title: "", description: "", confirmLabel: "", variant: "destructive", onConfirm: async () => {} });
   const [editProductOpen, setEditProductOpen] = React.useState(false);
   const [editingVariant, setEditingVariant] = React.useState<VariantV4Row | null>(null);
+  const [addVariantOpen, setAddVariantOpen] = React.useState(false);
 
   const promptProductAction = React.useCallback(() => {
     if (!product?.product) return;
@@ -845,6 +880,9 @@ function VariantDetailDialog({
             </div>
             {product?.product && canManage && (
               <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2 text-[10px]" onClick={() => setAddVariantOpen(true)}>
+                  <Plus className="size-3" /> Add Varian
+                </Button>
                 <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2 text-[10px]" onClick={() => setEditProductOpen(true)}>
                   <Pen className="size-3" /> Edit Item
                 </Button>
@@ -973,6 +1011,21 @@ function VariantDetailDialog({
           />
         )}
 
+        {product?.product && (
+          <AddVariantV4Dialog
+            open={addVariantOpen}
+            onOpenChange={setAddVariantOpen}
+            brandSlug={brandSlug}
+            productId={product.product.id}
+            productName={product.product.name}
+            onSuccess={() => {
+              setAddVariantOpen(false);
+              onReloadDetail(product.product.id);
+              onRefreshList();
+            }}
+          />
+        )}
+
         <ConfirmActionDialog
           open={productConfirm.open}
           onOpenChange={(open) => setProductConfirm((s) => ({ ...s, open }))}
@@ -1033,6 +1086,12 @@ function EditProductV4Dialog({
         ? "Edit Unit Second"
         : "Edit Produk";
 
+  const categoryTypeLabel = product.productKind === "SPAREPART"
+    ? "Sparepart"
+    : product.productKind === "UNIT"
+      ? product.conditionType === "NEW" ? "Unit Baru" : "Unit Second"
+      : "Produk";
+
   const handleSave = async () => {
     if (!name.trim() || saving) return;
     setSaving(true);
@@ -1067,7 +1126,7 @@ function EditProductV4Dialog({
             <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 text-xs" />
           </div>
           <div>
-            <Label className="text-xs">Kategori</Label>
+            <Label className="text-xs">Kategori · {categoryTypeLabel}</Label>
             <Select value={categoryId} onValueChange={setCategoryId}>
               <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -1208,6 +1267,125 @@ function EditVariantV4Dialog({
           <Button className="h-9 w-full text-xs" disabled={saving || !name.trim()} onClick={handleSave}>
             {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
             Simpan Varian
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ═══════════════════════ ADD VARIANT ═══════════════════════ */
+
+function AddVariantV4Dialog({
+  open, onOpenChange, brandSlug, productId, productName, onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  brandSlug: string;
+  productId: string;
+  productName: string;
+  onSuccess: () => void;
+}) {
+  const [saving, setSaving] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [attributesText, setAttributesText] = React.useState("");
+  const [sku, setSku] = React.useState("");
+  const [barcode, setBarcode] = React.useState("");
+  const [unit, setUnit] = React.useState("pcs");
+  const [minStock, setMinStock] = React.useState(0);
+  const [costPrice, setCostPrice] = React.useState(0);
+  const [sellingPrice, setSellingPrice] = React.useState(0);
+  const [imageUrl, setImageUrl] = React.useState("");
+  const [initialStock, setInitialStock] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setName("");
+    setAttributesText("");
+    setSku("");
+    setBarcode("");
+    setUnit("pcs");
+    setMinStock(0);
+    setCostPrice(0);
+    setSellingPrice(0);
+    setImageUrl("");
+    setInitialStock(0);
+  }, [open]);
+
+  const handleSave = async () => {
+    if (!name.trim() || saving) return;
+    let attributes: Record<string, string> = {};
+    try {
+      attributes = attributesText.trim() ? JSON.parse(attributesText) : {};
+    } catch {
+      triggerDynamicIslandFeedback({ title: "Format attributes harus JSON valid", type: "error" });
+      return;
+    }
+    setSaving(true);
+    const input: CreateVariantV4Input = {
+      productId,
+      name: name.trim(),
+      attributes,
+      sku: sku.trim() || null,
+      barcode: barcode.trim() || null,
+      unit: unit.trim() || "pcs",
+      minStock,
+      costPrice,
+      sellingPrice,
+      imageUrl: imageUrl.trim() || null,
+      initialStock,
+    };
+    const res = await createVariantV4Action(brandSlug, input);
+    setSaving(false);
+    if (res.success) {
+      triggerDynamicIslandFeedback({ title: "Varian berhasil ditambahkan", type: "success" });
+      onSuccess();
+    } else {
+      triggerDynamicIslandFeedback({ title: res.error || "Gagal menambahkan varian", type: "error" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add Varian</DialogTitle>
+          <DialogDescription>
+            Tambah varian baru untuk <span className="font-medium">{productName}</span>.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Nama Varian</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Contoh: Hitam 128GB" />
+          </div>
+          <div>
+            <Label className="text-xs">Attributes / Opsi Variasi (JSON)</Label>
+            <Textarea value={attributesText} onChange={(e) => setAttributesText(e.target.value)} className="mt-1 min-h-24 font-mono text-xs" placeholder='{"warna":"Hitam","kapasitas":"128GB"}' />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div><Label className="text-xs">SKU</Label><Input value={sku} onChange={(e) => setSku(e.target.value)} className="mt-1 h-9 text-xs" /></div>
+            <div><Label className="text-xs">Barcode</Label><Input value={barcode} onChange={(e) => setBarcode(e.target.value)} className="mt-1 h-9 text-xs" /></div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div><Label className="text-xs">Satuan</Label><Input value={unit} onChange={(e) => setUnit(e.target.value)} className="mt-1 h-9 text-xs" /></div>
+            <div><Label className="text-xs">Minimum Stok</Label><Input type="number" value={minStock} onChange={(e) => setMinStock(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div><Label className="text-xs">Harga Modal</Label><Input type="number" value={costPrice} onChange={(e) => setCostPrice(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
+            <div><Label className="text-xs">Harga Jual</Label><Input type="number" value={sellingPrice} onChange={(e) => setSellingPrice(Number(e.target.value))} className="mt-1 h-9 text-xs" /></div>
+          </div>
+          <div>
+            <Label className="text-xs">URL Gambar</Label>
+            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="mt-1 h-9 text-xs" placeholder="https://..." />
+          </div>
+          <div>
+            <Label className="text-xs">Stok Awal</Label>
+            <Input type="number" value={initialStock} onChange={(e) => setInitialStock(Number(e.target.value))} className="mt-1 h-9 text-xs" />
+          </div>
+          <Button className="h-9 w-full text-xs" disabled={saving || !name.trim()} onClick={handleSave}>
+            {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+            Tambah Varian
           </Button>
         </div>
       </DialogContent>
@@ -1783,7 +1961,7 @@ function QuantityFormDialog({
         <div className="space-y-4">
           {categories.length > 0 && (
             <div>
-              <Label className="text-xs">Kategori</Label>
+              <Label className="text-xs">Kategori · {label}</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
                 <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih kategori (opsional)" /></SelectTrigger>
                 <SelectContent>
@@ -2159,11 +2337,11 @@ function StockOpnameDialog({
 /* ═══════════════════════ BELANJA STOK ═══════════════════════ */
 
 function BelanjaStokDialog({
-  open, onOpenChange, brandSlug, branchId, onSuccess,
+  brandSlug, branchId, onSuccess,
 }: {
-  open: boolean; onOpenChange: (o: boolean) => void;
   brandSlug: string; branchId: string; onSuccess: () => void;
 }) {
+  const { isExpanded, collapse } = useExpandableScreen();
   const [step, setStep] = React.useState<"form" | "preview">("form");
   const [saving, setSaving] = React.useState(false);
   const [supplierName, setSupplierName] = React.useState("");
@@ -2178,7 +2356,7 @@ function BelanjaStokDialog({
   const [paymentAccounts, setPaymentAccounts] = React.useState<{ id: string; name: string; balance: number }[]>([]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!isExpanded) return;
     setStep("form");
     setSaving(false);
     setSupplierName("");
@@ -2190,7 +2368,7 @@ function BelanjaStokDialog({
     setSearchResults([]);
     setItems([]);
     setPaymentAccounts([]);
-  }, [open]);
+  }, [isExpanded]);
 
   const fetchPaymentAccounts = React.useCallback(async () => {
     try {
@@ -2200,7 +2378,7 @@ function BelanjaStokDialog({
     } catch {}
   }, [brandSlug, branchId]);
 
-  React.useEffect(() => { if (open) fetchPaymentAccounts(); }, [open, fetchPaymentAccounts]);
+  React.useEffect(() => { if (isExpanded) fetchPaymentAccounts(); }, [isExpanded, fetchPaymentAccounts]);
 
   const doSearch = React.useCallback(async (term: string) => {
     if (!term.trim() || !branchId) { setSearchResults([]); return; }
@@ -2264,7 +2442,7 @@ function BelanjaStokDialog({
       if (res.success) {
         const data = res.data as any;
         triggerDynamicIslandFeedback({ title: `Belanja stok berhasil: ${data.purchaseNumber}`, type: "success" });
-        onOpenChange(false);
+        collapse();
         onSuccess();
       } else {
         triggerDynamicIslandFeedback({ title: res.error || "Gagal mencatat belanja stok", type: "error" });
@@ -2282,81 +2460,89 @@ function BelanjaStokDialog({
   }, [paymentAccounts]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        {step === "form" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Belanja Stok</DialogTitle>
-              <DialogDescription>Catat pembelian stok untuk Sparepart, Produk, atau Unit Baru.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <Label className="text-xs">Tanggal Belanja</Label>
-                  <Input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="mt-1 h-9 text-xs" />
-                </div>
-                <div>
-                  <Label className="text-xs">Akun Pembayaran *</Label>
-                  <Select value={paymentAccountId} onValueChange={setPaymentAccountId}>
-                    <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
-                    <SelectContent>
-                      {paymentAccounts.map((a) => (
-                        <SelectItem key={a.id} value={a.id} className="text-xs">{a.name} — Rp {a.balance.toLocaleString("id-ID")}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <Label className="text-xs">Supplier (opsional)</Label>
-                  <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Nama supplier" />
-                </div>
-                <div>
-                  <Label className="text-xs">No. Invoice Supplier (opsional)</Label>
-                  <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="mt-1 h-9 text-xs" placeholder="INV-001" />
-                </div>
+    <ExpandableScreenContent
+      className="bg-card text-card-foreground"
+      closeButtonClassName="text-muted-foreground hover:bg-muted"
+    >
+      {step === "form" ? (
+        <div className="flex w-full flex-col gap-4 p-4 sm:p-6 lg:h-[calc(90dvh)] lg:flex-row lg:gap-0 lg:overflow-hidden">
+          {/* LEFT: cari item + informasi belanja */}
+          <div className="flex w-full flex-col gap-4 lg:h-full lg:w-[46%] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:pr-6">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Belanja Stok</h2>
+              <p className="text-xs text-muted-foreground">Catat pembelian stok untuk Sparepart, Produk, atau Unit Baru.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs">Tanggal Belanja</Label>
+                <Input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="mt-1 h-9 text-xs" />
               </div>
               <div>
-                <Label className="text-xs">Catatan (opsional)</Label>
-                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 text-xs" rows={2} placeholder="Catatan belanja" />
-              </div>
-
-              <Separator />
-
-              <div>
-                <Label className="text-xs">Cari Item (Sparepart / Produk / Unit Baru)</Label>
-                <Input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); doSearch(e.target.value); }}
-                  className="mt-1 h-9 text-xs" placeholder="Cari nama varian, SKU, atau barcode..." />
-                {searching && <div className="flex items-center gap-1 py-1 text-[10px] text-muted-foreground"><Loader2 className="size-3 animate-spin" /> Mencari...</div>}
-                {searchResults.length > 0 && (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border">
-                    {searchResults.map((v) => (
-                      <button key={v.variantId} onClick={() => handleAddItem(v)}
-                        className="flex w-full items-center gap-2 border-b px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/30">
-                        <Plus className="size-3 shrink-0 text-primary" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{v.productName} — {v.variantName}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">
-                            {productKindLabel(v.productKind, v.conditionType)} &middot; SKU: {v.sku ?? "—"} &middot; Stok: {v.currentStock}
-                          </p>
-                        </div>
-                      </button>
+                <Label className="text-xs">Akun Pembayaran *</Label>
+                <Select value={paymentAccountId} onValueChange={setPaymentAccountId}>
+                  <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
+                  <SelectContent className="z-[10010]">
+                    {paymentAccounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id} className="text-xs">{a.name} — Rp {a.balance.toLocaleString("id-ID")}</SelectItem>
                     ))}
-                  </div>
-                )}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs">Supplier (opsional)</Label>
+                <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Nama supplier" />
+              </div>
+              <div>
+                <Label className="text-xs">No. Invoice Supplier (opsional)</Label>
+                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="mt-1 h-9 text-xs" placeholder="INV-001" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Catatan (opsional)</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 text-xs" rows={2} placeholder="Catatan belanja" />
+            </div>
 
-              {items.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium">Item ({items.length})</p>
+            <Separator />
+
+            <div>
+              <Label className="text-xs">Cari Item (Sparepart / Produk / Unit Baru)</Label>
+              <Input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); doSearch(e.target.value); }}
+                className="mt-1 h-9 text-xs" placeholder="Cari nama varian, SKU, atau barcode..." autoFocus />
+              {searching && <div className="flex items-center gap-1 py-1 text-[10px] text-muted-foreground"><Loader2 className="size-3 animate-spin" /> Mencari...</div>}
+              {searchResults.length > 0 && (
+                <div className="mt-1 max-h-60 overflow-y-auto rounded-lg border lg:max-h-none">
+                  {searchResults.map((v) => (
+                    <button key={v.variantId} onClick={() => handleAddItem(v)}
+                      className="flex w-full items-center gap-2 border-b px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/30">
+                      <Plus className="size-3 shrink-0 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{v.productName} — {v.variantName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {productKindLabel(v.productKind, v.conditionType)} &middot; SKU: {v.sku ?? "—"} &middot; Stok: {v.currentStock}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: item list */}
+          <div className="flex w-full flex-col gap-4 lg:h-full lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pl-6">
+            <div className="space-y-1">
+              <p className="text-xs font-medium">Items Selected ({items.length})</p>
+              {items.length > 0 ? (
+                <>
                   <div className="rounded-lg border">
-                    <div className="grid grid-cols-[2fr_50px_80px_80px_80px_30px] gap-1 border-b bg-muted/30 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+                    <div className="grid grid-cols-[1.3fr_36px_64px_80px_80px_28px] gap-1 border-b bg-muted/30 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
                       <span>Item</span><span>Stok</span><span>Qty Beli</span><span>Harga Modal</span><span>Subtotal</span><span></span>
                     </div>
                     {items.map((item, i) => (
-                      <div key={item.variantId} className="grid grid-cols-[2fr_50px_80px_80px_80px_30px] gap-1 border-b px-2 py-1.5 text-[10px] last:border-0">
+                      <div key={item.variantId} className="grid grid-cols-[1.3fr_36px_64px_80px_80px_28px] gap-1 border-b px-2 py-1.5 text-[10px] last:border-0">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{item.productName}</p>
                           <p className="truncate text-muted-foreground">{item.variantName}</p>
@@ -2383,63 +2569,63 @@ function BelanjaStokDialog({
                     <span className="text-xs text-muted-foreground">Total: {items.length} item</span>
                     <span className="text-xs font-semibold tabular-nums">Rp {totalAmount.toLocaleString("id-ID")}</span>
                   </div>
-                </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Belum ada item. Cari dan pilih item di panel kiri.</p>
               )}
+            </div>
 
-              <div className="flex gap-2">
-                <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => onOpenChange(false)}>Batal</Button>
-                <Button className="h-9 flex-1 text-xs" onClick={handlePreview} disabled={items.length === 0 || !paymentAccountId}>
-                  Preview & Konfirmasi
-                </Button>
+            <div className="flex gap-2 lg:mt-auto lg:pt-2">
+              <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => collapse()}>Batal</Button>
+              <Button className="h-9 flex-1 text-xs" onClick={handlePreview} disabled={items.length === 0 || !paymentAccountId}>
+                Preview & Konfirmasi
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 sm:p-6">
+          <h2 className="text-lg font-semibold tracking-tight">Preview Belanja Stok</h2>
+          <p className="mb-3 text-xs text-muted-foreground">Periksa kembali sebelum menyimpan.</p>
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Supplier:</span> {supplierName || "—"}</div>
+                <div><span className="text-muted-foreground">Akun:</span> {payAccMap.get(paymentAccountId)?.name ?? "—"}</div>
+                <div><span className="text-muted-foreground">Tanggal:</span> {purchaseDate}</div>
+                <div><span className="text-muted-foreground">Total:</span> <strong>Rp {totalAmount.toLocaleString("id-ID")}</strong></div>
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Preview Belanja Stok</DialogTitle>
-              <DialogDescription>Periksa kembali sebelum menyimpan.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-muted-foreground">Supplier:</span> {supplierName || "—"}</div>
-                  <div><span className="text-muted-foreground">Akun:</span> {payAccMap.get(paymentAccountId)?.name ?? "—"}</div>
-                  <div><span className="text-muted-foreground">Tanggal:</span> {purchaseDate}</div>
-                  <div><span className="text-muted-foreground">Total:</span> <strong>Rp {totalAmount.toLocaleString("id-ID")}</strong></div>
-                </div>
-              </div>
 
-              <div className="rounded-lg border">
-                <div className="grid grid-cols-[2fr_60px_60px_70px_70px] gap-1 border-b bg-muted/30 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
-                  <span>Item</span><span>Stok Skrg</span><span>Qty Masuk</span><span>Stok Stlh</span><span>Subtotal</span>
-                </div>
-                {items.map((item) => (
-                  <div key={item.variantId} className="grid grid-cols-[2fr_60px_60px_70px_70px] gap-1 border-b px-2 py-1.5 text-[10px] last:border-0">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.productName}</p>
-                      <p className="truncate text-muted-foreground">{item.variantName}</p>
-                    </div>
-                    <div className="flex items-center tabular-nums">{item.currentStock}</div>
-                    <div className="flex items-center tabular-nums">{item.quantity}</div>
-                    <div className="flex items-center tabular-nums">{item.currentStock + item.quantity}</div>
-                    <div className="flex items-center tabular-nums">{(item.quantity * item.unitCost).toLocaleString("id-ID")}</div>
+            <div className="rounded-lg border">
+              <div className="grid grid-cols-[2fr_60px_60px_70px_70px] gap-1 border-b bg-muted/30 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+                <span>Item</span><span>Stok Skrg</span><span>Qty Masuk</span><span>Stok Stlh</span><span>Subtotal</span>
+              </div>
+              {items.map((item) => (
+                <div key={item.variantId} className="grid grid-cols-[2fr_60px_60px_70px_70px] gap-1 border-b px-2 py-1.5 text-[10px] last:border-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{item.productName}</p>
+                    <p className="truncate text-muted-foreground">{item.variantName}</p>
                   </div>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => setStep("form")}>Kembali</Button>
-                <Button className="h-9 flex-1 text-xs" onClick={handleSubmit} disabled={saving}>
-                  {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
-                  {saving ? "Menyimpan..." : "Konfirmasi Simpan"}
-                </Button>
-              </div>
+                  <div className="flex items-center tabular-nums">{item.currentStock}</div>
+                  <div className="flex items-center tabular-nums">{item.quantity}</div>
+                  <div className="flex items-center tabular-nums">{item.currentStock + item.quantity}</div>
+                  <div className="flex items-center tabular-nums">{(item.quantity * item.unitCost).toLocaleString("id-ID")}</div>
+                </div>
+              ))}
             </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+
+            <div className="flex gap-2">
+              <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => setStep("form")}>Kembali</Button>
+              <Button className="h-9 flex-1 text-xs" onClick={handleSubmit} disabled={saving}>
+                {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+                {saving ? "Menyimpan..." : "Konfirmasi Simpan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ExpandableScreenContent>
   );
 }
 
@@ -2588,6 +2774,7 @@ function UnitSecondFormDialog({
   const [name, setName] = React.useState("");
   const [imageUrl, setImageUrl] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
+  const [catOptions, setCatOptions] = React.useState<CategoryV4Row[]>([]);
   const [existingProductId, setExistingProductId] = React.useState<string | null>(null);
   const [searchResults, setSearchResults] = React.useState<Array<{ productId: string; name: string; categoryName: string | null; readyCount: number }>>([]);
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -2597,6 +2784,15 @@ function UnitSecondFormDialog({
   ]);
 
   const searchRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setCategoryId("");
+    setCatOptions(categories.filter((c) => c.itemType === "DEVICE_UNIT"));
+    listCategoriesV4Action(brandSlug, "DEVICE_UNIT").then((res) => {
+      if (res.success && res.data) setCatOptions(res.data);
+    });
+  }, [open, brandSlug, categories]);
 
   const reset = () => {
     setName("");
@@ -2719,19 +2915,17 @@ function UnitSecondFormDialog({
           <DialogDescription>Isi detail unit second beserta unit-unitnya.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          {categories.length > 0 && (
-            <div>
-              <Label className="text-xs">Kategori</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih kategori (opsional)" /></SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id} className="text-xs">{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div>
+            <Label className="text-xs">Kategori · Unit Second</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih kategori (opsional)" /></SelectTrigger>
+              <SelectContent>
+                {catOptions.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id} className="text-xs">{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div ref={searchRef} className="relative">
             <Label className="text-xs">Nama Unit / Model</Label>

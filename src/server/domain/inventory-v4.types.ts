@@ -117,6 +117,20 @@ export interface UpdateVariantV4Input {
   isActive?: boolean;
 }
 
+export interface CreateVariantV4Input {
+  productId: string;
+  name: string;
+  attributes?: Record<string, string>;
+  sku?: string | null;
+  barcode?: string | null;
+  unit?: string;
+  minStock?: number;
+  costPrice?: number;
+  sellingPrice?: number;
+  imageUrl?: string | null;
+  initialStock?: number;
+}
+
 export interface UpdateUnitSecondV4Input {
   unitId: string;
   unitAttributes?: Record<string, string>;

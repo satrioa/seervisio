@@ -7,6 +7,7 @@ import type {
   CreateProductV4Input,
   CreateUnitBaruV4Input,
   CreateUnitSecondV4Input,
+  CreateVariantV4Input,
   UpdateProductV4Input,
   UpdateVariantV4Input,
   UpdateUnitSecondV4Input,
@@ -111,7 +112,7 @@ export async function listProductsV4(
   if (search) {
     countQuery = countQuery.ilike("name", `%${search}%`);
   }
-  countQuery = countQuery.order("created_at", { ascending: false });
+  countQuery = countQuery.order("is_active", { ascending: false }).order("created_at", { ascending: false });
 
   let dataQuery = (supabase as any)
     .from("inv_products")
@@ -125,6 +126,7 @@ export async function listProductsV4(
       )
     `)
     .eq("brand_id", brandId)
+    .order("is_active", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (branchId) {
@@ -289,6 +291,70 @@ export async function updateVariantV4(
     .eq("id", input.variantId);
 
   if (error) throw new Error(parsePgErr(error));
+}
+
+/* ─── Create variant V4 ─── */
+
+export async function createVariantV4(
+  supabase: SupabaseClientLike,
+  input: CreateVariantV4Input,
+  branchId: string,
+  brandId: number,
+  createdBy: string,
+): Promise<string> {
+  // 1. Create variant
+  const { data: variant, error: variantErr } = await (supabase as any)
+    .from("inv_variants")
+    .insert({
+      product_id: input.productId,
+      branch_id: branchId,
+      brand_id: brandId,
+      name: input.name.trim(),
+      attributes: (input.attributes ?? {}) as any,
+      sku: input.sku ?? null,
+      barcode: input.barcode ?? null,
+      image_url: input.imageUrl ?? null,
+      unit: input.unit ?? "pcs",
+      min_stock: input.minStock ?? 0,
+      cost_price: input.costPrice ?? 0,
+      selling_price: input.sellingPrice ?? 0,
+    })
+    .select("id")
+    .single();
+
+  if (variantErr) throw new Error(parsePgErr(variantErr));
+  const variantId = (variant as any).id;
+
+  // 2. Create variant stock row at the product's branch
+  const initialStock = input.initialStock ?? 0;
+  const { error: stockErr } = await (supabase as any).from("inv_variant_stocks").insert({
+    variant_id: variantId,
+    branch_id: branchId,
+    brand_id: brandId,
+    current_stock: initialStock,
+    reserved_stock: 0,
+  });
+  if (stockErr) throw new Error(parsePgErr(stockErr));
+
+  // 3. Create opening stock movement if initialStock > 0
+  if (initialStock > 0) {
+    const { error: movErr } = await (supabase as any).from("inv_stock_movements").insert({
+      brand_id: brandId,
+      branch_id: branchId,
+      product_id: input.productId,
+      variant_id: variantId,
+      direction: "IN",
+      movement_type: "OPENING_STOCK",
+      quantity: initialStock,
+      stock_before: 0,
+      stock_after: initialStock,
+      created_by: createdBy,
+      notes: "Stok awal varian baru",
+    });
+    if (movErr) throw new Error(parsePgErr(movErr));
+  }
+
+  return variantId;
 }
 
 export async function updateUnitSecondV4(
@@ -879,58 +945,90 @@ export async function searchPurchaseVariantsV4(
   branchId: string,
   search?: string,
 ): Promise<PurchaseVariantSearchRow[]> {
-  let query = (supabase as any)
-    .from("inv_variants")
-    .select(`
-      id, name, product_id, sku, barcode, unit, min_stock,
-      cost_price, selling_price, attributes,
-      inv_products!inner(id, name, product_kind, condition_type, category_id)
-    `)
-    .eq("inv_products.brand_id", brandId)
-    .eq("inv_variants.is_active", true)
-    .not("inv_products.product_kind", "eq", "UNIT")
-    .or("inv_products.condition_type.is.null,inv_products.condition_type.neq.SECOND")
-    .order("inv_products.name", { ascending: true });
+  const term = search?.trim();
 
-  if (search && search.trim()) {
-    const term = search.trim();
-    query = query.or(
-      `inv_products.name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
-    );
+  // ── Step 1: Query inv_products directly (no joins) ──────────────────────
+  const productQuery = (supabase as any)
+    .from("inv_products")
+    .select("id, name, product_kind, condition_type, category_id, is_active")
+    .eq("brand_id", brandId)
+    .eq("is_active", true)
+    .not("product_kind", "eq", "UNIT")
+    .or("condition_type.is.null,condition_type.neq.SECOND")
+    .order("name", { ascending: true });
+
+  const { data: productsData, error: productsError } = await productQuery;
+  if (productsError) throw new Error(parsePgErr(productsError));
+
+  if (!productsData || productsData.length === 0) return [];
+
+  const productIds = (productsData as any[]).map((p) => p.id);
+
+  // ── Step 2: Query inv_variants for those products ───────────────────────
+  const { data: variantsData, error: variantsError } = await (supabase as any)
+    .from("inv_variants")
+    .select("id, product_id, name, sku, barcode, unit, min_stock, cost_price, selling_price, attributes")
+    .in("product_id", productIds)
+    .eq("is_active", true);
+  if (variantsError) throw new Error(parsePgErr(variantsError));
+
+  const variantIds = (variantsData as any[] ?? []).map((v) => v.id);
+
+  // ── Step 3: Query inv_variant_stocks for those variants at this branch ──
+  let stocksData: any[] = [];
+  if (variantIds.length > 0) {
+    const { data: sd, error: stocksError } = await (supabase as any)
+      .from("inv_variant_stocks")
+      .select("variant_id, current_stock")
+      .in("variant_id", variantIds)
+      .eq("branch_id", branchId);
+    if (stocksError) throw new Error(parsePgErr(stocksError));
+    stocksData = sd ?? [];
   }
 
-  const { data, error } = await query;
-  if (error) throw new Error(parsePgErr(error));
+  const stockMap = new Map<string, number>();
+  for (const s of stocksData) stockMap.set(s.variant_id, Number(s.current_stock ?? 0));
 
+  const productMap = new Map<string, any>((productsData as any[]).map((p) => [p.id, p]));
+
+  // ── Step 4: Build rows + in-memory search ───────────────────────────────
+  const termLower = term?.toLowerCase();
   const rows: PurchaseVariantSearchRow[] = [];
-  for (const raw of (data as any[]) ?? []) {
-    const variantId = raw.id;
-    const { data: stockData } = await (supabase as any)
-      .from("inv_variant_stocks")
-      .select("current_stock")
-      .eq("branch_id", branchId)
-      .eq("variant_id", variantId)
-      .maybeSingle();
+  for (const v of (variantsData as any[]) ?? []) {
+    const product = productMap.get(v.product_id);
+    if (!product) continue;
 
-    rows.push({
-      variantId,
-      variantName: raw.name,
-      productId: raw.product_id,
-      productName: raw.inv_products.name,
-      productKind: raw.inv_products.product_kind,
-      conditionType: raw.inv_products.condition_type,
-      sku: raw.sku,
-      barcode: raw.barcode,
-      unit: raw.unit,
-      costPrice: Number(raw.cost_price),
-      sellingPrice: Number(raw.selling_price),
-      minStock: Number(raw.min_stock ?? 0),
-      currentStock: Number(stockData?.current_stock ?? 0),
+    const row: PurchaseVariantSearchRow = {
+      variantId: v.id,
+      variantName: v.name,
+      productId: v.product_id,
+      productName: product.name,
+      productKind: product.product_kind,
+      conditionType: product.condition_type,
+      sku: v.sku,
+      barcode: v.barcode,
+      unit: v.unit,
+      costPrice: Number(v.cost_price),
+      sellingPrice: Number(v.selling_price),
+      minStock: Number(v.min_stock ?? 0),
+      currentStock: stockMap.get(v.id) ?? 0,
       reservedStock: 0,
-      stockAvailable: Number(stockData?.current_stock ?? 0),
-      attributes: raw.attributes ?? {},
-      categoryId: raw.inv_products.category_id,
-    });
+      stockAvailable: stockMap.get(v.id) ?? 0,
+      attributes: v.attributes ?? {},
+      categoryId: product.category_id,
+    };
+
+    if (
+      termLower &&
+      !row.productName.toLowerCase().includes(termLower) &&
+      !row.variantName.toLowerCase().includes(termLower) &&
+      !(row.sku && row.sku.toLowerCase().includes(termLower)) &&
+      !(row.barcode && row.barcode.toLowerCase().includes(termLower))
+    ) {
+      continue;
+    }
+
+    rows.push(row);
   }
 
   return rows;
@@ -1129,7 +1227,7 @@ export async function listStockOpnameVariantsV4(
   if (search && search.trim()) {
     const term = search.trim();
     query = query.or(
-      `inv_products.name.ilike.%${term}%,inv_variants.name.ilike.%${term}%,inv_variants.sku.ilike.%${term}%,inv_variants.barcode.ilike.%${term}%`
+      `name.ilike.%${term}%,sku.ilike.%${term}%,barcode.ilike.%${term}%,inv_products.name.ilike.%${term}%`
     );
   }
 
@@ -1389,36 +1487,56 @@ export async function listServiceSparepartUsageV4(
 export async function searchServicesV4(
   supabase: SupabaseClientLike,
   brandId: number,
-  branchId: string,
+  branchIds: string[] | null,
   search?: string,
 ): Promise<ServiceSparepartSearchRow[]> {
   let query = (supabase as any)
     .from("services")
     .select(`
-      id, service_number, customer_name, brand_name, type_name, current_status,
-      brand_id, branch_id
+      id, service_number, device_brand, device_model, current_status,
+      brand_id, branch_id,
+      customer:customers!services_customer_id_fkey(id, name)
     `)
     .eq("brand_id", brandId)
-    .eq("branch_id", branchId)
-    .in("current_status", ["PERBAIKAN", "QC"])
+    .is("deleted_at", null)
+    .in("current_status", ["REPAIRING", "QC"])
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(200);
 
-  if (search && search.trim()) {
-    const term = search.trim();
-    query = query.or(`service_number.ilike.%${term}%,customer_name.ilike.%${term}%`);
+  if (branchIds) {
+    query = query.in("branch_id", branchIds);
   }
 
   const { data, error } = await query;
   if (error) throw new Error(parsePgErr(error));
 
-  return ((data as any[]) ?? []).map((r: any) => ({
+  const statusLabels: Record<string, string> = {
+    INTAKE: "MASUK",
+    DIAGNOSIS: "DIAGNOSA",
+    WAITING_APPROVAL: "DIAGNOSA",
+    REPAIRING: "PERBAIKAN",
+    QC: "QC",
+    DONE: "SELESAI",
+    CANCELLED: "CANCELLED",
+  };
+
+  const term = search?.trim()?.toLowerCase();
+  const rows = ((data as any[]) ?? [])
+    .filter((r: any) => {
+      if (!term) return true;
+      const serviceNumber = (r.service_number ?? "").toLowerCase();
+      const customerName = ((r.customer as any)?.name ?? "").toLowerCase();
+      return serviceNumber.includes(term) || customerName.includes(term);
+    })
+    .slice(0, 20);
+
+  return rows.map((r: any) => ({
     serviceId: r.id,
     serviceNumber: r.service_number,
-    customerName: r.customer_name ?? null,
-    deviceBrand: r.brand_name ?? null,
-    deviceModel: r.type_name ?? null,
-    currentStatus: r.current_status ?? null,
+    customerName: (r.customer as any)?.name ?? null,
+    deviceBrand: r.device_brand ?? null,
+    deviceModel: r.device_model ?? null,
+    currentStatus: statusLabels[r.current_status] ?? r.current_status ?? null,
     brandId: r.brand_id,
     branchId: r.branch_id,
   }));
@@ -1945,16 +2063,19 @@ export async function listPosTransactionsV4(
   branchId?: string | null,
   page: number = 1,
   pageSize: number = 25,
+  dateRange?: { from?: string; to?: string } | null,
 ): Promise<{ data: PosTransactionV4Row[]; total: number }> {
   const { from, to } = buildPagination(page, pageSize);
 
   let query = (supabase as any)
     .from("pos_transactions")
-    .select("*, payment_methods!left(name)", { count: "exact" })
+    .select("*, payment_accounts!left(account_name)", { count: "exact" })
     .eq("brand_id", brandId)
     .order("created_at", { ascending: false });
 
   if (branchId) query = query.eq("branch_id", branchId);
+  if (dateRange?.from) query = query.gte("created_at", dateRange.from);
+  if (dateRange?.to) query = query.lte("created_at", dateRange.to);
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
@@ -1967,6 +2088,19 @@ export async function listPosTransactionsV4(
       .select("id, name")
       .in("id", creatorIds);
     for (const p of profiles ?? []) profileMap.set(p.id, p.name);
+  }
+
+  // pos_transactions.payment_method_id stores a branch_payment_methods.id.
+  // There is no FK between the two tables, so resolve method_type via a
+  // follow-up query instead of an embedded join.
+  const paymentMethodIds = [...new Set((data ?? []).map((p: any) => p.payment_method_id).filter(Boolean))];
+  let methodTypeMap = new Map<string, string>();
+  if (paymentMethodIds.length > 0) {
+    const { data: bpm } = await (supabase as any)
+      .from("branch_payment_methods")
+      .select("id, method_type")
+      .in("id", paymentMethodIds);
+    for (const b of bpm ?? []) methodTypeMap.set(b.id, b.method_type);
   }
 
   const rows: PosTransactionV4Row[] = ((data as any[]) ?? []).map((r: any) => ({
@@ -1983,9 +2117,9 @@ export async function listPosTransactionsV4(
     paidAmount: Number(r.paid_amount),
     changeAmount: Number(r.change_amount),
     paymentMethodId: r.payment_method_id,
-    paymentMethodName: r.payment_methods?.name ?? null,
+    paymentMethodName: methodTypeMap.get(r.payment_method_id) ?? null,
     paymentAccountId: r.payment_account_id,
-    paymentAccountName: null,
+    paymentAccountName: r.payment_accounts?.account_name ?? null,
     status: r.status,
     notes: r.notes ?? null,
     createdBy: r.created_by,
