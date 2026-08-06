@@ -25,9 +25,9 @@ WHERE l.brand_id IS NOT NULL
 
 -- Reactivate any existing but inactive/deleted membership for license holders.
 UPDATE user_brand_memberships m
-SET is_active = true, deleted_at = NULL, role = 'MASTER_ADMIN', updated_at = now()
+SET is_active = true, role = 'MASTER_ADMIN', updated_at = now()
 FROM licenses l
 WHERE m.profile_id = l.profile_id
   AND m.brand_id = l.brand_id
   AND l.status IN ('active', 'trial')
-  AND (m.is_active = false OR m.deleted_at IS NOT NULL);
+  AND m.is_active = false;

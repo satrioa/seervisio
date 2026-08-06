@@ -14,6 +14,9 @@ create table if not exists public.changelog_versions (
   title       text not null,
   summary     text,
   featured    boolean not null default false,
+  slug        text,
+  status      text not null default 'draft'
+    check (status in ('draft', 'published', 'scheduled', 'archived')),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );

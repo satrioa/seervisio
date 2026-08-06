@@ -24,12 +24,8 @@ alter table public.packages
     check (package_type in ('subscription', 'lifetime', 'trial')),
   add column if not exists is_default_trial boolean not null default false;
 
--- Backfill package_type from existing billing_duration configuration.
--- billing_duration_enabled = false historically meant "lifetime / no expiry".
-update public.packages
-set package_type = 'lifetime'
-where billing_duration_enabled = false
-  and package_type = 'subscription';
+-- Backfill package_type from existing billing_duration configuration lives
+-- in migration 135 (after billing_duration_enabled column is added there).
 
 -- Enforce at most one active default-trial package at a time.
 create unique index if not exists uq_packages_single_default_trial

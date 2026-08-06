@@ -7,6 +7,13 @@ alter table public.packages
     check (billing_duration_type in ('month', 'year')),
   add column if not exists billing_duration_value integer default 1;
 
+-- Backfill package_type from existing billing_duration configuration.
+-- billing_duration_enabled = false historically meant "lifetime / no expiry".
+update public.packages
+set package_type = 'lifetime'
+where billing_duration_enabled = false
+  and package_type = 'subscription';
+
 -- Update default packages with proper billing durations
 -- Starter: monthly renewable (1 month)
 update public.packages
