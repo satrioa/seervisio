@@ -103,8 +103,59 @@ commits (`main`). See recent-commits list below for grouping.
   "Kategori · {type}" to signal scoping. Mirrored in both `[brandSlug]` and
   `mockup/panel` copies.
 
+- **Add Varian** (inventory detail): New `AddVariantV4Dialog` opened via "Add
+  Varian" button in the `VariantDetailDialog` header (both `[brandSlug]` and
+  `mockup`). Backed by new `CreateVariantV4Input` type, `createVariantV4` repo
+  (inserts `inv_variants` + `inv_variant_stocks` + optional OPENING_STOCK
+  movement), and `createVariantV4Action` (validates product brand/branch +
+  active store + branch access). Form: name, attributes JSON, SKU, barcode,
+  unit, minStock, cost/selling price, image URL, initial stock.
+- **Z-index fix (committed `c07796c`)**: Dialog was raised to `z-[60]` while
+  Radix floating primitives (Popover/Select/DropdownMenu/Tooltip) stayed `z-50`
+  and portal to `<body>` — inside a dialog they mounted below the dialog layer →
+  unclickable. Reverted `ui/dialog.tsx` + service dialogs to `z-50`, dropped
+  `!z-[10010]` overrides in accounts/branches dialogs (4 files). Dynamic Island
+  `z-[60]` + onboarding overlays kept intentionally.
+- **Belanja Stok search fix (uncommitted)**: `searchPurchaseVariantsV4`
+  (`inventory-v4.repository.ts:942`) originally built a single PostgREST query
+  against `inv_variants` with embedded `inv_products!inner` joins plus embedded
+  filters (`.eq("inv_products.brand_id")`, `.not`, `.or`) and an embedded-column
+  `.order("inv_products.name")` — the combined embedded-filter pattern failed
+  silently (action caught → UI kept empty results). First attempt (in-memory
+  filter on same fragile base) didn't help; rewrote it as the proven
+  `listPosProductsV4` multi-step pattern: query `inv_products` directly
+  (brand, is_active, not UNIT, condition_type null/NOT SECOND, order by name),
+  then `inv_variants` `.in("product_id")` `.eq("is_active", true)`, then one
+  batched `inv_variant_stocks` fetch (`.in("variant_id")` + branch). Search
+  filter applied in-memory over product/variant name, SKU, barcode. Kills the
+  old N+1 stock query too. `npx tsc --noEmit` clean. Note: `doSearch` still
+  bails silently when `branchId` is empty (`activeBranchId` null = ALL_BRANCHES).
+- **Belanja Stok redesign — ExpandableScreen (uncommitted)**: `BelanjaStokDialog`
+  in both `[brandSlug]` and `mockup` `inventory-v4/page.tsx` converted from
+  `Dialog` to the (previously unused) `ExpandableScreen` component
+  (`src/components/ui/expandable-screen.tsx`). API: root `<ExpandableScreen>`
+  (children, defaultExpanded, onExpandChange, layoutId="expandable-card",
+  triggerRadius="100px", contentRadius="24px", animationDuration=0.3,
+  lockScroll=true), `ExpandableScreenTrigger` (wraps children in clickable
+  motion.div — no `asChild`, put the Button inside), `ExpandableScreenContent`
+  (renders `fixed inset-0 z-[9999]` full-screen morphing card; props
+  className/showCloseButton/closeButtonClassName; close button absolute
+  right-6 top-6), `useExpandableScreen()` → {isExpanded, expand, collapse}.
+  Layout is now side-by-side: LEFT = purchase info fields + item list with
+  totals + Batal/Preview buttons (`lg:w-[46%]`, border-r, own scroll);
+  RIGHT = item search + results (`lg:flex-1`, own scroll). Body scroll locked
+  while expanded. Page root wrapped in `<ExpandableScreen>`, Belanja Stok
+  button → `ExpandableScreenTrigger` (internal state, `belanjaOpen` state
+  removed), dialog props `open`/`onOpenChange` dropped → dialog uses
+  `useExpandableScreen()` (`collapse()` on Batal/save). **Select gotcha**: Radix
+  `SelectContent` portals to body at `z-50` — under the `z-[9999]` overlay, so
+  the account `SelectContent` got `className="z-[10010]"` (same bug class as
+  `c07796c`). Preview step + all submit logic preserved. `npx tsc --noEmit`
+  clean. `Dialog`/`DialogHeader` imports still used by the page's other dialogs.
+
 ## Next move
-- (none pending — repo stable, typecheck clean. Await next task.)
+- Commit the Belanja Stok search fix on its own (user's unstaged WIP in
+  `inventory-v4/page.tsx`, `pos-v4/*` stays untouched).
 
 ## Relevant files
 - `src/server/actions/*.actions.ts`, `src/server/actions/service.actions.ts`
