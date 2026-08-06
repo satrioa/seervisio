@@ -43,6 +43,10 @@ export interface RevenueBreakdownItem {
   source: string;
   amount: number;
   percentage: number;
+  /** Accrued revenue for this source — billed but not yet paid (belum masuk kas). */
+  pendingAmount?: number;
+  /** Number of transactions behind pendingAmount. */
+  pendingCount?: number;
 }
 
 export interface PaymentMethodBreakdownItem {
@@ -371,10 +375,16 @@ export async function getFinanceReportAction(
       totalReceivable,
     };
 
-    /* ── 4. Revenue breakdown ── */
+    /* ── 4. Revenue breakdown (realized only — from finance_ledger) ── */
     const revTotal = ledgerTotalRevenue || 1;
     const revenueBreakdown: RevenueBreakdownItem[] = [
-      { source: "Servis", amount: ledgerServiceRevenue, percentage: (ledgerServiceRevenue / revTotal) * 100 },
+      {
+        source: "Servis",
+        amount: ledgerServiceRevenue,
+        percentage: (ledgerServiceRevenue / revTotal) * 100,
+        pendingAmount: totalReceivable,
+        pendingCount: unpaidServiceCount,
+      },
       { source: "POS / Aksesoris", amount: ledgerPosRevenue, percentage: (ledgerPosRevenue / revTotal) * 100 },
       { source: "Pendapatan Lain", amount: ledgerOtherIncome, percentage: (ledgerOtherIncome / revTotal) * 100 },
     ];

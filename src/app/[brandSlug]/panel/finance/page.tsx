@@ -112,22 +112,60 @@ interface KpiCardDef {
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   sub?: string;
+  /** Renders with a dashed border, "estimasi" badge and muted value to avoid being read as a final figure. */
+  estimate?: boolean;
+  tooltip?: string;
 }
 
-function KpiCard({ label, value, icon: Icon, color, sub, loading }: KpiCardDef & { loading: boolean }) {
-  return (
-    <Card>
+function KpiCard({ label, value, icon: Icon, color, sub, estimate, tooltip, loading }: KpiCardDef & { loading: boolean }) {
+  const card = (
+    <Card className={estimate ? "border-dashed bg-muted/20" : undefined}>
       <CardContent className="flex flex-col gap-1 p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <Icon className={`size-4 shrink-0 ${color}`} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {label}
+            {estimate && (
+              <Badge variant="outline" className="h-4 px-1 text-[9px] font-normal normal-case">
+                estimasi
+              </Badge>
+            )}
+          </span>
+          <Icon className={`size-4 shrink-0 ${estimate ? "text-muted-foreground" : color}`} />
         </div>
-        <span className={`text-xl font-semibold ${color}`}>
+        <span className={`text-xl font-semibold ${estimate ? "text-muted-foreground" : color}`}>
           {loading ? <Skeleton className="h-7 w-28" /> : value}
         </span>
         {sub && <span className="text-[10px] text-muted-foreground">{sub}</span>}
       </CardContent>
     </Card>
+  );
+
+  if (!tooltip) return card;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{card}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-64 text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function EmptyState({
+  icon: Icon = BarChart3,
+  message,
+  compact,
+}: {
+  icon?: React.ComponentType<{ className?: string }>;
+  message: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col items-center justify-center gap-2 ${compact ? "py-6" : "py-10"}`}>
+      <Icon className={`text-muted-foreground/60 ${compact ? "size-5" : "size-7"}`} />
+      <p className="text-center text-xs text-muted-foreground">{message}</p>
+    </div>
   );
 }
 
@@ -334,16 +372,16 @@ export default function FinanceReportPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <KpiCard label="Total Pendapatan" value={fmtCurrency(s.totalRevenue)} icon={TrendingUp} color="text-emerald-600" loading={false} />
-                <KpiCard label="Pendapatan Servis" value={fmtCurrency(s.serviceRevenue)} icon={WrenchIcon} color="text-blue-600" sub={`${s.serviceRevenueCount} transaksi`} loading={false} />
-                <KpiCard label="Pendapatan POS" value={fmtCurrency(s.posRevenue)} icon={ShoppingCart} color="text-violet-600" sub={`${s.posRevenueCount} transaksi`} loading={false} />
+                <KpiCard label="Total Pendapatan" value={fmtCurrency(s.totalRevenue)} icon={TrendingUp} color="text-emerald-600" tooltip="Total pendapatan yang sudah lunas & masuk kas pada periode ini." loading={false} />
+                <KpiCard label="Pendapatan Servis (Lunas)" value={fmtCurrency(s.serviceRevenue)} icon={WrenchIcon} color="text-blue-600" sub={`${s.serviceRevenueCount} transaksi lunas`} tooltip="Realized — hanya transaksi servis yang sudah dibayar & masuk kas. Servis yang belum dibayar ditampilkan sebagai piutang terpisah." loading={false} />
+                <KpiCard label="Pendapatan POS" value={fmtCurrency(s.posRevenue)} icon={ShoppingCart} color="text-violet-600" sub={`${s.posRevenueCount} transaksi`} tooltip="Penjualan POS yang sudah lunas pada periode ini." loading={false} />
                 <KpiCard label="Pendapatan Lain" value={fmtCurrency(s.otherIncome)} icon={Wallet} color="text-cyan-600" loading={false} />
-                <KpiCard label="Total Pengeluaran" value={fmtCurrency(s.totalExpense)} icon={TrendingDown} color="text-red-600" loading={false} />
-                <KpiCard label="Potongan MDR" value={fmtCurrency(s.totalMdr)} icon={Settings2} color="text-orange-600" loading={false} />
-                <KpiCard label="Net Cashflow" value={fmtCurrency(s.netCashflow)} icon={ArrowRightLeft} color={s.netCashflow >= 0 ? "text-emerald-600" : "text-red-600"} loading={false} />
-                <KpiCard label="Laba Bersih (Estimasi)" value={fmtCurrency(s.estimatedNetProfit)} icon={PiggyBank} color={s.estimatedNetProfit >= 0 ? "text-emerald-600" : "text-red-600"} sub="Estimasi" loading={false} />
-                <KpiCard label="Servis Belum Lunas" value={String(s.unpaidServiceCount)} icon={AlertTriangle} color="text-amber-600" loading={false} />
-                <KpiCard label="Piutang Servis" value={fmtCurrency(s.totalReceivable)} icon={FileText} color="text-rose-600" loading={false} />
+                <KpiCard label="Total Pengeluaran" value={fmtCurrency(s.totalExpense)} icon={TrendingDown} color="text-red-600" tooltip="Total biaya periode ini (operasional, stok, MDR, dan lainnya)." loading={false} />
+                <KpiCard label="Potongan MDR" value={fmtCurrency(s.totalMdr)} icon={Settings2} color="text-orange-600" tooltip="Potongan biaya transaksi non-tunai (merchant discount rate)." loading={false} />
+                <KpiCard label="Net Cashflow" value={fmtCurrency(s.netCashflow)} icon={ArrowRightLeft} color={s.netCashflow >= 0 ? "text-emerald-600" : "text-red-600"} tooltip="Selisih arus kas masuk dikurangi keluar dari mutasi akun." loading={false} />
+                <KpiCard label="Laba Bersih" value={fmtCurrency(s.estimatedNetProfit)} icon={PiggyBank} color={s.estimatedNetProfit >= 0 ? "text-emerald-600" : "text-red-600"} estimate tooltip="Estimasi = pendapatan lunas − pengeluaran. Angka awal, bukan hasil rekonsiliasi kas final." loading={false} />
+                <KpiCard label="Servis Belum Lunas" value={String(s.unpaidServiceCount)} icon={AlertTriangle} color="text-amber-600" tooltip="Jumlah servis dengan tagihan tersisa (final cost − pembayaran) > 0." loading={false} />
+                <KpiCard label="Piutang Servis" value={fmtCurrency(s.totalReceivable)} icon={FileText} color="text-indigo-600" tooltip="Total tagihan servis yang belum dibayar — belum masuk kas (accrued)." loading={false} />
               </div>
 
               {/* ── Two-column layout ── */}
@@ -352,11 +390,11 @@ export default function FinanceReportPage() {
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold">Pendapatan berdasarkan sumber</CardTitle>
-                    <CardDescription className="text-xs">Servis, POS, dan pendapatan lain</CardDescription>
+                    <CardDescription className="text-xs">Realized — hanya transaksi yang sudah lunas masuk kas</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {revenueBreakdown.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-4 text-center">Belum ada pendapatan.</p>
+                      <EmptyState message="Belum ada pendapatan lunas pada periode ini." />
                     ) : (
                       revenueBreakdown.map((rb) => {
                         const pct = rb.percentage;
@@ -372,14 +410,26 @@ export default function FinanceReportPage() {
                                 style={{ width: `${Math.min(pct, 100)}%` }}
                               />
                             </div>
+                            {rb.pendingAmount != null && rb.pendingAmount > 0 && (
+                              <p className="text-[10px] text-muted-foreground">
+                                Belum lunas (piutang): {fmtCurrency(rb.pendingAmount)} · {rb.pendingCount ?? 0} servis
+                              </p>
+                            )}
                           </div>
                         );
                       })
                     )}
                     {revenueBreakdown.length > 0 && (
-                      <div className="flex items-center justify-between pt-2 border-t text-xs font-medium">
-                        <span>Total</span>
-                        <span>{fmtCurrency(s.totalRevenue)}</span>
+                      <div className="space-y-1.5 border-t pt-2">
+                        <div className="flex items-center justify-between text-xs font-medium">
+                          <span>Total (lunas)</span>
+                          <span>{fmtCurrency(s.totalRevenue)}</span>
+                        </div>
+                        {s.unpaidServiceCount > 0 && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Piutang servis {fmtCurrency(s.totalReceivable)} ({s.unpaidServiceCount} servis) belum masuk kas — tidak dihitung pada angka di atas.
+                          </p>
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -389,11 +439,14 @@ export default function FinanceReportPage() {
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold">Pendapatan per Metode Pembayaran</CardTitle>
-                    <CardDescription className="text-xs">Bruto, MDR, dan netto yang diterima</CardDescription>
+                    <CardDescription className="text-xs">Bruto, MDR, dan netto dari transaksi POS & servis</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {pmtBreakdown.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-4 text-center">Belum ada transaksi.</p>
+                      <EmptyState
+                        icon={CreditCard}
+                        message="Belum ada transaksi POS/servis terpetakan per metode pada periode ini. Breakdown ini bersumber dari transaksi POS & servis, bukan mutasi kas umum."
+                      />
                     ) : (
                       <div className="overflow-x-auto">
                         <Table>
@@ -428,11 +481,11 @@ export default function FinanceReportPage() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold">Saldo Akun Pembayaran</CardTitle>
-                  <CardDescription className="text-xs">Saldo terkini dari mutasi periode ini</CardDescription>
+                  <CardDescription className="text-xs">Per akun — saldo & arus masuk/keluar kas/bank dari mutasi periode ini</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {accountBalances.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-4 text-center">Belum ada akun aktif.</p>
+                    <EmptyState icon={Landmark} message="Belum ada akun aktif." />
                   ) : (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {accountBalances.map((acct) => (
@@ -467,11 +520,11 @@ export default function FinanceReportPage() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold">Performa Cabang</CardTitle>
-                  <CardDescription className="text-xs">Ringkasan pendapatan dan pengeluaran per cabang</CardDescription>
+                  <CardDescription className="text-xs">Per cabang — pendapatan & biaya dari pembukuan (finance ledger)</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   {branchPerformance.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-4 text-center">Belum ada data cabang.</p>
+                    <EmptyState icon={Building2} message="Belum ada data cabang." />
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
@@ -509,7 +562,7 @@ export default function FinanceReportPage() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold">Ringkasan Mutasi</CardTitle>
-                  <CardDescription className="text-xs">Total arus kas masuk, keluar, dan mutasi terbaru</CardDescription>
+                  <CardDescription className="text-xs">Per timeline — total arus kas masuk, keluar, dan mutasi terbaru</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -535,7 +588,7 @@ export default function FinanceReportPage() {
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-2">Mutasi Terbaru</p>
                     {recentMovements.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2">Belum ada mutasi.</p>
+                      <EmptyState icon={History} message="Belum ada mutasi pada periode ini." compact />
                     ) : (
                       <div className="space-y-1">
                         {recentMovements.slice(0, 10).map((m) => (
@@ -587,7 +640,7 @@ export default function FinanceReportPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {shiftSummary.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-4 text-center">Belum ada shift ditutup pada periode ini.</p>
+                    <EmptyState icon={Store} message="Belum ada shift ditutup pada periode ini." />
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
