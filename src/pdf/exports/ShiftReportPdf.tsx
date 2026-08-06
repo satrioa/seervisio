@@ -153,10 +153,10 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
   const headerDate = formatDate(closedAt ?? openedAt);
 
   return (
-    <PdfDocument title={`Shift Report - ${shiftNumber}`}>
+    <PdfDocument title={`Laporan Shift - ${shiftNumber}`}>
       <PdfHeader
-        title={`Shift Report${branchName ? ` - ${branchName}` : ""}`}
-        subtitle="Operational shift report based on transactions recorded in Seervis."
+        title={`Laporan Shift${branchName ? ` - ${branchName}` : ""}`}
+        subtitle="Laporan operasional shift berdasarkan transaksi yang tercatat di Seervis."
         brandName={branchName ?? undefined}
         generatedBy={openedByName ?? undefined}
         generatedAt={headerDate}
@@ -164,43 +164,43 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
         rightSubText={statusLabel}
       />
 
-      <PdfSection title="Shift Summary">
+      <PdfSection title="Ringkasan Shift">
         <View style={styles.ringkasanRow}>
           <View style={styles.ringkasanCol}>
-            <Text style={styles.ringkasanLabel}>Shift Time</Text>
-            <Text style={styles.ringkasanValue}>Opened: {formatDateTime(openedAt)}</Text>
-            <Text style={styles.ringkasanValue}>Closed: {formatDateTime(closedAt)}</Text>
-            <Text style={styles.ringkasanValue}>Duration: {formatDuration(openedAt, closedAt)}</Text>
+            <Text style={styles.ringkasanLabel}>Waktu Shift</Text>
+            <Text style={styles.ringkasanValue}>Dibuka: {formatDateTime(openedAt)}</Text>
+            <Text style={styles.ringkasanValue}>Ditutup: {formatDateTime(closedAt)}</Text>
+            <Text style={styles.ringkasanValue}>Durasi: {formatDuration(openedAt, closedAt)}</Text>
           </View>
           <View style={styles.ringkasanCol}>
-            <Text style={styles.ringkasanLabel}>Branch & Staff</Text>
-            <Text style={styles.ringkasanValue}>Branch: {branchName || "-"}</Text>
-            <Text style={styles.ringkasanValue}>Opened by: {openedByName || "-"}</Text>
-            <Text style={styles.ringkasanValue}>Closed by: {closedByName || "-"}</Text>
+            <Text style={styles.ringkasanLabel}>Cabang & Staf</Text>
+            <Text style={styles.ringkasanValue}>Cabang: {branchName || "-"}</Text>
+            <Text style={styles.ringkasanValue}>Dibuka oleh: {openedByName || "-"}</Text>
+            <Text style={styles.ringkasanValue}>Ditutup oleh: {closedByName || "-"}</Text>
           </View>
           <View style={styles.ringkasanCol}>
             <Text style={styles.ringkasanLabel}>Status</Text>
             <StatusBadge status={status} diff={diff} />
             <Text style={[styles.ringkasanValue, { marginTop: 4 }]}>
-              Opening Cash: {formatRupiah(openingCash)}
+              Kas Awal: {formatRupiah(openingCash)}
             </Text>
           </View>
         </View>
       </PdfSection>
 
-      <PdfSection title="Cash Reconciliation">
+      <PdfSection title="Rekonsiliasi Kas">
         <PdfDataTable
           columns={[
-            { key: "desc", header: "Description", width: "55%" },
-            { key: "value", header: "Amount", width: "45%", align: "right" },
+            { key: "desc", header: "Keterangan", width: "55%" },
+            { key: "value", header: "Jumlah", width: "45%", align: "right" },
           ]}
           data={[
-            { desc: "Opening Balance", value: formatRupiah(openingCash) },
-            { desc: "Cash In", value: formatRupiah(cashMethodTotal) },
-            { desc: "Expected Closing Cash", value: formatRupiah(expectedCash) },
-            { desc: "Actual Cash", value: formatRupiah(countedCash) },
+            { desc: "Saldo Awal", value: formatRupiah(openingCash) },
+            { desc: "Kas Masuk", value: formatRupiah(cashMethodTotal) },
+            { desc: "Kas Akhir yang Diharapkan", value: formatRupiah(expectedCash) },
+            { desc: "Kas Aktual", value: formatRupiah(countedCash) },
             {
-              desc: "Reconciliation Status",
+              desc: "Status Rekonsiliasi",
               value: `${formatReconciliationStatus(diff).label} (${formatRupiah(diff)})`,
             },
           ]}
@@ -208,36 +208,36 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
         />
       </PdfSection>
 
-      <PdfSection title="Cashflow Summary">
+      <PdfSection title="Ringkasan Arus Kas">
         <PdfSummaryBox
           items={[
-            { label: "Total Cash In", value: formatRupiah(inTotal) },
-            { label: "Total Cash Out", value: formatRupiah(outTotal) },
-            { label: "Cash Revenue", value: formatRupiah(cashMethodTotal) },
-            { label: "Non-Cash Revenue", value: formatRupiah(nonCashMethodTotal) },
+            { label: "Total Kas Masuk", value: formatRupiah(inTotal) },
+            { label: "Total Kas Keluar", value: formatRupiah(outTotal) },
+            { label: "Pendapatan Tunai", value: formatRupiah(cashMethodTotal) },
+            { label: "Pendapatan Non-Tunai", value: formatRupiah(nonCashMethodTotal) },
           ]}
         />
       </PdfSection>
 
-      <PdfSection title="Service Payments">
+      <PdfSection title="Pembayaran Servis">
         {serviceTransactions.length === 0 ? (
-          <Text style={styles.noteText}>No service transactions in this shift.</Text>
+          <Text style={styles.noteText}>Tidak ada transaksi servis pada shift ini.</Text>
         ) : (
           <>
-            <PdfStatCard label="Total Service Revenue" value={formatRupiah(serviceTransactions.reduce((s, t) => s + t.amount, 0))} />
+            <PdfStatCard label="Total Pendapatan Servis" value={formatRupiah(serviceTransactions.reduce((s, t) => s + t.amount, 0))} />
             <View style={{ height: 8 }} />
             <PdfDataTable
               columns={[
-                { key: "date", header: "Date", width: "13%" },
-                { key: "ref", header: "Payment No", width: "18%" },
-                { key: "desc", header: "Description", width: "31%" },
-                { key: "method", header: "Method", width: "23%" },
-                { key: "amount", header: "Amount", width: "15%", align: "right" },
+                { key: "date", header: "Tanggal", width: "13%" },
+                { key: "ref", header: "No. Pembayaran", width: "18%" },
+                { key: "desc", header: "Keterangan", width: "31%" },
+                { key: "method", header: "Metode", width: "23%" },
+                { key: "amount", header: "Jumlah", width: "15%", align: "right" },
               ]}
               data={serviceTransactions.map((t) => ({
                 date: formatDate(t.createdAt, "short"),
                 ref: t.referenceId || "-",
-                desc: t.description.replace(/^Payment\s+/i, "Payment ").replace(/ for service$/i, ""),
+                desc: t.description.replace(/^Payment\s+/i, "Pembayaran ").replace(/ for service$/i, ""),
                 method: t.accountName || "-",
                 amount: formatRupiah(t.amount),
               }))}
@@ -247,24 +247,22 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
         )}
       </PdfSection>
 
-      <PdfSection title="POS & Other Income">
+      <PdfSection title="POS & Pendapatan Lainnya">
         {posIncomeTransactions.length === 0 ? (
-          <Text style={styles.noteText}>No POS / other income transactions in this shift.</Text>
+          <Text style={styles.noteText}>Tidak ada transaksi POS / pendapatan lain pada shift ini.</Text>
         ) : (
           <>
-            <PdfStatCard label="Total POS Revenue" value={formatRupiah(posIncomeTransactions.reduce((s, t) => s + t.amount, 0))} />
+            <PdfStatCard label="Total Pendapatan POS" value={formatRupiah(posIncomeTransactions.reduce((s, t) => s + t.amount, 0))} />
             <View style={{ height: 8 }} />
             <PdfDataTable
               columns={[
-                { key: "date", header: "Date", width: "14%" },
-                { key: "ref", header: "Ref", width: "20%" },
-                { key: "desc", header: "Description", width: "32%" },
-                { key: "account", header: "Account", width: "19%" },
-                { key: "amount", header: "Amount", width: "15%", align: "right" },
+                { key: "date", header: "Tanggal", width: "16%" },
+                { key: "desc", header: "Keterangan", width: "42%" },
+                { key: "account", header: "Akun", width: "27%" },
+                { key: "amount", header: "Jumlah", width: "15%", align: "right" },
               ]}
               data={posIncomeTransactions.map((t) => ({
                 date: formatDate(t.createdAt, "short"),
-                ref: t.referenceId || "-",
                 desc: t.description || "-",
                 account: t.accountName || "-",
                 amount: formatRupiah(t.amount),
@@ -275,20 +273,20 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
         )}
       </PdfSection>
 
-      <PdfSection title="Cash Out Details">
+      <PdfSection title="Detail Kas Keluar">
         {cashOutTransactions.length === 0 ? (
-          <Text style={styles.noteText}>No cash out transactions in this shift.</Text>
+          <Text style={styles.noteText}>Tidak ada transaksi kas keluar pada shift ini.</Text>
         ) : (
           <>
-            <PdfStatCard label="Total Cash Out" value={formatRupiah(outTotal)} />
+            <PdfStatCard label="Total Kas Keluar" value={formatRupiah(outTotal)} />
             <View style={{ height: 8 }} />
             <PdfDataTable
               columns={[
-                { key: "date", header: "Date", width: "16%" },
-                { key: "category", header: "Category", width: "17%" },
-                { key: "desc", header: "Description", width: "28%" },
-                { key: "account", header: "Account", width: "17%" },
-                { key: "amount", header: "Amount", width: "22%", align: "right" },
+                { key: "date", header: "Tanggal", width: "16%" },
+                { key: "category", header: "Kategori", width: "17%" },
+                { key: "desc", header: "Keterangan", width: "28%" },
+                { key: "account", header: "Akun", width: "17%" },
+                { key: "amount", header: "Jumlah", width: "22%", align: "right" },
               ]}
               data={cashOutTransactions.map((t) => ({
                 date: formatDate(t.createdAt, "short"),
@@ -303,19 +301,19 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
         )}
       </PdfSection>
 
-      <PdfSection title="Revenue by Payment Method">
+      <PdfSection title="Pendapatan per Metode Pembayaran">
         {paymentBreakdown.length === 0 ? (
-          <Text style={styles.noteText}>No payment method data in this shift.</Text>
+          <Text style={styles.noteText}>Tidak ada data metode pembayaran pada shift ini.</Text>
         ) : (
           <PdfDataTable
             columns={[
-              { key: "method", header: "Payment Method", width: "40%" },
-              { key: "count", header: "Transactions", width: "30%", align: "right" },
-              { key: "total", header: "Total Revenue", width: "30%", align: "right" },
+              { key: "method", header: "Metode Pembayaran", width: "40%" },
+              { key: "count", header: "Transaksi", width: "30%", align: "right" },
+              { key: "total", header: "Total Pendapatan", width: "30%", align: "right" },
             ]}
             data={paymentBreakdown.map((p) => ({
               method: formatPaymentMethodLabel(p.methodType, p.methodName),
-              count: `${p.count} transactions`,
+              count: `${p.count} transaksi`,
               total: formatRupiah(p.total),
             }))}
             variant="striped"
@@ -326,12 +324,12 @@ export function ShiftReportPdf({ data }: { data: ShiftReportData }) {
       <Divider spacing="md" />
 
       <Text style={styles.noteText}>
-        This document was automatically generated from shift data, payment account movements, services, POS, and
-        cash out records within the shift period.
+        Dokumen ini dibuat otomatis dari data shift, pergerakan akun pembayaran, servis, POS, dan
+        catatan kas keluar dalam periode shift.
       </Text>
 
       <PdfFooter
-        leftText="Generated by Seervisio"
+        leftText="Dibuat oleh Seervisio"
         showPageNumber
         showTimestamp
       />

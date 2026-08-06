@@ -23,9 +23,9 @@ const styles = StyleSheet.create({
   },
   value: {
     fontFamily: theme.typography.heading.fontFamily,
-    fontSize: theme.primitives.typography['2xl'],
+    fontSize: theme.primitives.typography.lg,
     color: theme.colors.foreground,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   subtext: {
     fontSize: theme.primitives.typography.xs,

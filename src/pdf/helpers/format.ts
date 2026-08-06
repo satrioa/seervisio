@@ -68,6 +68,6 @@ export function formatPaymentMethodLabel(methodType: string, methodName: string)
 
 export function formatReconciliationStatus(diff: number): { label: string; color: string } {
   if (diff === 0) return { label: "Sesuai", color: "#16a34a" };
-  if (diff > 0) return { label: "Lebih", color: "#d97706" };
+  if (diff > 0) return { label: "Profit", color: "#16a34a" };
   return { label: "Kurang", color: "#dc2626" };
 }
