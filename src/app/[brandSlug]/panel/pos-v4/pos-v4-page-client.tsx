@@ -16,11 +16,8 @@ import { Separator } from "@/components/ui/separator";
 import { InvoicePrintPopover } from "@/components/services/invoice-print-popover";
 import { getPosReceiptDataAction } from "@/server/actions/pos-receipt.actions";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
 } from "@/components/ui/dialog";
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose,
-} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   MinimalCard,
@@ -65,6 +62,12 @@ import type {
 
 function formatPrice(n: number) {
   return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function formatDateShort(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function getDisplayImage(product: PosProductV4Row, variant?: PosVariantV4Row) {
@@ -316,7 +319,8 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const [productsLoading, setProductsLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [activeCategory, setActiveCategory] = React.useState<string | null>(null);
-  const [categories, setCategories] = React.useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = React.useState<{ id: string; name: string; itemType: string }[]>([]);
+  const [activeType, setActiveType] = React.useState<"semua" | "produk" | "unit">("semua");
   const [unitOptions, setUnitOptions] = React.useState<PosUnitSecondOptionV4Row[]>([]);
   const [unitPickerOpen, setUnitPickerOpen] = React.useState(false);
   const [unitPickerProductName, setUnitPickerProductName] = React.useState("");
@@ -342,6 +346,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const [transactions, setTransactions] = React.useState<PosTransactionV4Row[]>([]);
   const [txLoading, setTxLoading] = React.useState(false);
   const [txDrawerOpen, setTxDrawerOpen] = React.useState(false);
+  const [txDateRange, setTxDateRange] = React.useState<{ from?: string; to?: string } | null>(null);
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailItems, setDetailItems] = React.useState<PosTransactionItemV4Row[]>([]);
   const [detailTx, setDetailTx] = React.useState<PosTransactionV4Row | null>(null);
@@ -376,7 +381,9 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
 
   const fetchCategories = React.useCallback(async () => {
     const res = await listPosCategoriesV4Action(brandSlug);
-    if (res.success) setCategories(res.data ?? []);
+    if (res.success) {
+      setCategories((res.data ?? []).map((c) => ({ id: c.id, name: c.name, itemType: c.itemType })));
+    }
   }, [brandSlug]);
 
   const fetchPaymentMethods = React.useCallback(async () => {
@@ -394,13 +401,13 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
   const fetchTransactions = React.useCallback(async () => {
     if (!activeBranchId) return;
     setTxLoading(true);
-    const res = await listPosTransactionsV4Action(brandSlug, activeBranchId, 1);
+    const res = await listPosTransactionsV4Action(brandSlug, activeBranchId, 1, txDateRange);
     if (res.success) {
       const r = res.data as any;
       setTransactions(r.data ?? []);
     }
     setTxLoading(false);
-  }, [brandSlug, activeBranchId]);
+  }, [brandSlug, activeBranchId, txDateRange]);
 
   React.useEffect(() => {
     if (!activeBranchId) return;
@@ -409,6 +416,11 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
     fetchProducts(null, "");
     fetchTransactions();
   }, [activeBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    if (!activeBranchId || !txDrawerOpen) return;
+    fetchTransactions();
+  }, [txDateRange, txDrawerOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshAll = React.useCallback(() => {
     if (!activeBranchId) return;
@@ -429,6 +441,31 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
     setActiveCategory(catId);
     fetchProducts(catId, searchTerm);
   }, [fetchProducts, searchTerm]);
+
+  const visibleCategories = React.useMemo(() => {
+    if (activeType === "semua") return categories;
+    return categories.filter((c) =>
+      activeType === "produk" ? c.itemType === "PRODUCT" : c.itemType === "DEVICE_UNIT",
+    );
+  }, [categories, activeType]);
+
+  const handleTypeChange = React.useCallback((type: "semua" | "produk" | "unit") => {
+    setActiveType(type);
+    const allowed = type === "semua"
+      ? categories
+      : categories.filter((c) => (type === "produk" ? c.itemType === "PRODUCT" : c.itemType === "DEVICE_UNIT"));
+    if (activeCategory && !allowed.some((c) => c.id === activeCategory)) {
+      setActiveCategory(null);
+      fetchProducts(null, searchTerm);
+    }
+  }, [categories, activeCategory, searchTerm, fetchProducts]);
+
+  const filteredProducts = React.useMemo(() => {
+    if (activeType === "semua") return products;
+    return products.filter((p) =>
+      activeType === "produk" ? p.productKind === "PRODUCT" : p.productKind === "UNIT",
+    );
+  }, [products, activeType]);
 
   /* ── Unit Second Picker ── */
 
@@ -737,33 +774,58 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             </div>
           </div>
 
-          {/* Category tabs */}
+          {/* Type + Category filters */}
           <div className="flex items-center gap-1.5 overflow-x-auto border-b px-3 py-1.5">
-            <button
-              type="button"
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                activeCategory === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/70"
-              }`}
-              onClick={() => handleCategoryChange(null)}
-            >
-              Semua
-            </button>
-            {categories.map((cat) => (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {([
+                { id: "semua", label: "Semua" },
+                { id: "produk", label: "Produk" },
+                { id: "unit", label: "Unit" },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                    activeType === tab.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                  onClick={() => handleTypeChange(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
-                key={cat.id}
                 type="button"
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                  activeCategory === cat.id
+                  activeCategory === null
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/70"
                 }`}
-                onClick={() => handleCategoryChange(cat.id)}
+                onClick={() => handleCategoryChange(null)}
               >
-                {cat.name}
+                Semua
               </button>
-            ))}
+              {visibleCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                    activeCategory === cat.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                  onClick={() => handleCategoryChange(cat.id)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Product grid */}
@@ -791,9 +853,21 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
               </div>
             )}
 
-            {!productsLoading && (
+            {!productsLoading && products.length > 0 && filteredProducts.length === 0 && (
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                <Package className="size-10 text-muted-foreground/40" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Tidak ada item untuk filter ini</p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground/70">
+                    Coba pilih tipe {activeType === "produk" ? "Produk" : "Unit"} lain atau ganti kategori.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!productsLoading && filteredProducts.length > 0 && (
               <div className="grid justify-start gap-3 p-3 sm:gap-4 sm:p-4 grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,200px)] lg:[grid-template-columns:repeat(auto-fill,220px)]">
-                {products.map((product) => {
+                {filteredProducts.map((product) => {
                   const isUnitSecond = product.productKind === "UNIT" && product.conditionType === "SECOND";
                   const firstVariant = product.variants[0]!;
 
@@ -1103,26 +1177,62 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
             </Button>
 
             {/* Riwayat transaksi */}
-            <Sheet open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
-              <SheetContent
-                side="bottom"
-                className="mx-auto h-[85vh] max-w-none rounded-t-[20px] px-0 pb-0 pt-0 sm:max-w-lg"
+            <Dialog open={txDrawerOpen} onOpenChange={setTxDrawerOpen}>
+              <DialogContent
+                showCloseButton={false}
+                className="flex h-[85vh] w-full max-w-lg flex-col gap-0 overflow-hidden p-0 sm:rounded-[20px]"
               >
                 <div className="flex h-full flex-col">
-                  {/* Handle */}
-                  <div className="flex shrink-0 justify-center pt-3 pb-2">
-                    <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+                  {/* Header */}
+                  <div className="flex shrink-0 items-center justify-between border-b px-4 pt-4 pb-3">
+                    <div>
+                      <DialogTitle className="text-sm font-semibold">Riwayat Transaksi</DialogTitle>
+                      <DialogDescription className="text-[11px]">
+                        {txDateRange?.from
+                          ? `${formatDateShort(txDateRange.from)}${txDateRange.to ? ` - ${formatDateShort(txDateRange.to)}` : ""}`
+                          : "Semua transaksi"}
+                      </DialogDescription>
+                    </div>
+                    <DialogClose>
+                      <X className="size-3.5" />
+                    </DialogClose>
                   </div>
 
-                  {/* Header */}
-                  <div className="flex shrink-0 items-center justify-between border-b px-4 pb-3">
-                    <div>
-                      <SheetTitle className="text-sm font-semibold">Riwayat Transaksi</SheetTitle>
-                      <SheetDescription className="text-[11px]">Transaksi hari ini</SheetDescription>
-                    </div>
-                    <SheetClose>
-                      <X className="size-3.5" />
-                    </SheetClose>
+                  {/* Date filter */}
+                  <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2.5">
+                    <Input
+                      type="date"
+                      aria-label="Dari tanggal"
+                      value={txDateRange?.from ?? ""}
+                      onChange={(e) => {
+                        const next = { ...(txDateRange ?? {}), from: e.target.value || undefined };
+                        setTxDateRange(next);
+                      }}
+                      className="h-8 w-full text-xs"
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground">s/d</span>
+                    <Input
+                      type="date"
+                      aria-label="Sampai tanggal"
+                      value={txDateRange?.to ?? ""}
+                      onChange={(e) => {
+                        const next = { ...(txDateRange ?? {}), to: e.target.value || undefined };
+                        setTxDateRange(next);
+                      }}
+                      className="h-8 w-full text-xs"
+                    />
+                    {txDateRange?.from || txDateRange?.to ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setTxDateRange(null)}
+                        aria-label="Reset filter tanggal"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    ) : null}
                   </div>
 
                   {/* Body */}
@@ -1134,7 +1244,7 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                     ) : transactions.length === 0 ? (
                       <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
                         <Receipt className="size-10 text-muted-foreground/30" />
-                        <p className="text-sm text-muted-foreground">Belum ada transaksi hari ini.</p>
+                        <p className="text-sm text-muted-foreground">Belum ada transaksi pada rentang tanggal ini.</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1168,8 +1278,8 @@ export function PosV4PageClient({ brandSlug }: PosV4PageClientProps) {
                     )}
                   </div>
                 </div>
-              </SheetContent>
-            </Sheet>
+              </DialogContent>
+            </Dialog>
           </div>
         </aside>
 

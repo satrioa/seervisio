@@ -10,7 +10,6 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { flushSync } from "react-dom";
 import { twMerge } from "tailwind-merge";
 import { tv, type VariantProps } from "tailwind-variants";
 
@@ -254,7 +253,7 @@ function ThemeTogglerButton({
       document.head.appendChild(style);
 
       const transition = doc.startViewTransition(() => {
-        flushSync(() => onToggleTheme?.());
+        onToggleTheme?.();
       });
 
       transition.finished.finally(() => style.remove());

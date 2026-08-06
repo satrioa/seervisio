@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 
@@ -155,10 +156,25 @@ export function ExpandableScreenContent({
   const { isExpanded, collapse, layoutId, contentRadius, animationDuration } =
     useExpandableScreen()
 
-  return (
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) return null
+
+  return createPortal(
     <AnimatePresence initial={false}>
       {isExpanded && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-2">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4">
+          {/* Dark blurred backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+          />
           {/* Morphing background with shared layoutId */}
           <motion.div
             layoutId={layoutId}
@@ -167,7 +183,7 @@ export function ExpandableScreenContent({
               borderRadius: contentRadius,
             }}
             layout
-            className={`relative flex h-full w-full overflow-y-auto transform-gpu will-change-transform ${className}`}
+            className={`relative flex h-full w-full max-w-5xl max-h-[90vh] overflow-y-auto transform-gpu will-change-transform ${className}`}
           >
             <motion.div
               initial={{ opacity: 0 }}
@@ -193,7 +209,8 @@ export function ExpandableScreenContent({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }
 
