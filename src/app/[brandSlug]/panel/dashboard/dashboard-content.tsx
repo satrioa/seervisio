@@ -132,21 +132,7 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
   return (
     <div className="flex flex-col gap-4" data-tour="dashboard-overview">
       {/* ── Page Header ── */}
-      <PageHeader
-        title="Dashboard"
-        actions={
-          <DateRangePicker
-            value={{
-              dateRange,
-              mode,
-              startYear,
-              endYear,
-              granularity,
-            }}
-            onChange={handleDateRangeChange}
-          />
-        }
-      />
+      <PageHeader title="Dashboard" />
 
       {/* ── Tabs ── */}
       <Tabs defaultValue="general" className="flex flex-col gap-4">
@@ -165,6 +151,16 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
               <Package /> Inventory
             </TabsTrigger>
           </TabsList>
+          <DateRangePicker
+            value={{
+              dateRange,
+              mode,
+              startYear,
+              endYear,
+              granularity,
+            }}
+            onChange={handleDateRangeChange}
+          />
         </div>
 
         {/* TAB 1 — GENERAL */}

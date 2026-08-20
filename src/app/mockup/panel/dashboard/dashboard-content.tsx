@@ -87,18 +87,6 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
           { label: "Panel", href: `/${brandSlug}/panel` },
           { label: "Dashboard" },
         ]}
-        actions={
-          <DateRangePicker
-            value={{
-              dateRange,
-              mode,
-              startYear,
-              endYear,
-              granularity,
-            }}
-            onChange={handleDateRangeChange}
-          />
-        }
       />
 
       {/* ── Tabs ── */}
@@ -118,6 +106,16 @@ export function DashboardContent({ brandSlug }: DashboardContentProps) {
             <Package /> Inventory
           </TabsTrigger>
         </TabsList>
+          <DateRangePicker
+            value={{
+              dateRange,
+              mode,
+              startYear,
+              endYear,
+              granularity,
+            }}
+            onChange={handleDateRangeChange}
+          />
         </div>
 
         {/* TAB 1 — GENERAL */}
