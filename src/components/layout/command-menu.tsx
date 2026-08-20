@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { registerCommandPaletteShortcut } from "@/lib/command-palette-shortcut";
 import { globalSearchAction, type GlobalSearchResult } from "@/server/actions/global-search.actions";
 import {
   ArrowRight,
@@ -300,14 +301,7 @@ export function CommandMenu({ brandSlug }: CommandMenuProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    return registerCommandPaletteShortcut(() => setOpen((prev) => !prev));
   }, []);
 
   useEffect(() => {

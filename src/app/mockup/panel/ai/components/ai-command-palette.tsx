@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -41,21 +42,11 @@ interface AiCommandPaletteProps {
 }
 
 export function AiCommandPalette({ brandSlug }: AiCommandPaletteProps) {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   React.useEffect(() => {
     if (open) {
@@ -86,7 +77,7 @@ export function AiCommandPalette({ brandSlug }: AiCommandPaletteProps) {
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
     } else if (e.key === "Enter" && filtered[selectedIndex]) {
       e.preventDefault();
-      window.location.href = `/${brandSlug}${filtered[selectedIndex].href}`;
+      router.push(`/${brandSlug}${filtered[selectedIndex].href}`);
       setOpen(false);
     } else if (e.key === "Escape") {
       setOpen(false);
@@ -98,23 +89,19 @@ export function AiCommandPalette({ brandSlug }: AiCommandPaletteProps) {
       {/* Floating trigger button */}
       <button
         type="button"
+        data-mockup-interactive
         onClick={() => setOpen(true)}
         className="fixed bottom-6 right-6 z-40 flex size-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 transition-all duration-200 hover:bg-emerald-400 hover:shadow-emerald-500/40 hover:-translate-y-0.5 active:scale-95"
       >
         <Command className="size-5" />
       </button>
 
-      {/* Shortcut hint (desktop) */}
-      <div className="fixed bottom-20 right-8 z-40 hidden items-center gap-1.5 rounded-full bg-muted/80 px-3 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm md:flex">
-        <span className="rounded border bg-background px-1.5 py-0.5 text-[9px] font-medium">⌘</span>
-        <span className="rounded border bg-background px-1.5 py-0.5 text-[9px] font-medium">K</span>
-      </div>
-
       {/* Overlay */}
       <AnimatePresence>
         {open && (
           <>
             <motion.div
+              data-mockup-interactive
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -122,6 +109,7 @@ export function AiCommandPalette({ brandSlug }: AiCommandPaletteProps) {
               onClick={() => setOpen(false)}
             />
             <motion.div
+              data-mockup-interactive
               initial={{ opacity: 0, scale: 0.96, y: -12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: -12 }}
@@ -167,7 +155,7 @@ export function AiCommandPalette({ brandSlug }: AiCommandPaletteProps) {
                             )}
                             onMouseEnter={() => setSelectedIndex(i)}
                             onClick={() => {
-                              window.location.href = `/${brandSlug}${item.href}`;
+                              router.push(`/${brandSlug}${item.href}`);
                               setOpen(false);
                             }}
                           >

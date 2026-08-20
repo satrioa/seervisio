@@ -2,22 +2,26 @@
 
 import * as React from "react";
 
-function isDashboardTabInteraction(target: EventTarget | null) {
+function isAllowedInteraction(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('[data-slot="tabs-trigger"]'));
+  return Boolean(
+    target.closest(
+      '[data-slot="tabs-trigger"], [data-slot="command"], [data-slot="dialog-content"], [data-mockup-interactive]',
+    ),
+  );
 }
 
 export function MockupInteractionGuard() {
   React.useEffect(() => {
     const blockNonTabInteraction = (event: Event) => {
-      if (isDashboardTabInteraction(event.target)) return;
+      if (isAllowedInteraction(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
     };
 
     const blockNonTabKeyboard = (event: KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") return;
-      if (isDashboardTabInteraction(event.target)) return;
+      if (isAllowedInteraction(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
     };
