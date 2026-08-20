@@ -1,7 +1,6 @@
 "use client";
 
-import { mergeProps } from "@base-ui/react/merge-props";
-import { useRender } from "@base-ui/react/use-render";
+import { mergeProps, useRender } from "@base-ui/react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
