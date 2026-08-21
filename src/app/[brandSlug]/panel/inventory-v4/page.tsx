@@ -62,6 +62,11 @@ import {
   listStockOpnameVariantsV4Action,
   submitStockOpnameV4Action,
 } from "@/server/actions/inventory-v4.actions";
+import {
+  getSuppliersForPurchaseAction,
+  createSupplierAction,
+  type SupplierRow,
+} from "@/server/actions/supplier.actions";
 import type {
   ProductV4Row,
   ProductDetailV4Row,
@@ -2344,7 +2349,7 @@ function BelanjaStokDialog({
   const { isExpanded, collapse } = useExpandableScreen();
   const [step, setStep] = React.useState<"form" | "preview">("form");
   const [saving, setSaving] = React.useState(false);
-  const [supplierName, setSupplierName] = React.useState("");
+  const [supplierId, setSupplierId] = React.useState("");
   const [invoiceNumber, setInvoiceNumber] = React.useState("");
   const [purchaseDate, setPurchaseDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [paymentAccountId, setPaymentAccountId] = React.useState("");
@@ -2354,12 +2359,21 @@ function BelanjaStokDialog({
   const [searching, setSearching] = React.useState(false);
   const [items, setItems] = React.useState<(PurchaseVariantSearchRow & { quantity: number; unitCost: number; unitSellingPrice: number; note: string })[]>([]);
   const [paymentAccounts, setPaymentAccounts] = React.useState<{ id: string; name: string; balance: number }[]>([]);
+  const [suppliers, setSuppliers] = React.useState<SupplierRow[]>([]);
+  const [supplierLoading, setSupplierLoading] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addName, setAddName] = React.useState("");
+  const [addWhatsapp, setAddWhatsapp] = React.useState("");
+  const [addStore, setAddStore] = React.useState("");
+  const [addBank, setAddBank] = React.useState("");
+  const [addSaving, setAddSaving] = React.useState(false);
+  const [addError, setAddError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!isExpanded) return;
     setStep("form");
     setSaving(false);
-    setSupplierName("");
+    setSupplierId("");
     setInvoiceNumber("");
     setPurchaseDate(new Date().toISOString().split("T")[0]);
     setPaymentAccountId("");
@@ -2368,6 +2382,13 @@ function BelanjaStokDialog({
     setSearchResults([]);
     setItems([]);
     setPaymentAccounts([]);
+    setSuppliers([]);
+    setAddOpen(false);
+    setAddName("");
+    setAddWhatsapp("");
+    setAddStore("");
+    setAddBank("");
+    setAddError(null);
   }, [isExpanded]);
 
   const fetchPaymentAccounts = React.useCallback(async () => {
@@ -2378,7 +2399,50 @@ function BelanjaStokDialog({
     } catch {}
   }, [brandSlug, branchId]);
 
-  React.useEffect(() => { if (isExpanded) fetchPaymentAccounts(); }, [isExpanded, fetchPaymentAccounts]);
+  const fetchSuppliers = React.useCallback(async () => {
+    try {
+      setSupplierLoading(true);
+      const res = await getSuppliersForPurchaseAction(brandSlug);
+      if (res.success) setSuppliers(res.data ?? []);
+    } catch {} finally {
+      setSupplierLoading(false);
+    }
+  }, [brandSlug]);
+
+  React.useEffect(() => {
+    if (isExpanded) {
+      fetchPaymentAccounts();
+      fetchSuppliers();
+    }
+  }, [isExpanded, fetchPaymentAccounts, fetchSuppliers]);
+
+  const handleAddSupplier = async () => {
+    if (!addName.trim()) {
+      setAddError("Nama supplier wajib diisi");
+      return;
+    }
+    setAddSaving(true);
+    setAddError(null);
+    const res = await createSupplierAction(brandSlug, {
+      name: addName,
+      whatsapp: addWhatsapp,
+      storeName: addStore,
+      bankAccountInfo: addBank,
+    });
+    setAddSaving(false);
+    if (res.success) {
+      const created = res.data as SupplierRow;
+      setSuppliers((prev) => [...prev, created]);
+      setSupplierId(created.id);
+      setAddOpen(false);
+      setAddName("");
+      setAddWhatsapp("");
+      setAddStore("");
+      setAddBank("");
+    } else {
+      setAddError(res.error ?? "Gagal menambah supplier");
+    }
+  };
 
   const doSearch = React.useCallback(async (term: string) => {
     if (!term.trim() || !branchId) { setSearchResults([]); return; }
@@ -2427,7 +2491,7 @@ function BelanjaStokDialog({
       const input: CreateStockPurchaseV4Input = {
         branchId,
         paymentAccountId,
-        supplierName: supplierName || null,
+        supplierId: supplierId || null,
         purchaseDate,
         notes: notes || null,
         items: items.map((item) => ({
@@ -2460,6 +2524,7 @@ function BelanjaStokDialog({
   }, [paymentAccounts]);
 
   return (
+    <>
     <ExpandableScreenContent
       className="bg-card text-card-foreground"
       closeButtonClassName="text-muted-foreground hover:bg-muted"
@@ -2478,10 +2543,10 @@ function BelanjaStokDialog({
                 <Label className="text-xs">Tanggal Belanja</Label>
                 <Input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="mt-1 h-9 text-xs" />
               </div>
-              <div>
+              <div className="w-[260px]">
                 <Label className="text-xs">Akun Pembayaran *</Label>
                 <Select value={paymentAccountId} onValueChange={setPaymentAccountId}>
-                  <SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
+                  <SelectTrigger className="mt-1 h-9 w-full text-xs"><SelectValue placeholder="Pilih akun" /></SelectTrigger>
                   <SelectContent className="z-[10010]">
                     {paymentAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id} className="text-xs">{a.name} — Rp {a.balance.toLocaleString("id-ID")}</SelectItem>
@@ -2493,7 +2558,34 @@ function BelanjaStokDialog({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label className="text-xs">Supplier (opsional)</Label>
-                <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} className="mt-1 h-9 text-xs" placeholder="Nama supplier" />
+                <div className="mt-1 flex items-center gap-2">
+                  <Select value={supplierId} onValueChange={setSupplierId}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder={supplierLoading ? "Memuat..." : "Pilih supplier"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Belum ada supplier</div>
+                      ) : (
+                        suppliers.map((s) => (
+                          <SelectItem key={s.id} value={s.id} className="text-xs">
+                            {s.name}{s.storeName ? ` · ${s.storeName}` : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setAddOpen(true)}
+                    title="Tambah supplier baru"
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs">No. Invoice Supplier (opsional)</Label>
@@ -2590,7 +2682,7 @@ function BelanjaStokDialog({
           <div className="space-y-3">
             <div className="rounded-lg border bg-muted/20 p-3">
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-muted-foreground">Supplier:</span> {supplierName || "—"}</div>
+                <div><span className="text-muted-foreground">Supplier:</span> {suppliers.find((s) => s.id === supplierId)?.name || "—"}</div>
                 <div><span className="text-muted-foreground">Akun:</span> {payAccMap.get(paymentAccountId)?.name ?? "—"}</div>
                 <div><span className="text-muted-foreground">Tanggal:</span> {purchaseDate}</div>
                 <div><span className="text-muted-foreground">Total:</span> <strong>Rp {totalAmount.toLocaleString("id-ID")}</strong></div>
@@ -2626,6 +2718,53 @@ function BelanjaStokDialog({
         </div>
       )}
     </ExpandableScreenContent>
+
+    {/* Add Supplier dialog */}
+    <Dialog open={addOpen} onOpenChange={(v) => { if (!v) { setAddOpen(false); setAddError(null); } }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Tambah Supplier</DialogTitle>
+          <DialogDescription className="text-xs">
+            Data supplier akan tersimpan di database dan bisa dipilih saat Belanja Stok.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {addError && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 text-xs text-destructive">{addError}</div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Nama Supplier *</Label>
+            <Input value={addName} onChange={(e) => setAddName(e.target.value)} className="h-9 text-xs" placeholder="Nama supplier" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">WhatsApp</Label>
+              <Input value={addWhatsapp} onChange={(e) => setAddWhatsapp(e.target.value)} className="h-9 text-xs" placeholder="08..." />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Nama Toko</Label>
+              <Input value={addStore} onChange={(e) => setAddStore(e.target.value)} className="h-9 text-xs" placeholder="Nama toko" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Informasi Bank Account</Label>
+            <Textarea value={addBank} onChange={(e) => setAddBank(e.target.value)} className="text-xs" rows={3} placeholder="Bank, No. Rekening, Atas Nama" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setAddOpen(false); setAddError(null); }} disabled={addSaving}>
+            Batal
+          </Button>
+          <Button size="sm" className="h-9 text-xs" onClick={handleAddSupplier} disabled={addSaving}>
+            {addSaving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {addSaving ? "Menyimpan..." : "Simpan Supplier"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

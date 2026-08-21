@@ -19,6 +19,11 @@ import {
   listInventoryItemsAction,
   type InventoryItemRow,
 } from "@/server/actions/inventory.actions";
+import {
+  getSuppliersForPurchaseAction,
+  createSupplierAction,
+  type SupplierRow,
+} from "@/server/actions/supplier.actions";
 import { useActiveBranch } from "@/components/layout/active-branch-context";
 import { Loader2, Package, Plus, Trash2, ShoppingCart } from "lucide-react";
 
@@ -45,22 +50,41 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
   const [error, setError] = React.useState<string | null>(null);
 
   const [branchId, setBranchId] = React.useState(activeBranchId ?? branches[0]?.id ?? "");
-  const [supplierName, setSupplierName] = React.useState("");
+  const [supplierId, setSupplierId] = React.useState("");
   const [purchaseDate, setPurchaseDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [paymentAccountId, setPaymentAccountId] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [lineItems, setLineItems] = React.useState<LineItem[]>([]);
   const [paymentAccounts, setPaymentAccounts] = React.useState<{ id: string; name: string; balance: number }[]>([]);
+  const [suppliers, setSuppliers] = React.useState<SupplierRow[]>([]);
+  const [supplierLoading, setSupplierLoading] = React.useState(false);
+
+  // Add-supplier dialog state
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addName, setAddName] = React.useState("");
+  const [addWhatsapp, setAddWhatsapp] = React.useState("");
+  const [addStore, setAddStore] = React.useState("");
+  const [addBank, setAddBank] = React.useState("");
+  const [addSaving, setAddSaving] = React.useState(false);
+  const [addError, setAddError] = React.useState<string | null>(null);
 
   // Search state for item addition
   const [searchValue, setSearchValue] = React.useState("");
   const [searchResults, setSearchResults] = React.useState<InventoryItemRow[]>([]);
   const [searching, setSearching] = React.useState(false);
 
+  const loadSuppliers = React.useCallback(async () => {
+    const brandSlug = window.location.pathname.split("/")[1];
+    setSupplierLoading(true);
+    const res = await getSuppliersForPurchaseAction(brandSlug);
+    if (res.success) setSuppliers(res.data);
+    setSupplierLoading(false);
+  }, []);
+
   React.useEffect(() => {
     if (!open) {
       setBranchId(activeBranchId ?? branches[0]?.id ?? "");
-      setSupplierName("");
+      setSupplierId("");
       setPurchaseDate(new Date().toISOString().split("T")[0]);
       setPaymentAccountId("");
       setNotes("");
@@ -68,8 +92,10 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
       setSearchValue("");
       setSearchResults([]);
       setError(null);
+    } else {
+      loadSuppliers();
     }
-  }, [open, activeBranchId, branches]);
+  }, [open, activeBranchId, branches, loadSuppliers]);
 
   React.useEffect(() => {
     if (!open || !branchId) return;
@@ -78,6 +104,36 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
       if (res.success) setPaymentAccounts(res.data);
     });
   }, [open, branchId]);
+
+  const handleAddSupplier = async () => {
+    if (!addName.trim()) {
+      setAddError("Nama supplier wajib diisi");
+      return;
+    }
+    setAddSaving(true);
+    setAddError(null);
+    const brandSlug = window.location.pathname.split("/")[1];
+    const res = await createSupplierAction(brandSlug, {
+      name: addName,
+      whatsapp: addWhatsapp,
+      storeName: addStore,
+      bankAccountInfo: addBank,
+    });
+    setAddSaving(false);
+    if (res.success) {
+      const created = res.data as SupplierRow;
+      setSuppliers((prev) => [...prev, created]);
+      setSupplierId(created.id);
+      setAddOpen(false);
+      setAddName("");
+      setAddWhatsapp("");
+      setAddStore("");
+      setAddBank("");
+    } else {
+      setAddError(res.error ?? "Gagal menambah supplier");
+    }
+  };
+
 
   const handleSearch = async (q: string) => {
     setSearchValue(q);
@@ -160,7 +216,7 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
 
     const res = await createStockPurchaseAction(brandSlug, {
       branchId,
-      supplierName: supplierName.trim() || undefined,
+      supplierId: supplierId || null,
       paymentAccountId,
       purchaseDate,
       notes: notes.trim() || undefined,
@@ -190,6 +246,7 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) onOpenChange(); }}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
@@ -234,21 +291,42 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
           </div>
 
           {/* Supplier + Payment */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Supplier</Label>
-              <Input
-                type="text"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                className="h-9 text-xs"
-                placeholder="Nama supplier (opsional)"
-              />
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="space-y-1.5 min-w-[200px] flex-1">
+              <Label className="text-xs font-medium">Supplier (opsional)</Label>
+              <div className="flex items-center gap-2">
+                <Select value={supplierId} onValueChange={setSupplierId}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder={supplierLoading ? "Memuat..." : "Pilih supplier"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">Belum ada supplier</div>
+                    ) : (
+                      suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                          {s.name}{s.storeName ? ` · ${s.storeName}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setAddOpen(true)}
+                  title="Tambah supplier baru"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              </div>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 w-[260px]">
               <Label className="text-xs font-medium">Akun Pembayaran *</Label>
               <Select value={paymentAccountId} onValueChange={setPaymentAccountId}>
-                <SelectTrigger className="h-9 text-xs">
+                <SelectTrigger className="h-9 text-xs w-full">
                   <SelectValue placeholder="Pilih akun" />
                 </SelectTrigger>
                 <SelectContent>
@@ -397,5 +475,52 @@ export function PurchaseFormDialog({ open, onOpenChange, onSuccess }: PurchaseFo
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Add Supplier dialog */}
+    <Dialog open={addOpen} onOpenChange={(v) => { if (!v) { setAddOpen(false); setAddError(null); } }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Tambah Supplier</DialogTitle>
+          <DialogDescription className="text-xs">
+            Data supplier akan tersimpan di database dan bisa dipilih saat Belanja Stok.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {addError && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 text-xs text-destructive">{addError}</div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Nama Supplier *</Label>
+            <Input value={addName} onChange={(e) => setAddName(e.target.value)} className="h-9 text-xs" placeholder="Nama supplier" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">WhatsApp</Label>
+              <Input value={addWhatsapp} onChange={(e) => setAddWhatsapp(e.target.value)} className="h-9 text-xs" placeholder="08..." />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Nama Toko</Label>
+              <Input value={addStore} onChange={(e) => setAddStore(e.target.value)} className="h-9 text-xs" placeholder="Nama toko" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Informasi Bank Account</Label>
+            <Textarea value={addBank} onChange={(e) => setAddBank(e.target.value)} className="text-xs" rows={3} placeholder="Bank, No. Rekening, Atas Nama" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setAddOpen(false); setAddError(null); }} disabled={addSaving}>
+            Batal
+          </Button>
+          <Button size="sm" className="h-9 text-xs" onClick={handleAddSupplier} disabled={addSaving}>
+            {addSaving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {addSaving ? "Menyimpan..." : "Simpan Supplier"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

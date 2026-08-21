@@ -197,6 +197,7 @@ const COLLAPSIBLE_GROUPS: CollapsibleGroup[] = [
     items: [
       { href: "inventory-v4", label: "Inventory" },
       { href: "stock-reports", label: "Laporan Stok" },
+      { href: "suppliers", label: "Supplier" },
     ],
   },
   {

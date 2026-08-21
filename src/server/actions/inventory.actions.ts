@@ -1634,6 +1634,7 @@ export async function adjustInventoryStockAction(
 export interface PurchaseInput {
   branchId: string;
   supplierName?: string;
+  supplierId?: string | null;
   paymentAccountId: string;
   purchaseDate?: string;
   notes?: string;
@@ -1653,6 +1654,7 @@ export interface PurchaseRow {
   branchName: string | null;
   purchaseNumber: string;
   supplierName: string | null;
+  supplierId: string | null;
   paymentAccountId: string | null;
   paymentAccountName: string | null;
   purchaseDate: string;
@@ -1745,6 +1747,7 @@ export async function createStockPurchaseAction(
         p_branch_id: input.branchId,
         p_purchase_number: purchaseNumber,
         p_supplier_name: input.supplierName ?? null,
+        p_supplier_id: input.supplierId ?? null,
         p_payment_account_id: input.paymentAccountId,
         p_purchase_date: input.purchaseDate ?? new Date().toISOString().split("T")[0],
         p_notes: input.notes ?? null,
@@ -1789,6 +1792,7 @@ export async function createStockPurchaseAction(
       branchName: purchase.branches?.name ?? null,
       purchaseNumber: purchase.purchase_number,
       supplierName: purchase.supplier_name ?? null,
+      supplierId: purchase.supplier_id ?? null,
       paymentAccountId: purchase.payment_account_id,
       paymentAccountName: purchase.payment_accounts?.account_name ?? null,
       purchaseDate: purchase.purchase_date,
@@ -1912,6 +1916,7 @@ export async function listPurchaseHistoryAction(
       branchName: p.branches?.name ?? null,
       purchaseNumber: p.purchase_number,
       supplierName: p.supplier_name ?? null,
+      supplierId: p.supplier_id ?? null,
       paymentAccountId: p.payment_account_id,
       paymentAccountName: p.payment_accounts?.account_name ?? null,
       purchaseDate: p.purchase_date,
@@ -1985,6 +1990,7 @@ export async function getPurchaseDetailAction(
       branchName: purchase.branches?.name ?? null,
       purchaseNumber: purchase.purchase_number,
       supplierName: purchase.supplier_name ?? null,
+      supplierId: purchase.supplier_id ?? null,
       paymentAccountId: purchase.payment_account_id,
       paymentAccountName: purchase.payment_accounts?.account_name ?? null,
       purchaseDate: purchase.purchase_date,

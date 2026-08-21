@@ -338,6 +338,7 @@ export interface CreateStockPurchaseV4Input {
   branchId: string;
   paymentAccountId: string;
   supplierName?: string | null;
+  supplierId?: string | null;
   purchaseDate?: string;
   notes?: string | null;
   items: PurchaseStockV4ItemInput[];
@@ -385,6 +386,7 @@ export interface StockPurchaseV4Row {
   purchaseNumber: string;
   purchaseDate: string;
   supplierName: string | null;
+  supplierId: string | null;
   totalAmount: number;
   paymentAccountId: string;
   paymentAccountName: string | null;
