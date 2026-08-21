@@ -41,6 +41,20 @@ function buildPagination(page: number = 1, pageSize: number = 25) {
   return { from, to };
 }
 
+// Supabase returns view columns in snake_case (e.g. `product_name`), but the
+// report row types and UI expect camelCase (e.g. `productName`). Convert keys
+// so the returned rows match the domain types. The query-builder filters below
+// keep using the real DB column names, which is unaffected.
+function mapRows<T>(rows: any[] | null): T[] {
+  return (rows ?? []).map((row) => {
+    const out: Record<string, any> = {};
+    for (const key of Object.keys(row)) {
+      out[key.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase())] = row[key];
+    }
+    return out as T;
+  });
+}
+
 /* ─── POS Sales Summary ─── */
 
 export async function getV4PosSalesSummary(
@@ -62,7 +76,7 @@ export async function getV4PosSalesSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4PosSalesSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4PosSalesSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── POS Item Sales ─── */
@@ -86,7 +100,7 @@ export async function getV4PosItemSales(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4PosItemSalesRow[], total: count ?? 0 };
+  return { data: mapRows<V4PosItemSalesRow>(data), total: count ?? 0 };
 }
 
 /* ─── POS Payment Summary ─── */
@@ -107,7 +121,7 @@ export async function getV4PosPaymentSummary(
   const { data, error, count } = await query;
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4PosPaymentSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4PosPaymentSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Inventory Stock Summary ─── */
@@ -131,7 +145,7 @@ export async function getV4InventoryStockSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4InventoryStockSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4InventoryStockSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Inventory Valuation ─── */
@@ -155,7 +169,7 @@ export async function getV4InventoryValuation(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4InventoryValuationRow[], total: count ?? 0 };
+  return { data: mapRows<V4InventoryValuationRow>(data), total: count ?? 0 };
 }
 
 /* ─── Unit Second Summary ─── */
@@ -180,7 +194,7 @@ export async function getV4UnitSecondSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4UnitSecondSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4UnitSecondSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Inventory Movement Summary ─── */
@@ -204,7 +218,7 @@ export async function getV4MovementSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4InventoryMovementSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4InventoryMovementSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Sparepart Usage Summary ─── */
@@ -228,7 +242,7 @@ export async function getV4SparepartUsageSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4SparepartUsageSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4SparepartUsageSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Stock Purchase Summary ─── */
@@ -253,7 +267,7 @@ export async function getV4StockPurchaseSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4StockPurchaseSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4StockPurchaseSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Branch Business Summary ─── */
@@ -277,7 +291,7 @@ export async function getV4BranchBusinessSummary(
   const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(parsePgErr(error));
 
-  return { data: (data ?? []) as V4BranchBusinessSummaryRow[], total: count ?? 0 };
+  return { data: mapRows<V4BranchBusinessSummaryRow>(data), total: count ?? 0 };
 }
 
 /* ─── Inventory Report Totals ─── */
