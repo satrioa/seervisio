@@ -240,79 +240,88 @@ function derivePortalEventType(entry: TimelineEntry): TimelineEventType {
 }
 
 function buildTimelineEvents(timeline: TimelineEntry[]): TimelineEvent[] {
-  return timeline.map((entry, idx) => {
-    const eventType = derivePortalEventType(entry);
-    const actor = entry.actor ?? "Sistem";
-    const createdAt = entry.timestamp ?? new Date().toISOString();
-    const fromLabel = entry.fromStatus ? STATUS_LABELS[entry.fromStatus] || entry.fromStatus : null;
-    const toLabel = entry.toStatus ? STATUS_LABELS[entry.toStatus] || entry.toStatus : null;
+  return timeline
+    .filter((entry) => {
+      const eventType = derivePortalEventType(entry);
+      return eventType !== "SPAREPART_ADDED" && eventType !== "SPAREPART_REMOVED";
+    })
+    .map((entry, idx) => {
+      const eventType = derivePortalEventType(entry);
+      const actor = entry.actor ?? "Sistem";
+      const createdAt = entry.timestamp ?? new Date().toISOString();
+      const fromLabel = entry.fromStatus ? STATUS_LABELS[entry.fromStatus] || entry.fromStatus : null;
+      const toLabel = entry.toStatus ? STATUS_LABELS[entry.toStatus] || entry.toStatus : null;
 
-    let title: string;
-    let description: string;
+      let title: string;
+      let description: string;
 
-    switch (eventType) {
-      case "SERVICE_CREATED":
-        title = "Servis dibuat";
-        description = "Servis baru dibuat.";
-        break;
-      case "STATUS_CHANGED":
-        title = "Status berubah";
-        description =
-          fromLabel && toLabel && fromLabel !== toLabel
-            ? `${fromLabel} → ${toLabel}`
-            : entry.reason || "Status servis berubah.";
-        break;
-      case "TECHNICIAN_ASSIGNED": {
-        title = "Teknisi ditugaskan";
-        const name = (entry.reason ?? "")
-          .replace(/^Teknisi (ditugaskan|berubah):\s*/, "")
-          .replace(/\s*→.*$/, "")
-          .trim();
-        description = name ? `${name} ditugaskan sebagai teknisi.` : "Teknisi ditugaskan.";
-        break;
+      switch (eventType) {
+        case "SERVICE_CREATED":
+          title = "Servis dibuat";
+          description = "Servis baru dibuat.";
+          break;
+        case "STATUS_CHANGED":
+          title = "Status berubah";
+          description =
+            fromLabel && toLabel && fromLabel !== toLabel
+              ? `${fromLabel} → ${toLabel}`
+              : entry.reason || "Status servis berubah.";
+          break;
+        case "TECHNICIAN_ASSIGNED": {
+          title = "Teknisi ditugaskan";
+          const name = (entry.reason ?? "")
+            .replace(/^Teknisi (ditugaskan|berubah):\s*/, "")
+            .replace(/\s*→.*$/, "")
+            .trim();
+          description = name ? `${name} ditugaskan sebagai teknisi.` : "Teknisi ditugaskan.";
+          break;
+        }
+        case "TECHNICIAN_UNASSIGNED":
+          title = "Teknisi dihapus";
+          description = "Teknisi dihapus dari servis.";
+          break;
+        case "PAYMENT_CREATED":
+          title = "Tagihan dibuat";
+          description = entry.reason || "Tagihan dibuat.";
+          break;
+        case "PAYMENT_RECEIVED":
+          title = "Pembayaran diterima";
+          description = entry.reason || "Pembayaran diterima.";
+          break;
+        case "SPAREPART_ADDED":
+          title = "Sparepart ditambahkan";
+          description = entry.reason || "Sparepart ditambahkan.";
+          break;
+        case "BILLING_SET":
+          title = "Tagihan diperbarui";
+          description = entry.reason || "Tagihan diperbarui.";
+          break;
+        case "SERVICE_PICKED_UP":
+          title = "Perangkat diambil";
+          description = entry.reason || "Perangkat telah diserahkan kepada pelanggan.";
+          break;
+        case "SERVICE_REOPENED":
+          title = "Servis dibuka kembali";
+          description = "Servis dibuka kembali untuk diproses.";
+          break;
+        default:
+          title = "Aktivitas";
+          description = entry.reason || "Aktivitas servis.";
       }
-      case "TECHNICIAN_UNASSIGNED":
-        title = "Teknisi dihapus";
-        description = "Teknisi dihapus dari servis.";
-        break;
-      case "PAYMENT_CREATED":
-        title = "Tagihan dibuat";
-        description = entry.reason || "Tagihan dibuat.";
-        break;
-      case "PAYMENT_RECEIVED":
-        title = "Pembayaran diterima";
-        description = entry.reason || "Pembayaran diterima.";
-        break;
-      case "SPAREPART_ADDED":
-        title = "Sparepart ditambahkan";
-        description = entry.reason || "Sparepart ditambahkan.";
-        break;
-      case "BILLING_SET":
-        title = "Tagihan diperbarui";
-        description = entry.reason || "Tagihan diperbarui.";
-        break;
-      case "SERVICE_PICKED_UP":
-        title = "Perangkat diambil";
-        description = entry.reason || "Perangkat telah diserahkan kepada pelanggan.";
-        break;
-      case "SERVICE_REOPENED":
-        title = "Servis dibuka kembali";
-        description = "Servis dibuka kembali untuk diproses.";
-        break;
-      default:
-        title = "Aktivitas";
-        description = entry.reason || "Aktivitas servis.";
-    }
 
-    return {
-      id: `${idx}-${eventType}-${entry.toStatus ?? entry.status}`,
-      eventType,
-      title,
-      description,
-      actor,
-      createdAt,
-    };
-  });
+      return {
+        id: `${idx}-${eventType}-${entry.toStatus ?? entry.status}`,
+        eventType,
+        title,
+        description,
+        actor,
+        createdAt,
+      };
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
 }
 
 function ServiceActivityBlock({ service }: { service: PortalData["service"] }) {
