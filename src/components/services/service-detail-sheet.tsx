@@ -32,7 +32,6 @@ export function ServiceDetailSheet({
   onServiceUpdated,
   role,
 }: ServiceDetailSheetProps) {
-  console.log("[TRACE:ServiceDetailSheet] received service timeline length:", service?.timeline?.length ?? 0, "for", service?.id);
   const [enrichedService, setEnrichedService] = React.useState<ServiceRecord | null>(null);
 
   const handleOpenChange = React.useCallback(
