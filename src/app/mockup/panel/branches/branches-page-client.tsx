@@ -28,16 +28,10 @@ import { MoreHorizontal, Eye, Edit, UserCog, ToggleLeft, ToggleRight } from "luc
 
 import {
   getBranchesListAction, getBranchDetailAction, getBranchStatsAction,
-  getBranchSubscriptionAction, createBranchAction, updateBranchAction,
+  createBranchAction, updateBranchAction,
   toggleBranchActiveAction, getBranchUsersAction,
 } from "@/server/actions/branch.actions";
-import type { BranchDetail, BranchStats, BranchSubscription } from "@/server/actions/branch.actions";
-
-const PLAN_LABELS: Record<string, string> = {
-  starter: "Starter",
-  pro: "Pro",
-  enterprise: "Enterprise",
-};
+import type { BranchDetail, BranchStats } from "@/server/actions/branch.actions";
 
 const ROLE_LABELS: Record<string, string> = {
   PLATFORM_OWNER: "Platform Owner",
@@ -58,7 +52,6 @@ export function BranchesPageClient() {
 
   const [branches, setBranches] = React.useState<BranchDetail[]>([]);
   const [stats, setStats] = React.useState<BranchStats | null>(null);
-  const [subscription, setSubscription] = React.useState<BranchSubscription | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   const [selectedBranch, setSelectedBranch] = React.useState<BranchDetail | null>(null);
@@ -79,14 +72,12 @@ export function BranchesPageClient() {
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
-    const [branchesRes, statsRes, subRes] = await Promise.all([
+    const [branchesRes, statsRes] = await Promise.all([
       getBranchesListAction(brandSlug),
       getBranchStatsAction(brandSlug),
-      getBranchSubscriptionAction(brandSlug),
     ]);
     if (branchesRes.success) setBranches(branchesRes.data);
     if (statsRes.success) setStats(statsRes.data);
-    if (subRes.success) setSubscription(subRes.data);
     setLoading(false);
   }, [brandSlug]);
 
@@ -168,11 +159,6 @@ export function BranchesPageClient() {
     loadData();
   };
 
-  const maxBranches = subscription?.maxBranches ?? 1;
-  const branchCount = branches.length;
-  const planLabel = PLAN_LABELS[subscription?.plan ?? "starter"] ?? "Starter";
-  const atLimit = branchCount >= maxBranches;
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -191,38 +177,6 @@ export function BranchesPageClient() {
           </Button>
         </div>
       </div>
-
-      {/* Package Usage Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Paket Saat Ini</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-4 w-48" />
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-lg font-semibold">{planLabel}</p>
-                <p className="text-sm text-muted-foreground">
-                  Cabang Digunakan: {branchCount} / {maxBranches}
-                </p>
-                {atLimit && (
-                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                    Upgrade ke Pro untuk menambah cabang baru
-                  </p>
-                )}
-              </div>
-              <Button variant="outline" size="sm" disabled>
-                Upgrade Paket
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Stats Cards */}
       {loading ? (
